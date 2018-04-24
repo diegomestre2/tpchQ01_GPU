@@ -21,11 +21,12 @@ if(NOT EXISTS "${CUB_INCLUDE_DIR}")
 			${CUDA_INCLUDE_DIRS}
 			${CMAKE_SOURCE_DIR}/include
 			${CMAKE_SOURCE_DIR}
+			${CMAKE_CURRENT_SOURCE_DIR}/cub
 			${PROJECT_SOURCE_DIR}
 			${PROJECT_SOURCE_DIR}/include 
 			/opt 
 			$ENV{HOME}/opt 
-			ENV CUB_DIR 
+			#ENV CUB_DIR 
 			ENV CUB_INCLUDE_DIR 
 			ENV CUB_PATH
 		DOC "nVIDIA CUB GPU primitives header-only CUDA library"
@@ -37,7 +38,7 @@ if(EXISTS "${CUB_INCLUDE_DIR}")
 	include(FindPackageHandleStandardArgs) # I think this is a CMake v3 thing
 	mark_as_advanced(CUB_INCLUDE_DIR)
 else()
-	include(ExternalProject)
+#[[	include(ExternalProject)
 	ExternalProject_Add(
 		CUB
 		GIT_REPOSITORY https://github.com/NVlabs/cub
@@ -54,10 +55,11 @@ else()
 	ExternalProject_Get_Property(CUB source_dir)
 	set(CUB_INCLUDE_DIR ${source_dir})
 	set(CUB_INCLUDE_DIRS ${CUB_INCLUDE_DIR})
-
+]]
 endif()
 
 if(EXISTS "${CUB_INCLUDE_DIR}")
+	set(CUB_INCLUDE_DIRS ${CUB_INCLUDE_DIR})
 	set(CUB_FOUND 1)
 	execute_process(COMMAND bash "-c" "egrep \"^\\s*[0-9]\" -m1 \"${CUB_INCLUDE_DIR}/CHANGE_LOG.TXT\" | cut -d\\  -f1 | xargs echo -n" OUTPUT_VARIABLE CUB_VERSION)
 else()

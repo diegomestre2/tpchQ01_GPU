@@ -38,7 +38,7 @@ else()
     # Database Template Library (DTL)
     # git clone https://github.com/NVlabs/cub.git cub
     message(STATUS "CUB NOT FOUND. Including it as submodule...")
-    #include_directories(../cub/cub/)
+    include_directories(../cub/cub/)
 endif()
 
 find_package(CUDAAPIWrappers REQUIRED)
@@ -48,7 +48,6 @@ link_libraries(${CUDA_API_WRAPPERS_LIBS} "-lcudadevrt")
 #add_subdirectory(../cub/cub cub)
 
 include_directories(SYSTEM ../)
-include_directories("include")
 include_directories("include")
 
 ### CUDA

@@ -20,7 +20,7 @@ find_path(
 	cuda/api_wrappers.h
 	HINTS
 		${CUDA_INCLUDE_DIRS}
-		${CMAKE_CURRENT_SOURCE_DIR}
+		${CMAKE_CURRENT_SOURCE_DIR}/cuda-api-wrappers
 		${CMAKE_SOURCE_DIR}
 		${PROJECT_SOURCE_DIR}
 		/opt 
@@ -38,11 +38,12 @@ mark_as_advanced(CUDA_API_WRAPPERS_INCLUDE_DIR)
 find_library(
 	CUDA_API_WRAPPERS_LIB
 	HINTS 
-		${CMAKE_CURRENT_SOURCE_DIR}
+		${CMAKE_CURRENT_SOURCE_DIR}/cuda-api-wrappers/lib
 		${CMAKE_SOURCE_DIR}
 		${PROJECT_SOURCE_DIR}
 		ENV CUDA_API_WRAPPERS_DIR 
 		ENV CUDA_API_WRAPPERS_LIBRARY_DIR
+		ENV CUDA_API_WRAPPERS_INCLUDE_DIR
 	NAMES cuda-api-wrappers libcuda-api-wrappers
 	PATH_SUFFIXES lib
 	DOC "CUDA Modern C++ API wrappers - library"

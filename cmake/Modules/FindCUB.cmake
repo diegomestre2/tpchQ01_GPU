@@ -37,7 +37,7 @@ if(EXISTS "${CUB_INCLUDE_DIR}")
 	include(FindPackageHandleStandardArgs) # I think this is a CMake v3 thing
 	mark_as_advanced(CUB_INCLUDE_DIR)
 else()
-#[[	include(ExternalProject)
+	include(ExternalProject)
 	ExternalProject_Add(
 		CUB
 		GIT_REPOSITORY https://github.com/NVlabs/cub
@@ -53,7 +53,8 @@ else()
 	# Specify include dir
 	ExternalProject_Get_Property(CUB source_dir)
 	set(CUB_INCLUDE_DIR ${source_dir})
-]]
+	set(CUB_INCLUDE_DIRS ${CUB_INCLUDE_DIR})
+
 endif()
 
 if(EXISTS "${CUB_INCLUDE_DIR}")

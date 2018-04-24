@@ -1,13 +1,13 @@
 #include <stdio.h>
-
+#include "helper.hpp"
 namespace cuda{
   
   __global__
   void print() {
 
     // who am I?
-    u32 wid = global_warp_id();
-    u32 lid = warp_local_thread_id();
+    uint32_t wid = global_warp_id();
+    uint32_t lid = warp_local_thread_id();
     printf("Global Warp: %zu Local Warp: %zu",wid, lid);
 
   }

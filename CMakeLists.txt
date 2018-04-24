@@ -19,12 +19,14 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 set(LIBS
         #gtest
         #gtest_main
-        #pthread
+        pthread
         #numa
         cudart
         )
 
 ### project dependencies
+
+find_package(Threads)
 
 # NVidia CUB
 # git clone git@github.com:NVlabs/cub.git
@@ -47,16 +49,12 @@ link_libraries(${CUDA_API_WRAPPERS_LIBS} "-lcudadevrt")
 
 include_directories(SYSTEM ../)
 include_directories("include")
-
-target_include_directories(student PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-    PRIVATE src)
+include_directories("include")
 
 ### CUDA
 
 find_package(CUDA 9.1 REQUIRED)
-
+include(HandleCUDAComputeCapability)
 # avoid implicitly synchronization with other streams
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --default-stream per-thread)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --expt-relaxed-constexpr)
@@ -95,4 +93,4 @@ SET(SOURCE_FILES
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 cuda_add_executable(tpch_01 ${SOURCE_FILES})
-target_link_libraries(tpch_01 cudart)
+target_link_libraries(tpch_01 cudart pthread)

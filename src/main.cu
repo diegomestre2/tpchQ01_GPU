@@ -5,6 +5,7 @@ int main(){
 	std::cout << "TPC-H Query 1" << '\n';
 	std::cout << std::endl;
 
+    uint32_t key_cnt = 32;
 	uint32_t warp_size = 32;
 	uint32_t block_size = warp_size;
     uint32_t elements_per_thread = warp_size;

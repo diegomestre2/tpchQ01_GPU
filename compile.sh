@@ -20,6 +20,7 @@ fi
 if [ ! -d cuda-api-wrappers ]
 then
 	git clone https://github.com/eyalroz/cuda-api-wrappers
+	cp -r cuda-api-wrappers/scripts .
 fi
 
 # build cuda-api-wrappers

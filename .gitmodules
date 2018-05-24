@@ -1,6 +1,0 @@
-[submodule "cuda-api-wrappers"]
-	path = cuda-api-wrappers
-	url = https://github.com/eyalroz/cuda-api-wrappers.git
-[submodule "cub"]
-	path = cub
-	url = https://github.com/NVlabs/cub.git

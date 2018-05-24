@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(dtl_co)
+project(adms)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 
@@ -82,14 +82,18 @@ set(CUDA_SEPARABLE_COMPILATION OFF)
 
 include_directories(/usr/local/cuda/include)
 
+
+### GCC Flags
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG -Og -g")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++14 -march=corei7")
 
 
 SET(SOURCE_FILES
         src/main.cu
+        expl_comp_strat/common.cpp
+        expl_comp_strat/tpch_kit.cpp
         )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 cuda_add_executable(tpch_01 ${SOURCE_FILES})
-target_link_libraries(tpch_01 cudart pthread)
+target_link_libraries(tpch_01 ${LIBS})

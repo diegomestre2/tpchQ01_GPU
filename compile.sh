@@ -2,7 +2,7 @@
 
 # build cuda-api-wrappers
 cd cuda-api-wrappers
-if [ ! -d "$lib" ] 
+if [ ! -d "./$lib" ] 
 then
 	cmake .
 	make

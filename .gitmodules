@@ -1,9 +1,0 @@
-[submodule "cuda-api-wrappers"]
-	path = cuda-api-wrappers
-	url = https://github.com/eyalroz/cuda-api-wrappers.git
-[submodule "cub"]
-	path = cub
-	url = https://github.com/NVlabs/cub.git
-[submodule "expl_comp_strat"]
-	path = expl_comp_strat
-	url = https://bitbucket.org/adms17/expl_comp_strat.git

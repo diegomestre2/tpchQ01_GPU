@@ -1,6 +1,9 @@
 #include <stdio.h>
 #include "helper.hpp"
+#include "dates.hpp"
 #include "../expl_comp_strat/common.hpp"
+
+using u64_t = unsigned long long int;
 namespace cuda{
   
 	__global__
@@ -9,7 +12,6 @@ namespace cuda{
 	    int wid = global_warp_id();
 	    int lid = warp_local_thread_id();
 	    printf(" Global Warp: %d Local Warp: %d \n", wid, lid);
-
 	}
 
 	__inline__ __device__
@@ -61,12 +63,11 @@ namespace cuda{
 	void naive_tpchQ01(int *shipdate, int *discount, int *extendedprice, int *tax, 
 		char *returnflag, char *linestatus, int *quantity, AggrHashTable *aggregations, size_t cardinality){
 
-		int index = blockIdx.x * blockDim.x + threadIdx.x;
-  		int stride = blockDim.x * gridDim.x;
+		int i = blockIdx.x * blockDim.x + threadIdx.x;
+  		//int stride = blockDim.x * gridDim.x;
 
-
-	    for(size_t i = index ; i < cardinality; i += stride) {
-	        if (shipdate[i] <= 19980902) {
+	    //for(size_t i = index ; i < cardinality; i++) {
+	        if (i < cardinality && shipdate[i] <= todate_(2, 9, 1998)) {
 	            const auto disc = discount[i];
 	            const auto price = extendedprice[i];
 	            const auto disc_1 = Decimal64::ToValue(1, 0) - disc;
@@ -74,14 +75,16 @@ namespace cuda{
 	            const auto disc_price = Decimal64::Mul(disc_1, price);
 	            const auto charge = Decimal64::Mul(disc_price, tax_1);
 	            const idx_t idx = returnflag[i] << 8 | linestatus[i];
-	            aggregations[idx].sum_quantity += quantity[i];
-	            aggregations[idx].sum_base_price += price;
-	            aggregations[idx].sum_disc_price = int128_add64(aggregations[idx].sum_disc_price, disc_price);
-	            aggregations[idx].sum_charge = int128_add64(aggregations[idx].sum_charge, charge);
-	            aggregations[idx].sum_disc += disc;
-	            aggregations[idx].count++;
+	            atomicAdd((u64_t*)&(aggregations[idx].sum_quantity), (u64_t) quantity[i]);
+	            atomicAdd((u64_t*)&(aggregations[idx].sum_base_price), (u64_t)price);
+	            atomicAdd((u64_t*)&(aggregations[idx].sum_disc_price), (u64_t)int128_add64(aggregations[idx].sum_disc_price, disc_price));
+	            atomicAdd((u64_t*)&(aggregations[idx].sum_charge), (u64_t)int128_add64(aggregations[idx].sum_charge, charge));
+	            atomicAdd((u64_t*)&(aggregations[idx].sum_disc), (u64_t)disc);
+	            atomicAdd((u64_t*)&(aggregations[idx].count), (u64_t)1);
+	            
 	        }
-	    }
+	        __syncthreads();
+	    //}
 
 	}
 

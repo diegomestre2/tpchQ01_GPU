@@ -3,6 +3,7 @@ One more way to run TPC-H Query 01...
 
 #### Issues:
 
+- Modify Q01 for different Selectivities
 - Compression scheme for the data
 - CPU implementation
 - GPU implementation

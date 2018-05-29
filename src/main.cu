@@ -24,10 +24,10 @@ int main(){
     /* Allocate memory on device */
     auto current_device = cuda::device::current::get();
     auto d_shipdate      = cuda::memory::device::make_unique< int[]            >(current_device, data_length);
-    auto d_discount      = cuda::memory::device::make_unique< int[]            >(current_device, data_length);
-    auto d_extendedprice = cuda::memory::device::make_unique< int[]            >(current_device, data_length);
-    auto d_tax           = cuda::memory::device::make_unique< int[]            >(current_device, data_length);
-    auto d_quantity      = cuda::memory::device::make_unique< int[]            >(current_device, data_length);
+    auto d_discount      = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
+    auto d_extendedprice = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
+    auto d_tax           = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
+    auto d_quantity      = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
     auto d_returnflag    = cuda::memory::device::make_unique< char[]           >(current_device, data_length);
     auto d_linestatus    = cuda::memory::device::make_unique< char[]           >(current_device, data_length);
     auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]  >(current_device, MAX_GROUPS);
@@ -36,16 +36,17 @@ int main(){
 
 
     auto size_int          = data_length * sizeof(int);
+    auto size_int64        = data_length * sizeof(int64_t);
     auto size_char         = data_length * sizeof(char);
     auto size_aggregations = MAX_GROUPS  * sizeof(AggrHashTable);
 
 
     /* Transfer data to device */
     cuda::memory::copy(d_shipdate.get(),      shipdate,      size_int);
-    cuda::memory::copy(d_discount.get(),      discount,      size_int);
-    cuda::memory::copy(d_extendedprice.get(), extendedprice, size_int);
-    cuda::memory::copy(d_tax.get(),           tax,           size_int);
-    cuda::memory::copy(d_quantity.get(),      quantity,      size_int);
+    cuda::memory::copy(d_discount.get(),      discount,      size_int64);
+    cuda::memory::copy(d_extendedprice.get(), extendedprice, size_int64);
+    cuda::memory::copy(d_tax.get(),           tax,           size_int64);
+    cuda::memory::copy(d_quantity.get(),      quantity,      size_int64);
     cuda::memory::copy(d_returnflag.get(),    returnflag,    size_char);
     cuda::memory::copy(d_linestatus.get(),    linestatus,    size_char);
     cuda::memory::copy(d_aggregations.get(),  aggrs0,        size_aggregations);
@@ -55,7 +56,7 @@ int main(){
     //uint32_t elements_per_thread = warp_size;
     uint32_t block_size = 128;
     //uint32_t elements_per_block = block_size * elements_per_thread;
-    uint32_t block_cnt = ((data_length / 32) + block_size - 1) / block_size;
+    uint32_t block_cnt = ((data_length) + block_size - 1) / block_size;
     int sharedBytes = 272 * sizeof(AggrHashTable);
 
 
@@ -63,7 +64,7 @@ int main(){
     std::cout << "launch params: <<<" << block_cnt << "," << block_size << ">>>" << std::endl;
     std::cout << todate_(2, 9, 1998) << std::endl;
         auto start = timer::now();
-    cuda::thread_local_tpchQ01<<<block_cnt , block_size, sharedBytes>>>(d_shipdate.get(), 
+    cuda::naive_tpchQ01<<<block_cnt , block_size, sharedBytes>>>(d_shipdate.get(), 
         d_discount.get(), d_extendedprice.get(), d_tax.get(), d_returnflag.get(), 
         d_linestatus.get(), d_quantity.get(), d_aggregations.get(), data_length);
     cudaDeviceSynchronize();

@@ -23,15 +23,15 @@ static const char *COUNT1[7] = {
 static const char *COUNT2[7] = {
 	NULL, "1st", "2nd", "3rd", "4th", "5th", "last"
 };
-__device__
+//__device__
 static int LEAPDAYS[13] = {
 	0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
 };
-__device__
+//__device__
 static int CUMDAYS[13] = {
 	0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365
 };
-__device__
+//__device__
 static int CUMLEAPDAYS[13] = {
 	0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366
 };
@@ -50,7 +50,7 @@ static int CUMLEAPDAYS[13] = {
 
 
 #define leapyear(y)		((y) % 4 == 0 && ((y) % 100 != 0 || (y) % 400 == 0))
-__device__
+__host__ //__device__
 static int
 leapyears(int year)
 {
@@ -65,7 +65,7 @@ leapyears(int year)
 
 	return y4 + y400 - y100 + (year >= 0);	/* may be negative */
 }
-__device__
+__host__ //__device__
 static date
 todate_(int day, int month, int year)
 {

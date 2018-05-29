@@ -11,7 +11,7 @@ using timer = std::chrono::high_resolution_clock;
 
 int main(){
 
-	std::cout << "TPC-H Query 1" << '\n';
+    std::cout << "TPC-H Query 1" << '\n';
     get_device_properties();
     /* load data */
     lineitem li(7000000ull);
@@ -39,7 +39,7 @@ int main(){
     auto size_char         = data_length * sizeof(char);
     auto size_aggregations = MAX_GROUPS  * sizeof(AggrHashTable);
 
-    auto start = timer::now();
+
     /* Transfer data to device */
     cuda::memory::copy(d_shipdate.get(),      shipdate,      size_int);
     cuda::memory::copy(d_discount.get(),      discount,      size_int);
@@ -53,13 +53,17 @@ int main(){
     /* Setup to launch kernel */
     //uint32_t warp_size = 32;
     //uint32_t elements_per_thread = warp_size;
-    uint32_t block_size = 1024;
+    uint32_t block_size = 128;
     //uint32_t elements_per_block = block_size * elements_per_thread;
-    uint32_t block_cnt = (data_length + block_size - 1) / block_size;
+    uint32_t block_cnt = ((data_length / 32) + block_size - 1) / block_size;
+    int sharedBytes = 272 * sizeof(AggrHashTable);
+
 
     /* Launching Kernel */
     std::cout << "launch params: <<<" << block_cnt << "," << block_size << ">>>" << std::endl;
-    cuda::blockwise01_tpchQ01<<<block_cnt, block_size>>>(d_shipdate.get(), 
+    std::cout << todate_(2, 9, 1998) << std::endl;
+        auto start = timer::now();
+    cuda::thread_local_tpchQ01<<<block_cnt , block_size, sharedBytes>>>(d_shipdate.get(), 
         d_discount.get(), d_extendedprice.get(), d_tax.get(), d_returnflag.get(), 
         d_linestatus.get(), d_quantity.get(), d_aggregations.get(), data_length);
     cudaDeviceSynchronize();

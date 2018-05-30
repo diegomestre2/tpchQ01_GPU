@@ -5,7 +5,7 @@
 
 #include "kernel.hpp"
 
-#include "../expl_comp_strat/tpch_kit.hpp"
+#include "../expl_comp_strat2/tpch_kit.hpp"
 
 using timer = std::chrono::high_resolution_clock;
 #define streamSize (32 * 1024)
@@ -35,14 +35,16 @@ int main(){
     auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]  >(current_device, MAX_GROUPS);
 
     auto size_int64        = data_length * sizeof(int64_t);
+    auto size_int        = data_length * sizeof(int);
 
     auto size_char         = data_length * sizeof(char);
     auto size_aggregations = MAX_GROUPS  * sizeof(AggrHashTable);
 
     /* Transfer data to device */
 
-    /*cudaStream_t streams[nStreams];
-    auto streamBytes = streamSize * sizeof(int);
+    cudaStream_t streams[nStreams];
+    auto streamBytes = streamSize * sizeof(int64_t);
+    auto streamBytes_int = streamSize * sizeof(int);
     auto stremBytes_char = streamSize * sizeof(char);
     for (int i = 0; i < nStreams; ++i) {
         int offset = i * streamSize;
@@ -53,7 +55,7 @@ int main(){
             streamBytes = (data_length - offset) * sizeof(int);
         }
     
-        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, streamBytes,     streams[i]);
+        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, streamBytes_int,     streams[i]);
         cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, streamBytes,     streams[i]);
         cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, streamBytes,     streams[i]);
         cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, streamBytes,     streams[i]);
@@ -61,16 +63,16 @@ int main(){
         cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, stremBytes_char, streams[i]);
         cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, stremBytes_char, streams[i]);
         //break;
-    }*/
+    }
 
-    cuda::memory::copy(d_shipdate.get(),      shipdate,      size_int);
+    /*cuda::memory::copy(d_shipdate.get(),      shipdate,      size_int);
     cuda::memory::copy(d_discount.get(),      discount,      size_int64);
     cuda::memory::copy(d_extendedprice.get(), extendedprice, size_int64);
     cuda::memory::copy(d_tax.get(),           tax,           size_int64);
     cuda::memory::copy(d_quantity.get(),      quantity,      size_int64);
     cuda::memory::copy(d_returnflag.get(),    returnflag,    size_char);
     cuda::memory::copy(d_linestatus.get(),    linestatus,    size_char);
-    cuda::memory::copy(d_aggregations.get(),  aggrs0,        size_aggregations);
+    cuda::memory::copy(d_aggregations.get(),  aggrs0,        size_aggregations);*/
 
     /* Setup to launch kernel */
     //uint32_t warp_size = 32;
@@ -78,18 +80,14 @@ int main(){
     uint32_t block_size = 128;
     //uint32_t elements_per_block = block_size * elements_per_thread;
 
-    /*uint32_t block_cnt = ((data_length / 32) + block_size - 1) / block_size;
+    uint32_t block_cnt = ((data_length / 32) + block_size - 1) / block_size;
     int sharedBytes = 18 * sizeof(AggrHashTableKey);
 
     std::cout << "launch params: <<<" << (streamSize / block_size) << "," << block_size << ">>>" << std::endl;
     auto start = timer::now();
     for (int i = 0; i < nStreams; ++i) {
         auto num = streamSize;
-        if 
         int offset = i * streamSize;
-*/
-    uint32_t block_cnt = ((data_length) + block_size - 1) / block_size;
-    int sharedBytes = 272 * sizeof(AggrHashTable);
         
         cuda::thread_local_tpchQ01<<<(streamSize / (block_size * 32)), block_size, 0, streams[i]>>>(d_shipdate.get(), 
         d_discount.get(), d_extendedprice.get(), d_tax.get(), d_returnflag.get(), 

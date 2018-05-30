@@ -1,0 +1,621 @@
+The system is: Linux - 4.15.17-200.fc26.x86_64 - x86_64
+Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+Compiler: /opt/gcc-5.4.0/bin/gcc 
+Build flags: 
+Id flags:  
+
+The output was:
+0
+
+
+Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "a.out"
+
+The C compiler identification is GNU, found in "/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/3.11.0/CompilerIdC/a.out"
+
+Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+Compiler: /opt/gcc-5.4.0/bin/g++ 
+Build flags: 
+Id flags:  
+
+The output was:
+0
+
+
+Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "a.out"
+
+The CXX compiler identification is GNU, found in "/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/3.11.0/CompilerIdCXX/a.out"
+
+Determining if the C compiler works passed with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_2d5de/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_2d5de.dir/build.make CMakeFiles/cmTC_2d5de.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_2d5de.dir/testCCompiler.c.o
+/opt/gcc-5.4.0/bin/gcc    -o CMakeFiles/cmTC_2d5de.dir/testCCompiler.c.o   -c /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp/testCCompiler.c
+Linking C executable cmTC_2d5de
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_2d5de.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/gcc    -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_2d5de.dir/testCCompiler.c.o  -o cmTC_2d5de 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+Detecting C compiler ABI info compiled with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_cbf7a/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_cbf7a.dir/build.make CMakeFiles/cmTC_cbf7a.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_cbf7a.dir/CMakeCCompilerABI.c.o
+/opt/gcc-5.4.0/bin/gcc    -o CMakeFiles/cmTC_cbf7a.dir/CMakeCCompilerABI.c.o   -c /usr/share/cmake/Modules/CMakeCCompilerABI.c
+Linking C executable cmTC_cbf7a
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_cbf7a.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/gcc    -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -v -rdynamic CMakeFiles/cmTC_cbf7a.dir/CMakeCCompilerABI.c.o  -o cmTC_cbf7a 
+Using built-in specs.
+COLLECT_GCC=/opt/gcc-5.4.0/bin/gcc
+COLLECT_LTO_WRAPPER=/opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/lto-wrapper
+Target: x86_64-unknown-linux-gnu
+Configured with: /opt/sw/Downloads/objdir/../gcc-5.4.0/configure --prefix=/opt/sw/gcc-5.4.0 --enable-languages=c,c++,fortran --disable-multilib
+Thread model: posix
+gcc version 5.4.0 (GCC) 
+COMPILER_PATH=/opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/:/opt/gcc-5.4.0/libexec/gcc/
+LIBRARY_PATH=/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/:/opt/gcc-5.4.0/lib/gcc/:/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:./:/usr/local/cuda/lib64/:/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../:/lib/:/usr/lib/
+COLLECT_GCC_OPTIONS='-L/usr/local/cuda-9.1/targets/x86_64-linux/lib/' '-v' '-rdynamic' '-o' 'cmTC_cbf7a' '-mtune=generic' '-march=x86-64'
+ /opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/collect2 --eh-frame-hdr -m elf_x86_64 -export-dynamic -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_cbf7a /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtbegin.o -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -L/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0 -L/opt/gcc-5.4.0/lib/gcc -L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L. -L/usr/local/cuda/lib64 -L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../.. CMakeFiles/cmTC_cbf7a.dir/CMakeCCompilerABI.c.o -lgcc --as-needed -lgcc_s --no-as-needed -lc -lgcc --as-needed -lgcc_s --no-as-needed /opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtend.o /lib/../lib64/crtn.o
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+Parsed C implicit link information from above output:
+  link line regex: [^( *|.*[/\])(ld|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\]+-)?ld|collect2)[^/\]*( |$)]
+  ignore line: [Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp]
+  ignore line: []
+  ignore line: [Run Build Command:"/usr/bin/gmake" "cmTC_cbf7a/fast"]
+  ignore line: [/usr/bin/gmake -f CMakeFiles/cmTC_cbf7a.dir/build.make CMakeFiles/cmTC_cbf7a.dir/build]
+  ignore line: [gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp']
+  ignore line: [Building C object CMakeFiles/cmTC_cbf7a.dir/CMakeCCompilerABI.c.o]
+  ignore line: [/opt/gcc-5.4.0/bin/gcc    -o CMakeFiles/cmTC_cbf7a.dir/CMakeCCompilerABI.c.o   -c /usr/share/cmake/Modules/CMakeCCompilerABI.c]
+  ignore line: [Linking C executable cmTC_cbf7a]
+  ignore line: [/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_cbf7a.dir/link.txt --verbose=1]
+  ignore line: [/opt/gcc-5.4.0/bin/gcc    -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -v -rdynamic CMakeFiles/cmTC_cbf7a.dir/CMakeCCompilerABI.c.o  -o cmTC_cbf7a ]
+  ignore line: [Using built-in specs.]
+  ignore line: [COLLECT_GCC=/opt/gcc-5.4.0/bin/gcc]
+  ignore line: [COLLECT_LTO_WRAPPER=/opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/lto-wrapper]
+  ignore line: [Target: x86_64-unknown-linux-gnu]
+  ignore line: [Configured with: /opt/sw/Downloads/objdir/../gcc-5.4.0/configure --prefix=/opt/sw/gcc-5.4.0 --enable-languages=c,c++,fortran --disable-multilib]
+  ignore line: [Thread model: posix]
+  ignore line: [gcc version 5.4.0 (GCC) ]
+  ignore line: [COMPILER_PATH=/opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/:/opt/gcc-5.4.0/libexec/gcc/]
+  ignore line: [LIBRARY_PATH=/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/:/opt/gcc-5.4.0/lib/gcc/:/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:./:/usr/local/cuda/lib64/:/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../:/lib/:/usr/lib/]
+  ignore line: [COLLECT_GCC_OPTIONS='-L/usr/local/cuda-9.1/targets/x86_64-linux/lib/' '-v' '-rdynamic' '-o' 'cmTC_cbf7a' '-mtune=generic' '-march=x86-64']
+  link line: [ /opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/collect2 --eh-frame-hdr -m elf_x86_64 -export-dynamic -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_cbf7a /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtbegin.o -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -L/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0 -L/opt/gcc-5.4.0/lib/gcc -L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L. -L/usr/local/cuda/lib64 -L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../.. CMakeFiles/cmTC_cbf7a.dir/CMakeCCompilerABI.c.o -lgcc --as-needed -lgcc_s --no-as-needed -lc -lgcc --as-needed -lgcc_s --no-as-needed /opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtend.o /lib/../lib64/crtn.o]
+    arg [/opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/collect2] ==> ignore
+    arg [--eh-frame-hdr] ==> ignore
+    arg [-m] ==> ignore
+    arg [elf_x86_64] ==> ignore
+    arg [-export-dynamic] ==> ignore
+    arg [-dynamic-linker] ==> ignore
+    arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
+    arg [-o] ==> ignore
+    arg [cmTC_cbf7a] ==> ignore
+    arg [/lib/../lib64/crt1.o] ==> ignore
+    arg [/lib/../lib64/crti.o] ==> ignore
+    arg [/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtbegin.o] ==> ignore
+    arg [-L/usr/local/cuda-9.1/targets/x86_64-linux/lib/] ==> dir [/usr/local/cuda-9.1/targets/x86_64-linux/lib/]
+    arg [-L/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0] ==> dir [/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0]
+    arg [-L/opt/gcc-5.4.0/lib/gcc] ==> dir [/opt/gcc-5.4.0/lib/gcc]
+    arg [-L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64] ==> dir [/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64]
+    arg [-L/lib/../lib64] ==> dir [/lib/../lib64]
+    arg [-L/usr/lib/../lib64] ==> dir [/usr/lib/../lib64]
+    arg [-L.] ==> ignore
+    arg [-L/usr/local/cuda/lib64] ==> dir [/usr/local/cuda/lib64]
+    arg [-L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../..] ==> dir [/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../..]
+    arg [CMakeFiles/cmTC_cbf7a.dir/CMakeCCompilerABI.c.o] ==> ignore
+    arg [-lgcc] ==> lib [gcc]
+    arg [--as-needed] ==> ignore
+    arg [-lgcc_s] ==> lib [gcc_s]
+    arg [--no-as-needed] ==> ignore
+    arg [-lc] ==> lib [c]
+    arg [-lgcc] ==> lib [gcc]
+    arg [--as-needed] ==> ignore
+    arg [-lgcc_s] ==> lib [gcc_s]
+    arg [--no-as-needed] ==> ignore
+    arg [/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtend.o] ==> ignore
+    arg [/lib/../lib64/crtn.o] ==> ignore
+  collapse library dir [/usr/local/cuda-9.1/targets/x86_64-linux/lib/] ==> [/usr/local/cuda-9.1/targets/x86_64-linux/lib]
+  collapse library dir [/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0] ==> [/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0]
+  collapse library dir [/opt/gcc-5.4.0/lib/gcc] ==> [/opt/gcc-5.4.0/lib/gcc]
+  collapse library dir [/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64] ==> [/opt/gcc-5.4.0/lib64]
+  collapse library dir [/lib/../lib64] ==> [/lib64]
+  collapse library dir [/usr/lib/../lib64] ==> [/usr/lib64]
+  collapse library dir [/usr/local/cuda/lib64] ==> [/usr/local/cuda/lib64]
+  collapse library dir [/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../..] ==> [/opt/gcc-5.4.0/lib]
+  implicit libs: [gcc;gcc_s;c;gcc;gcc_s]
+  implicit dirs: [/usr/local/cuda-9.1/targets/x86_64-linux/lib;/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0;/opt/gcc-5.4.0/lib/gcc;/opt/gcc-5.4.0/lib64;/lib64;/usr/lib64;/usr/local/cuda/lib64;/opt/gcc-5.4.0/lib]
+  implicit fwks: []
+
+
+
+
+Detecting C [-std=c11] compiler features compiled with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_ff95b/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_ff95b.dir/build.make CMakeFiles/cmTC_ff95b.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_ff95b.dir/feature_tests.c.o
+/opt/gcc-5.4.0/bin/gcc   -std=c11 -o CMakeFiles/cmTC_ff95b.dir/feature_tests.c.o   -c /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/feature_tests.c
+Linking C executable cmTC_ff95b
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_ff95b.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/gcc    -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_ff95b.dir/feature_tests.c.o  -o cmTC_ff95b 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+    Feature record: C_FEATURE:1c_function_prototypes
+    Feature record: C_FEATURE:1c_restrict
+    Feature record: C_FEATURE:1c_static_assert
+    Feature record: C_FEATURE:1c_variadic_macros
+
+
+Detecting C [-std=c99] compiler features compiled with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_af90c/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_af90c.dir/build.make CMakeFiles/cmTC_af90c.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_af90c.dir/feature_tests.c.o
+/opt/gcc-5.4.0/bin/gcc   -std=c99 -o CMakeFiles/cmTC_af90c.dir/feature_tests.c.o   -c /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/feature_tests.c
+Linking C executable cmTC_af90c
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_af90c.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/gcc    -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_af90c.dir/feature_tests.c.o  -o cmTC_af90c 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+    Feature record: C_FEATURE:1c_function_prototypes
+    Feature record: C_FEATURE:1c_restrict
+    Feature record: C_FEATURE:0c_static_assert
+    Feature record: C_FEATURE:1c_variadic_macros
+
+
+Detecting C [-std=c90] compiler features compiled with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_03101/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_03101.dir/build.make CMakeFiles/cmTC_03101.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_03101.dir/feature_tests.c.o
+/opt/gcc-5.4.0/bin/gcc   -std=c90 -o CMakeFiles/cmTC_03101.dir/feature_tests.c.o   -c /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/feature_tests.c
+Linking C executable cmTC_03101
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_03101.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/gcc    -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_03101.dir/feature_tests.c.o  -o cmTC_03101 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+    Feature record: C_FEATURE:1c_function_prototypes
+    Feature record: C_FEATURE:0c_restrict
+    Feature record: C_FEATURE:0c_static_assert
+    Feature record: C_FEATURE:0c_variadic_macros
+Determining if the CXX compiler works passed with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_828c4/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_828c4.dir/build.make CMakeFiles/cmTC_828c4.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_828c4.dir/testCXXCompiler.cxx.o
+/opt/gcc-5.4.0/bin/g++     -o CMakeFiles/cmTC_828c4.dir/testCXXCompiler.cxx.o -c /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp/testCXXCompiler.cxx
+Linking CXX executable cmTC_828c4
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_828c4.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/g++     -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_828c4.dir/testCXXCompiler.cxx.o  -o cmTC_828c4 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+Detecting CXX compiler ABI info compiled with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_bdfa1/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_bdfa1.dir/build.make CMakeFiles/cmTC_bdfa1.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_bdfa1.dir/CMakeCXXCompilerABI.cpp.o
+/opt/gcc-5.4.0/bin/g++     -o CMakeFiles/cmTC_bdfa1.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp
+Linking CXX executable cmTC_bdfa1
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_bdfa1.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/g++     -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -v -rdynamic CMakeFiles/cmTC_bdfa1.dir/CMakeCXXCompilerABI.cpp.o  -o cmTC_bdfa1 
+Using built-in specs.
+COLLECT_GCC=/opt/gcc-5.4.0/bin/g++
+COLLECT_LTO_WRAPPER=/opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/lto-wrapper
+Target: x86_64-unknown-linux-gnu
+Configured with: /opt/sw/Downloads/objdir/../gcc-5.4.0/configure --prefix=/opt/sw/gcc-5.4.0 --enable-languages=c,c++,fortran --disable-multilib
+Thread model: posix
+gcc version 5.4.0 (GCC) 
+COMPILER_PATH=/opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/:/opt/gcc-5.4.0/libexec/gcc/
+LIBRARY_PATH=/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/:/opt/gcc-5.4.0/lib/gcc/:/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:./:/usr/local/cuda/lib64/:/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../:/lib/:/usr/lib/
+COLLECT_GCC_OPTIONS='-L/usr/local/cuda-9.1/targets/x86_64-linux/lib/' '-v' '-rdynamic' '-o' 'cmTC_bdfa1' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+ /opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/collect2 --eh-frame-hdr -m elf_x86_64 -export-dynamic -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_bdfa1 /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtbegin.o -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -L/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0 -L/opt/gcc-5.4.0/lib/gcc -L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L. -L/usr/local/cuda/lib64 -L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../.. CMakeFiles/cmTC_bdfa1.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtend.o /lib/../lib64/crtn.o
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+Parsed CXX implicit link information from above output:
+  link line regex: [^( *|.*[/\])(ld|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\]+-)?ld|collect2)[^/\]*( |$)]
+  ignore line: [Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp]
+  ignore line: []
+  ignore line: [Run Build Command:"/usr/bin/gmake" "cmTC_bdfa1/fast"]
+  ignore line: [/usr/bin/gmake -f CMakeFiles/cmTC_bdfa1.dir/build.make CMakeFiles/cmTC_bdfa1.dir/build]
+  ignore line: [gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp']
+  ignore line: [Building CXX object CMakeFiles/cmTC_bdfa1.dir/CMakeCXXCompilerABI.cpp.o]
+  ignore line: [/opt/gcc-5.4.0/bin/g++     -o CMakeFiles/cmTC_bdfa1.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp]
+  ignore line: [Linking CXX executable cmTC_bdfa1]
+  ignore line: [/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_bdfa1.dir/link.txt --verbose=1]
+  ignore line: [/opt/gcc-5.4.0/bin/g++     -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -v -rdynamic CMakeFiles/cmTC_bdfa1.dir/CMakeCXXCompilerABI.cpp.o  -o cmTC_bdfa1 ]
+  ignore line: [Using built-in specs.]
+  ignore line: [COLLECT_GCC=/opt/gcc-5.4.0/bin/g++]
+  ignore line: [COLLECT_LTO_WRAPPER=/opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/lto-wrapper]
+  ignore line: [Target: x86_64-unknown-linux-gnu]
+  ignore line: [Configured with: /opt/sw/Downloads/objdir/../gcc-5.4.0/configure --prefix=/opt/sw/gcc-5.4.0 --enable-languages=c,c++,fortran --disable-multilib]
+  ignore line: [Thread model: posix]
+  ignore line: [gcc version 5.4.0 (GCC) ]
+  ignore line: [COMPILER_PATH=/opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/:/opt/gcc-5.4.0/libexec/gcc/]
+  ignore line: [LIBRARY_PATH=/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/:/opt/gcc-5.4.0/lib/gcc/:/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:./:/usr/local/cuda/lib64/:/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../:/lib/:/usr/lib/]
+  ignore line: [COLLECT_GCC_OPTIONS='-L/usr/local/cuda-9.1/targets/x86_64-linux/lib/' '-v' '-rdynamic' '-o' 'cmTC_bdfa1' '-shared-libgcc' '-mtune=generic' '-march=x86-64']
+  link line: [ /opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/collect2 --eh-frame-hdr -m elf_x86_64 -export-dynamic -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_bdfa1 /lib/../lib64/crt1.o /lib/../lib64/crti.o /opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtbegin.o -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -L/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0 -L/opt/gcc-5.4.0/lib/gcc -L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L. -L/usr/local/cuda/lib64 -L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../.. CMakeFiles/cmTC_bdfa1.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtend.o /lib/../lib64/crtn.o]
+    arg [/opt/gcc-5.4.0/libexec/gcc/x86_64-unknown-linux-gnu/5.4.0/collect2] ==> ignore
+    arg [--eh-frame-hdr] ==> ignore
+    arg [-m] ==> ignore
+    arg [elf_x86_64] ==> ignore
+    arg [-export-dynamic] ==> ignore
+    arg [-dynamic-linker] ==> ignore
+    arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
+    arg [-o] ==> ignore
+    arg [cmTC_bdfa1] ==> ignore
+    arg [/lib/../lib64/crt1.o] ==> ignore
+    arg [/lib/../lib64/crti.o] ==> ignore
+    arg [/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtbegin.o] ==> ignore
+    arg [-L/usr/local/cuda-9.1/targets/x86_64-linux/lib/] ==> dir [/usr/local/cuda-9.1/targets/x86_64-linux/lib/]
+    arg [-L/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0] ==> dir [/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0]
+    arg [-L/opt/gcc-5.4.0/lib/gcc] ==> dir [/opt/gcc-5.4.0/lib/gcc]
+    arg [-L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64] ==> dir [/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64]
+    arg [-L/lib/../lib64] ==> dir [/lib/../lib64]
+    arg [-L/usr/lib/../lib64] ==> dir [/usr/lib/../lib64]
+    arg [-L.] ==> ignore
+    arg [-L/usr/local/cuda/lib64] ==> dir [/usr/local/cuda/lib64]
+    arg [-L/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../..] ==> dir [/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../..]
+    arg [CMakeFiles/cmTC_bdfa1.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+    arg [-lstdc++] ==> lib [stdc++]
+    arg [-lm] ==> lib [m]
+    arg [-lgcc_s] ==> lib [gcc_s]
+    arg [-lgcc] ==> lib [gcc]
+    arg [-lc] ==> lib [c]
+    arg [-lgcc_s] ==> lib [gcc_s]
+    arg [-lgcc] ==> lib [gcc]
+    arg [/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0/crtend.o] ==> ignore
+    arg [/lib/../lib64/crtn.o] ==> ignore
+  collapse library dir [/usr/local/cuda-9.1/targets/x86_64-linux/lib/] ==> [/usr/local/cuda-9.1/targets/x86_64-linux/lib]
+  collapse library dir [/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0] ==> [/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0]
+  collapse library dir [/opt/gcc-5.4.0/lib/gcc] ==> [/opt/gcc-5.4.0/lib/gcc]
+  collapse library dir [/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../../../lib64] ==> [/opt/gcc-5.4.0/lib64]
+  collapse library dir [/lib/../lib64] ==> [/lib64]
+  collapse library dir [/usr/lib/../lib64] ==> [/usr/lib64]
+  collapse library dir [/usr/local/cuda/lib64] ==> [/usr/local/cuda/lib64]
+  collapse library dir [/opt/gcc-5.4.0/bin/../lib/gcc/x86_64-unknown-linux-gnu/5.4.0/../../..] ==> [/opt/gcc-5.4.0/lib]
+  implicit libs: [stdc++;m;gcc_s;gcc;c;gcc_s;gcc]
+  implicit dirs: [/usr/local/cuda-9.1/targets/x86_64-linux/lib;/opt/gcc-5.4.0/lib/gcc/x86_64-unknown-linux-gnu/5.4.0;/opt/gcc-5.4.0/lib/gcc;/opt/gcc-5.4.0/lib64;/lib64;/usr/lib64;/usr/local/cuda/lib64;/opt/gcc-5.4.0/lib]
+  implicit fwks: []
+
+
+
+
+Detecting CXX [-std=c++1z] compiler features compiled with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_f5e12/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_f5e12.dir/build.make CMakeFiles/cmTC_f5e12.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_f5e12.dir/feature_tests.cxx.o
+/opt/gcc-5.4.0/bin/g++    -std=c++1z -o CMakeFiles/cmTC_f5e12.dir/feature_tests.cxx.o -c /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/feature_tests.cxx
+Linking CXX executable cmTC_f5e12
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_f5e12.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/g++     -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_f5e12.dir/feature_tests.cxx.o  -o cmTC_f5e12 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+    Feature record: CXX_FEATURE:1cxx_aggregate_default_initializers
+    Feature record: CXX_FEATURE:1cxx_alias_templates
+    Feature record: CXX_FEATURE:1cxx_alignas
+    Feature record: CXX_FEATURE:1cxx_alignof
+    Feature record: CXX_FEATURE:1cxx_attributes
+    Feature record: CXX_FEATURE:1cxx_attribute_deprecated
+    Feature record: CXX_FEATURE:1cxx_auto_type
+    Feature record: CXX_FEATURE:1cxx_binary_literals
+    Feature record: CXX_FEATURE:1cxx_constexpr
+    Feature record: CXX_FEATURE:1cxx_contextual_conversions
+    Feature record: CXX_FEATURE:1cxx_decltype
+    Feature record: CXX_FEATURE:1cxx_decltype_auto
+    Feature record: CXX_FEATURE:1cxx_decltype_incomplete_return_types
+    Feature record: CXX_FEATURE:1cxx_default_function_template_args
+    Feature record: CXX_FEATURE:1cxx_defaulted_functions
+    Feature record: CXX_FEATURE:1cxx_defaulted_move_initializers
+    Feature record: CXX_FEATURE:1cxx_delegating_constructors
+    Feature record: CXX_FEATURE:1cxx_deleted_functions
+    Feature record: CXX_FEATURE:1cxx_digit_separators
+    Feature record: CXX_FEATURE:1cxx_enum_forward_declarations
+    Feature record: CXX_FEATURE:1cxx_explicit_conversions
+    Feature record: CXX_FEATURE:1cxx_extended_friend_declarations
+    Feature record: CXX_FEATURE:1cxx_extern_templates
+    Feature record: CXX_FEATURE:1cxx_final
+    Feature record: CXX_FEATURE:1cxx_func_identifier
+    Feature record: CXX_FEATURE:1cxx_generalized_initializers
+    Feature record: CXX_FEATURE:1cxx_generic_lambdas
+    Feature record: CXX_FEATURE:1cxx_inheriting_constructors
+    Feature record: CXX_FEATURE:1cxx_inline_namespaces
+    Feature record: CXX_FEATURE:1cxx_lambdas
+    Feature record: CXX_FEATURE:1cxx_lambda_init_captures
+    Feature record: CXX_FEATURE:1cxx_local_type_template_args
+    Feature record: CXX_FEATURE:1cxx_long_long_type
+    Feature record: CXX_FEATURE:1cxx_noexcept
+    Feature record: CXX_FEATURE:1cxx_nonstatic_member_init
+    Feature record: CXX_FEATURE:1cxx_nullptr
+    Feature record: CXX_FEATURE:1cxx_override
+    Feature record: CXX_FEATURE:1cxx_range_for
+    Feature record: CXX_FEATURE:1cxx_raw_string_literals
+    Feature record: CXX_FEATURE:1cxx_reference_qualified_functions
+    Feature record: CXX_FEATURE:1cxx_relaxed_constexpr
+    Feature record: CXX_FEATURE:1cxx_return_type_deduction
+    Feature record: CXX_FEATURE:1cxx_right_angle_brackets
+    Feature record: CXX_FEATURE:1cxx_rvalue_references
+    Feature record: CXX_FEATURE:1cxx_sizeof_member
+    Feature record: CXX_FEATURE:1cxx_static_assert
+    Feature record: CXX_FEATURE:1cxx_strong_enums
+    Feature record: CXX_FEATURE:1cxx_template_template_parameters
+    Feature record: CXX_FEATURE:1cxx_thread_local
+    Feature record: CXX_FEATURE:1cxx_trailing_return_types
+    Feature record: CXX_FEATURE:1cxx_unicode_literals
+    Feature record: CXX_FEATURE:1cxx_uniform_initialization
+    Feature record: CXX_FEATURE:1cxx_unrestricted_unions
+    Feature record: CXX_FEATURE:1cxx_user_literals
+    Feature record: CXX_FEATURE:1cxx_variable_templates
+    Feature record: CXX_FEATURE:1cxx_variadic_macros
+    Feature record: CXX_FEATURE:1cxx_variadic_templates
+
+
+Detecting CXX [-std=c++14] compiler features compiled with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_afdfb/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_afdfb.dir/build.make CMakeFiles/cmTC_afdfb.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_afdfb.dir/feature_tests.cxx.o
+/opt/gcc-5.4.0/bin/g++    -std=c++14 -o CMakeFiles/cmTC_afdfb.dir/feature_tests.cxx.o -c /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/feature_tests.cxx
+Linking CXX executable cmTC_afdfb
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_afdfb.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/g++     -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_afdfb.dir/feature_tests.cxx.o  -o cmTC_afdfb 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+    Feature record: CXX_FEATURE:1cxx_aggregate_default_initializers
+    Feature record: CXX_FEATURE:1cxx_alias_templates
+    Feature record: CXX_FEATURE:1cxx_alignas
+    Feature record: CXX_FEATURE:1cxx_alignof
+    Feature record: CXX_FEATURE:1cxx_attributes
+    Feature record: CXX_FEATURE:1cxx_attribute_deprecated
+    Feature record: CXX_FEATURE:1cxx_auto_type
+    Feature record: CXX_FEATURE:1cxx_binary_literals
+    Feature record: CXX_FEATURE:1cxx_constexpr
+    Feature record: CXX_FEATURE:1cxx_contextual_conversions
+    Feature record: CXX_FEATURE:1cxx_decltype
+    Feature record: CXX_FEATURE:1cxx_decltype_auto
+    Feature record: CXX_FEATURE:1cxx_decltype_incomplete_return_types
+    Feature record: CXX_FEATURE:1cxx_default_function_template_args
+    Feature record: CXX_FEATURE:1cxx_defaulted_functions
+    Feature record: CXX_FEATURE:1cxx_defaulted_move_initializers
+    Feature record: CXX_FEATURE:1cxx_delegating_constructors
+    Feature record: CXX_FEATURE:1cxx_deleted_functions
+    Feature record: CXX_FEATURE:1cxx_digit_separators
+    Feature record: CXX_FEATURE:1cxx_enum_forward_declarations
+    Feature record: CXX_FEATURE:1cxx_explicit_conversions
+    Feature record: CXX_FEATURE:1cxx_extended_friend_declarations
+    Feature record: CXX_FEATURE:1cxx_extern_templates
+    Feature record: CXX_FEATURE:1cxx_final
+    Feature record: CXX_FEATURE:1cxx_func_identifier
+    Feature record: CXX_FEATURE:1cxx_generalized_initializers
+    Feature record: CXX_FEATURE:1cxx_generic_lambdas
+    Feature record: CXX_FEATURE:1cxx_inheriting_constructors
+    Feature record: CXX_FEATURE:1cxx_inline_namespaces
+    Feature record: CXX_FEATURE:1cxx_lambdas
+    Feature record: CXX_FEATURE:1cxx_lambda_init_captures
+    Feature record: CXX_FEATURE:1cxx_local_type_template_args
+    Feature record: CXX_FEATURE:1cxx_long_long_type
+    Feature record: CXX_FEATURE:1cxx_noexcept
+    Feature record: CXX_FEATURE:1cxx_nonstatic_member_init
+    Feature record: CXX_FEATURE:1cxx_nullptr
+    Feature record: CXX_FEATURE:1cxx_override
+    Feature record: CXX_FEATURE:1cxx_range_for
+    Feature record: CXX_FEATURE:1cxx_raw_string_literals
+    Feature record: CXX_FEATURE:1cxx_reference_qualified_functions
+    Feature record: CXX_FEATURE:1cxx_relaxed_constexpr
+    Feature record: CXX_FEATURE:1cxx_return_type_deduction
+    Feature record: CXX_FEATURE:1cxx_right_angle_brackets
+    Feature record: CXX_FEATURE:1cxx_rvalue_references
+    Feature record: CXX_FEATURE:1cxx_sizeof_member
+    Feature record: CXX_FEATURE:1cxx_static_assert
+    Feature record: CXX_FEATURE:1cxx_strong_enums
+    Feature record: CXX_FEATURE:1cxx_template_template_parameters
+    Feature record: CXX_FEATURE:1cxx_thread_local
+    Feature record: CXX_FEATURE:1cxx_trailing_return_types
+    Feature record: CXX_FEATURE:1cxx_unicode_literals
+    Feature record: CXX_FEATURE:1cxx_uniform_initialization
+    Feature record: CXX_FEATURE:1cxx_unrestricted_unions
+    Feature record: CXX_FEATURE:1cxx_user_literals
+    Feature record: CXX_FEATURE:1cxx_variable_templates
+    Feature record: CXX_FEATURE:1cxx_variadic_macros
+    Feature record: CXX_FEATURE:1cxx_variadic_templates
+
+
+Detecting CXX [-std=c++11] compiler features compiled with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_0c3ca/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_0c3ca.dir/build.make CMakeFiles/cmTC_0c3ca.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_0c3ca.dir/feature_tests.cxx.o
+/opt/gcc-5.4.0/bin/g++    -std=c++11 -o CMakeFiles/cmTC_0c3ca.dir/feature_tests.cxx.o -c /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/feature_tests.cxx
+Linking CXX executable cmTC_0c3ca
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_0c3ca.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/g++     -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_0c3ca.dir/feature_tests.cxx.o  -o cmTC_0c3ca 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+    Feature record: CXX_FEATURE:0cxx_aggregate_default_initializers
+    Feature record: CXX_FEATURE:1cxx_alias_templates
+    Feature record: CXX_FEATURE:1cxx_alignas
+    Feature record: CXX_FEATURE:1cxx_alignof
+    Feature record: CXX_FEATURE:1cxx_attributes
+    Feature record: CXX_FEATURE:0cxx_attribute_deprecated
+    Feature record: CXX_FEATURE:1cxx_auto_type
+    Feature record: CXX_FEATURE:0cxx_binary_literals
+    Feature record: CXX_FEATURE:1cxx_constexpr
+    Feature record: CXX_FEATURE:0cxx_contextual_conversions
+    Feature record: CXX_FEATURE:1cxx_decltype
+    Feature record: CXX_FEATURE:0cxx_decltype_auto
+    Feature record: CXX_FEATURE:1cxx_decltype_incomplete_return_types
+    Feature record: CXX_FEATURE:1cxx_default_function_template_args
+    Feature record: CXX_FEATURE:1cxx_defaulted_functions
+    Feature record: CXX_FEATURE:1cxx_defaulted_move_initializers
+    Feature record: CXX_FEATURE:1cxx_delegating_constructors
+    Feature record: CXX_FEATURE:1cxx_deleted_functions
+    Feature record: CXX_FEATURE:0cxx_digit_separators
+    Feature record: CXX_FEATURE:1cxx_enum_forward_declarations
+    Feature record: CXX_FEATURE:1cxx_explicit_conversions
+    Feature record: CXX_FEATURE:1cxx_extended_friend_declarations
+    Feature record: CXX_FEATURE:1cxx_extern_templates
+    Feature record: CXX_FEATURE:1cxx_final
+    Feature record: CXX_FEATURE:1cxx_func_identifier
+    Feature record: CXX_FEATURE:1cxx_generalized_initializers
+    Feature record: CXX_FEATURE:0cxx_generic_lambdas
+    Feature record: CXX_FEATURE:1cxx_inheriting_constructors
+    Feature record: CXX_FEATURE:1cxx_inline_namespaces
+    Feature record: CXX_FEATURE:1cxx_lambdas
+    Feature record: CXX_FEATURE:0cxx_lambda_init_captures
+    Feature record: CXX_FEATURE:1cxx_local_type_template_args
+    Feature record: CXX_FEATURE:1cxx_long_long_type
+    Feature record: CXX_FEATURE:1cxx_noexcept
+    Feature record: CXX_FEATURE:1cxx_nonstatic_member_init
+    Feature record: CXX_FEATURE:1cxx_nullptr
+    Feature record: CXX_FEATURE:1cxx_override
+    Feature record: CXX_FEATURE:1cxx_range_for
+    Feature record: CXX_FEATURE:1cxx_raw_string_literals
+    Feature record: CXX_FEATURE:1cxx_reference_qualified_functions
+    Feature record: CXX_FEATURE:0cxx_relaxed_constexpr
+    Feature record: CXX_FEATURE:0cxx_return_type_deduction
+    Feature record: CXX_FEATURE:1cxx_right_angle_brackets
+    Feature record: CXX_FEATURE:1cxx_rvalue_references
+    Feature record: CXX_FEATURE:1cxx_sizeof_member
+    Feature record: CXX_FEATURE:1cxx_static_assert
+    Feature record: CXX_FEATURE:1cxx_strong_enums
+    Feature record: CXX_FEATURE:1cxx_template_template_parameters
+    Feature record: CXX_FEATURE:1cxx_thread_local
+    Feature record: CXX_FEATURE:1cxx_trailing_return_types
+    Feature record: CXX_FEATURE:1cxx_unicode_literals
+    Feature record: CXX_FEATURE:1cxx_uniform_initialization
+    Feature record: CXX_FEATURE:1cxx_unrestricted_unions
+    Feature record: CXX_FEATURE:1cxx_user_literals
+    Feature record: CXX_FEATURE:0cxx_variable_templates
+    Feature record: CXX_FEATURE:1cxx_variadic_macros
+    Feature record: CXX_FEATURE:1cxx_variadic_templates
+
+
+Detecting CXX [-std=c++98] compiler features compiled with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_0a768/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_0a768.dir/build.make CMakeFiles/cmTC_0a768.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building CXX object CMakeFiles/cmTC_0a768.dir/feature_tests.cxx.o
+/opt/gcc-5.4.0/bin/g++    -std=c++98 -o CMakeFiles/cmTC_0a768.dir/feature_tests.cxx.o -c /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/feature_tests.cxx
+Linking CXX executable cmTC_0a768
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_0a768.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/g++     -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_0a768.dir/feature_tests.cxx.o  -o cmTC_0a768 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+    Feature record: CXX_FEATURE:0cxx_aggregate_default_initializers
+    Feature record: CXX_FEATURE:0cxx_alias_templates
+    Feature record: CXX_FEATURE:0cxx_alignas
+    Feature record: CXX_FEATURE:0cxx_alignof
+    Feature record: CXX_FEATURE:0cxx_attributes
+    Feature record: CXX_FEATURE:0cxx_attribute_deprecated
+    Feature record: CXX_FEATURE:0cxx_auto_type
+    Feature record: CXX_FEATURE:0cxx_binary_literals
+    Feature record: CXX_FEATURE:0cxx_constexpr
+    Feature record: CXX_FEATURE:0cxx_contextual_conversions
+    Feature record: CXX_FEATURE:0cxx_decltype
+    Feature record: CXX_FEATURE:0cxx_decltype_auto
+    Feature record: CXX_FEATURE:0cxx_decltype_incomplete_return_types
+    Feature record: CXX_FEATURE:0cxx_default_function_template_args
+    Feature record: CXX_FEATURE:0cxx_defaulted_functions
+    Feature record: CXX_FEATURE:0cxx_defaulted_move_initializers
+    Feature record: CXX_FEATURE:0cxx_delegating_constructors
+    Feature record: CXX_FEATURE:0cxx_deleted_functions
+    Feature record: CXX_FEATURE:0cxx_digit_separators
+    Feature record: CXX_FEATURE:0cxx_enum_forward_declarations
+    Feature record: CXX_FEATURE:0cxx_explicit_conversions
+    Feature record: CXX_FEATURE:0cxx_extended_friend_declarations
+    Feature record: CXX_FEATURE:0cxx_extern_templates
+    Feature record: CXX_FEATURE:0cxx_final
+    Feature record: CXX_FEATURE:0cxx_func_identifier
+    Feature record: CXX_FEATURE:0cxx_generalized_initializers
+    Feature record: CXX_FEATURE:0cxx_generic_lambdas
+    Feature record: CXX_FEATURE:0cxx_inheriting_constructors
+    Feature record: CXX_FEATURE:0cxx_inline_namespaces
+    Feature record: CXX_FEATURE:0cxx_lambdas
+    Feature record: CXX_FEATURE:0cxx_lambda_init_captures
+    Feature record: CXX_FEATURE:0cxx_local_type_template_args
+    Feature record: CXX_FEATURE:0cxx_long_long_type
+    Feature record: CXX_FEATURE:0cxx_noexcept
+    Feature record: CXX_FEATURE:0cxx_nonstatic_member_init
+    Feature record: CXX_FEATURE:0cxx_nullptr
+    Feature record: CXX_FEATURE:0cxx_override
+    Feature record: CXX_FEATURE:0cxx_range_for
+    Feature record: CXX_FEATURE:0cxx_raw_string_literals
+    Feature record: CXX_FEATURE:0cxx_reference_qualified_functions
+    Feature record: CXX_FEATURE:0cxx_relaxed_constexpr
+    Feature record: CXX_FEATURE:0cxx_return_type_deduction
+    Feature record: CXX_FEATURE:0cxx_right_angle_brackets
+    Feature record: CXX_FEATURE:0cxx_rvalue_references
+    Feature record: CXX_FEATURE:0cxx_sizeof_member
+    Feature record: CXX_FEATURE:0cxx_static_assert
+    Feature record: CXX_FEATURE:0cxx_strong_enums
+    Feature record: CXX_FEATURE:1cxx_template_template_parameters
+    Feature record: CXX_FEATURE:0cxx_thread_local
+    Feature record: CXX_FEATURE:0cxx_trailing_return_types
+    Feature record: CXX_FEATURE:0cxx_unicode_literals
+    Feature record: CXX_FEATURE:0cxx_uniform_initialization
+    Feature record: CXX_FEATURE:0cxx_unrestricted_unions
+    Feature record: CXX_FEATURE:0cxx_user_literals
+    Feature record: CXX_FEATURE:0cxx_variable_templates
+    Feature record: CXX_FEATURE:0cxx_variadic_macros
+    Feature record: CXX_FEATURE:0cxx_variadic_templates
+Determining if the include file pthread.h exists passed with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_867f6/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_867f6.dir/build.make CMakeFiles/cmTC_867f6.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_867f6.dir/CheckIncludeFile.c.o
+/opt/gcc-5.4.0/bin/gcc    -o CMakeFiles/cmTC_867f6.dir/CheckIncludeFile.c.o   -c /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp/CheckIncludeFile.c
+Linking C executable cmTC_867f6
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_867f6.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/gcc    -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_867f6.dir/CheckIncludeFile.c.o  -o cmTC_867f6 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+
+Determining if the function pthread_create exists in the pthread passed with the following output:
+Change Dir: /export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp
+
+Run Build Command:"/usr/bin/gmake" "cmTC_81828/fast"
+/usr/bin/gmake -f CMakeFiles/cmTC_81828.dir/build.make CMakeFiles/cmTC_81828.dir/build
+gmake[1]: Entering directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_81828.dir/CheckFunctionExists.c.o
+/opt/gcc-5.4.0/bin/gcc   -DCHECK_FUNCTION_EXISTS=pthread_create   -o CMakeFiles/cmTC_81828.dir/CheckFunctionExists.c.o   -c /usr/share/cmake/Modules/CheckFunctionExists.c
+Linking C executable cmTC_81828
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_81828.dir/link.txt --verbose=1
+/opt/gcc-5.4.0/bin/gcc  -DCHECK_FUNCTION_EXISTS=pthread_create  -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/  -rdynamic CMakeFiles/cmTC_81828.dir/CheckFunctionExists.c.o  -o cmTC_81828 -lpthread 
+gmake[1]: Leaving directory '/export/scratch1/home/tome/Volume/mnt_mac2/expl_comp_strat/build/CMakeFiles/CMakeTmp'
+
+

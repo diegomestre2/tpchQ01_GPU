@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include "helper.hpp"
 #include "dates.hpp"
-#include "../expl_comp_strat/common.hpp"
+#include "../expl_comp_strat2/common.hpp"
 #include <cooperative_groups.h>
 
 using namespace cooperative_groups;
 using u64_t = unsigned long long int;
+
 namespace cuda{
 
 #define magic_hash(rf, ls) ((rf - 'A') * 16 + (ls - 'F'))
@@ -157,7 +158,7 @@ namespace cuda{
             
         }
     }
-#if 0
+
     __device__
     int thread_sum(int *input, AggrHashTableKey *temp, int n){
 
@@ -175,8 +176,8 @@ namespace cuda{
     }
 
     __global__
-    void thread_local_tpchQ01(int *shipdate, int *discount, int *extendedprice, int *tax, 
-        char *returnflag, char *linestatus, int *quantity, AggrHashTable *aggregations, size_t cardinality) {
+    void thread_local_tpchQ01(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
+        char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, size_t cardinality) {
 
         __shared__ u64_t t_quant[18];
         __shared__ u64_t t_base[18];
@@ -216,11 +217,10 @@ namespace cuda{
         }
         // __syncthreads();
     }
-#endif
-#if 0
+
     __global__
-    void thread_local_tpchQ01_old(int *shipdate, int *discount, int *extendedprice, int *tax, 
-        char *returnflag, char *linestatus, int *quantity, AggrHashTable *aggregations, size_t cardinality) {
+    void thread_local_tpchQ01_old(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
+        char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, size_t cardinality) {
 
         __shared__ AggrHashTableKey hashtable[18];
         //if(threadIdx.x == 0)
@@ -257,7 +257,7 @@ namespace cuda{
 
     //}
 }
-#endif
+
 
 }
 

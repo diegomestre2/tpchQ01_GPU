@@ -193,30 +193,33 @@ namespace cuda{
         //if(threadIdx.x == 0)
         //    for(int i = 0; i!= 18; ++i)hashtable[i] = {0};
         //__syncthreads();
-        u64_t i = 32 * blockIdx.x * blockDim.x + threadIdx.x;
-        u64_t end = min((u64_t) cardinality, i + 32);
+        int i = 32 * blockIdx.x * blockDim.x + threadIdx.x;
+        int end = min((int)cardinality, i + 32);
 
         for(; i < end; i++) {
 
-        //if (i < cardinality && shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
-            const auto disc = discount[i];
-            const auto price = extendedprice[i];
-            const auto disc_1 = Decimal64::ToValue(1, 0) - disc;
-            const auto tax_1 = tax[i] + Decimal64::ToValue(1, 0);
-            const auto disc_price = Decimal64::Mul(disc_1, price);
-            const auto charge = Decimal64::Mul(disc_price, tax_1);
-            const idx_t idx = magic_hash(linestatus[i], returnflag[i]);
-            t_quant[idx] += (u64_t) quantity[i];
-            t_base[idx] += price;
-            t_charge[idx] += charge;
+            if (i < cardinality && shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
+                const auto disc = discount[i];
+                const auto price = extendedprice[i];
+                const auto disc_1 = Decimal64::ToValue(1, 0) - disc;
+                const auto tax_1 = tax[i] + Decimal64::ToValue(1, 0);
+                const auto disc_price = Decimal64::Mul(disc_1, price);
+                const auto charge = Decimal64::Mul(disc_price, tax_1);
+                const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
+                
+                //if(idx < 0 || idx > 17)
+                    {printf(" idx%d l%d r%d i%d \n",idx,linestatus[i], returnflag[i], i);}
+                t_quant[idx] += (u64_t) quantity[i];
+                t_base[idx] += price;
+                t_charge[idx] += charge;
 
-            t_disc_price[idx] += disc_price;
+                t_disc_price[idx] += disc_price;
 
-            t_disc[idx] += disc;
-            t_count[idx] += 1;
+                t_disc[idx] += disc;
+                t_count[idx] += 1;
+            }
+
         }
-
-        //}
         // __syncthreads();
     }
 
@@ -229,7 +232,7 @@ namespace cuda{
         //if(threadIdx.x == 0)
         //    for(int i = 0; i!= 18; ++i)hashtable[i] = {0};
         //__syncthreads();
-        u64_t i = blockIdx.x * blockDim.x + threadIdx.x;
+        int i = blockIdx.x * blockDim.x + threadIdx.x;
 
         if(i >= cardinality)
             return;
@@ -242,7 +245,7 @@ namespace cuda{
             const auto disc_price = Decimal64::Mul(disc_1, price);
             const auto charge = Decimal64::Mul(disc_price, tax_1);
             const idx_t idx = magic_hash(linestatus[i], returnflag[i]);
-            (hashtable[idx].sum_quantity) += (u64_t) quantity[i];
+            (hashtable[idx].sum_quantity) += quantity[i];
             (hashtable[idx].sum_base_price) += (u64_t)price;
             auto old = (hashtable[idx].sum_charge) += charge;
             //if (old + charge < charge) {

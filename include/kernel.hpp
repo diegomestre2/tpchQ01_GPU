@@ -129,41 +129,35 @@ namespace cuda{
     }
 
     __global__
-    void naive_tpchQ01(int *shipdate, int *discount, int *extendedprice, int *tax, 
-        char *returnflag, char *linestatus, int *quantity, AggrHashTable *aggregations, size_t cardinality){
+    void naive_tpchQ01(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
+        char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, size_t cardinality){
 
         int i = blockIdx.x * blockDim.x + threadIdx.x;
-        //int stride = blockDim.x * gridDim.x;
-
-        //for(size_t i = index ; i < cardinality; i++) {
-            if (i < cardinality && shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
-                const auto disc = discount[i];
-                const auto price = extendedprice[i];
-                const auto disc_1 = Decimal64::ToValue(1, 0) - disc;
-                const auto tax_1 = tax[i] + Decimal64::ToValue(1, 0);
-                const auto disc_price = Decimal64::Mul(disc_1, price);
-                const auto charge = Decimal64::Mul(disc_price, tax_1);
-                const idx_t idx = returnflag[i] << 8 | linestatus[i];
-                atomicAdd((u64_t*)&(aggregations[idx].sum_quantity), (u64_t) quantity[i]);
-                atomicAdd((u64_t*)&(aggregations[idx].sum_base_price), (u64_t)price);
-                auto old = atomicAdd((u64_t*)&(aggregations[idx].sum_charge), charge);
-                if (old + charge < charge) {
-                    atomicAdd((u64_t*)&(aggregations[idx].sum_charge) + 1, 1);
-                }
-
-                auto old_2 = atomicAdd((u64_t*)&(aggregations[idx].sum_disc_price), disc_price);
-                if (old_2 + disc_price < disc_price) {
-                    atomicAdd((u64_t*)&(aggregations[idx].sum_disc_price) + 1, 1);
-                }
-                atomicAdd((u64_t*)&(aggregations[idx].sum_disc), (u64_t)disc);
-                atomicAdd((u64_t*)&(aggregations[idx].count), (u64_t)1);
-                
+        if (i < cardinality && shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
+            const auto disc = discount[i];
+            const auto price = extendedprice[i];
+            const auto disc_1 = Decimal64::ToValue(1, 0) - disc;
+            const auto tax_1 = tax[i] + Decimal64::ToValue(1, 0);
+            const auto disc_price = Decimal64::Mul(disc_1, price);
+            const auto charge = Decimal64::Mul(disc_price, tax_1);
+            const idx_t idx = returnflag[i] << 8 | linestatus[i];
+            atomicAdd((u64_t*)&(aggregations[idx].sum_quantity), (u64_t) quantity[i]);
+            atomicAdd((u64_t*)&(aggregations[idx].sum_base_price), (u64_t)price);
+            auto old = atomicAdd((u64_t*)&(aggregations[idx].sum_charge), charge);
+            if (old + charge < charge) {
+                atomicAdd((u64_t*)&(aggregations[idx].sum_charge) + 1, 1);
             }
-            //__syncthreads();
-        //}
 
+            auto old_2 = atomicAdd((u64_t*)&(aggregations[idx].sum_disc_price), disc_price);
+            if (old_2 + disc_price < disc_price) {
+                atomicAdd((u64_t*)&(aggregations[idx].sum_disc_price) + 1, 1);
+            }
+            atomicAdd((u64_t*)&(aggregations[idx].sum_disc), (u64_t)disc);
+            atomicAdd((u64_t*)&(aggregations[idx].count), (u64_t)1);
+            
+        }
     }
-
+#if 0
     __device__
     int thread_sum(int *input, AggrHashTableKey *temp, int n){
 
@@ -222,8 +216,8 @@ namespace cuda{
         }
         // __syncthreads();
     }
-
-
+#endif
+#if 0
     __global__
     void thread_local_tpchQ01_old(int *shipdate, int *discount, int *extendedprice, int *tax, 
         char *returnflag, char *linestatus, int *quantity, AggrHashTable *aggregations, size_t cardinality) {
@@ -263,6 +257,7 @@ namespace cuda{
 
     //}
 }
+#endif
 
 }
 

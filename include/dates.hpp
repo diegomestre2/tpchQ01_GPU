@@ -50,8 +50,8 @@ static int CUMLEAPDAYS[13] = {
 
 
 #define leapyear(y)		((y) % 4 == 0 && ((y) % 100 != 0 || (y) % 400 == 0))
-__host__ //__device__
-static int
+ //__device__
+inline static int
 leapyears(int year)
 {
 	/* count the 4-fold years that passed since jan-1-0 */
@@ -65,8 +65,8 @@ leapyears(int year)
 
 	return y4 + y400 - y100 + (year >= 0);	/* may be negative */
 }
-__host__ //__device__
-static date
+ //__device__
+inline static date
 todate_(int day, int month, int year)
 {
 	date n = 0;

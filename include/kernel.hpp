@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "helper.hpp"
 #include "dates.hpp"
-#include "../expl_comp_strat2/common.hpp"
+#include "../expl_comp_strat/common.hpp"
 #include <cooperative_groups.h>
 
 using namespace cooperative_groups;

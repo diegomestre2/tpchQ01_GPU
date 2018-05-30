@@ -5,7 +5,7 @@
 
 #include "kernel.hpp"
 
-#include "../expl_comp_strat2/tpch_kit.hpp"
+#include "../expl_comp_strat/tpch_kit.hpp"
 
 using timer = std::chrono::high_resolution_clock;
 #define streamSize (32 * 1024)

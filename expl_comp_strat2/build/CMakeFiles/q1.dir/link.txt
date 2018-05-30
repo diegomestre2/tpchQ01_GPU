@@ -1,1 +1,0 @@
-/opt/gcc-5.4.0/bin/g++    -L/usr/local/cuda-9.1/targets/x86_64-linux/lib/ -rdynamic CMakeFiles/q1.dir/q1.cpp.o CMakeFiles/q1.dir/tpch_kit.cpp.o CMakeFiles/q1.dir/common.cpp.o CMakeFiles/q1.dir/monetdb.cpp.o  -o q1 -lpthread 

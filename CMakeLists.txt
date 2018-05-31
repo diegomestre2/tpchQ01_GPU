@@ -74,7 +74,7 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --generate-code arch=compute_61,code=sm_6
 # don't show deprecation warnings (which are a lot with CUDA 9)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -Wno-deprecated-declarations)
 
-set(CUDA_NVCC_FLAGS_DEBUG -g --generate-line-info --keep -DDEBUG)
+set(CUDA_NVCC_FLAGS_DEBUG -g -O0 --generate-line-info --keep -DDEBUG)
 set(CUDA_NVCC_FLAGS_RELEASE -O3 --generate-line-info --use_fast_math --keep -DNDEBUG)
 
 set(CUDA_PROPAGATE_HOST_FLAGS ON)
@@ -84,9 +84,8 @@ include_directories(/usr/local/cuda/include)
 
 
 ### GCC Flags
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG -Og -g")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG -O0 -g")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++14 -march=corei7")
-
 
 SET(SOURCE_FILES
         src/main.cu

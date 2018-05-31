@@ -1,6 +1,9 @@
+#pragma once
+
 #include <stdio.h>
 #include "helper.hpp"
 #include "dates.hpp"
+#include "constants.hpp"
 #include "../expl_comp_strat/common.hpp"
 #include <cooperative_groups.h>
 
@@ -182,7 +185,7 @@ namespace cuda{
 
     __global__
     void thread_local_tpchQ01(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
-        char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, size_t cardinality) {
+        char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, u64_t cardinality) {
 
         __shared__ u64_t t_quant[18];
         __shared__ u64_t t_base[18];
@@ -193,10 +196,8 @@ namespace cuda{
         //if(threadIdx.x == 0)
         //    for(int i = 0; i!= 18; ++i)hashtable[i] = {0};
         //__syncthreads();
-
-        int i = 32 * blockIdx.x * blockDim.x + threadIdx.x;
-        int end = min((int)cardinality, i + 32);
-
+        u64_t i = VALUES_PER_THREAD * blockIdx.x * blockDim.x + threadIdx.x;
+        u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
         for(; i < end; i++) {
 
             if (i < cardinality && shipdate[i] <= 729999){//todate_(2, 9, 1998)) {

@@ -7,7 +7,6 @@
 #include "../expl_comp_strat/tpch_kit.hpp"
 
 using timer = std::chrono::high_resolution_clock;
-#define streamSize (32 * 1024)
 
 inline bool file_exists (const std::string& name) {
   struct stat buffer;
@@ -28,7 +27,7 @@ int main(){
 
     assert(cardinality > 0 && "Prevent BS exception");
     const size_t data_length = cardinality;
-    const int nStreams = static_cast<int>(data_length / streamSize);
+    const int nStreams = static_cast<int>((data_length + TUPLES_PER_STREAM - 1) / TUPLES_PER_STREAM);
     clear_tables();
 
     /* Allocate memory on device */
@@ -50,25 +49,18 @@ int main(){
 
     /* Transfer data to device */
     cudaStream_t streams[nStreams];
-    auto streamBytes     = streamSize * sizeof(int64_t);
-    auto streamBytes_int = streamSize * sizeof(int);
-    auto stremBytes_char = streamSize * sizeof(char);
     for (int i = 0; i < nStreams; ++i) {
-        int offset = i * streamSize;
+        size_t offset = i * TUPLES_PER_STREAM;
+        size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
+
         cudaStreamCreate(&streams[i]);
-
-        if (offset + stremBytes_char > data_length) {
-            stremBytes_char = data_length - offset;
-            streamBytes     = (data_length - offset) * sizeof(int);
-        }
-
-        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, streamBytes_int, streams[i]);
-        cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, streamBytes,     streams[i]);
-        cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, streamBytes,     streams[i]);
-        cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, streamBytes,     streams[i]);
-        cuda::memory::async::copy(d_quantity.get()      + offset, quantity      + offset, streamBytes,     streams[i]);
-        cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, stremBytes_char, streams[i]);
-        cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, stremBytes_char, streams[i]);
+        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, size * sizeof(int),     streams[i]);
+        cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, size * sizeof(int64_t),     streams[i]);
+        cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, size * sizeof(int64_t),     streams[i]);
+        cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, size * sizeof(int64_t),     streams[i]);
+        cuda::memory::async::copy(d_quantity.get()      + offset, quantity      + offset, size * sizeof(int64_t),     streams[i]);
+        cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, size * sizeof(char), streams[i]);
+        cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, size * sizeof(char), streams[i]);
         //break;
     }
 
@@ -84,28 +76,35 @@ int main(){
     /* Setup to launch kernel */
     //uint32_t warp_size = 32;
     //uint32_t elements_per_thread = warp_size;
-    uint32_t block_size = 128;
-    //uint32_t elements_per_block = block_size * elements_per_thread;
+    //uint32_t elements_per_block = BLOCK_SIZE * elements_per_thread;
 
-    //uint32_t block_cnt = ((data_length / 32) + block_size - 1) / block_size;
-    //int sharedBytes    = 18 * sizeof(AggrHashTableKey);
+    uint32_t block_cnt = ((data_length / VALUES_PER_THREAD) + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    int sharedBytes = 18 * sizeof(AggrHashTableKey);
 
-    std::cout << "launch params: <<<" << (streamSize / (block_size * 32)) << "," << block_size << ">>>" << std::endl;
+    cuda_check_error();
     auto start = timer::now();
     for (int i = 0; i < nStreams; ++i) {
-        auto num   = streamSize;
-        int offset = i * streamSize;
-        
-        cuda::thread_local_tpchQ01<<<(streamSize / (block_size * 32)), block_size, 0, streams[i]>>>(d_shipdate.get(), 
-            d_discount.get(), d_extendedprice.get(), d_tax.get(), d_returnflag.get(), 
-            d_linestatus.get(), d_quantity.get(), d_aggregations.get(), streamSize); 
+        size_t offset = i * TUPLES_PER_STREAM;
+        size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));;
+        size_t amount_of_blocks = TUPLES_PER_STREAM / (BLOCK_SIZE * VALUES_PER_THREAD);
+
+        cuda::thread_local_tpchQ01<<<amount_of_blocks, BLOCK_SIZE, 0, streams[i]>>>(
+            d_shipdate.get() + offset,
+            d_discount.get() + offset,
+            d_extendedprice.get() + offset,
+            d_tax.get() + offset,
+            d_returnflag.get() + offset,
+            d_linestatus.get() + offset,
+            d_quantity.get() + offset,
+            d_aggregations.get() + offset,
+            (u64_t) size);
         //break;
     }
     cudaDeviceSynchronize();
     cuda_check_error();
     auto end = timer::now();
     for (int i = 0; i < nStreams; ++i) {
-        int offset = i * streamSize;
+        size_t offset = i * TUPLES_PER_STREAM;
         //cudaMemcpyAsync(&a[offset], &d_a[offset], 
                           //streamBytes, cudaMemcpyDeviceToHost, streams[i]);
         cudaStreamSynchronize(streams[i]);
@@ -115,10 +114,10 @@ int main(){
 
 
     /* Launching Kernel 
-    std::cout << "launch params: <<<" << block_cnt << "," << block_size << ">>>" << std::endl;
+    std::cout << "launch params: <<<" << block_cnt << "," << BLOCK_SIZE << ">>>" << std::endl;
     std::cout << todate_(2, 9, 1998) << std::endl;
         auto start = timer::now();
-    cuda::naive_tpchQ01<<<block_cnt , block_size, sharedBytes>>>(d_shipdate.get(), 
+    cuda::naive_tpchQ01<<<block_cnt , BLOCK_SIZE, sharedBytes>>>(d_shipdate.get(), 
         d_discount.get(), d_extendedprice.get(), d_tax.get(), d_returnflag.get(), 
         d_linestatus.get(), d_quantity.get(), d_aggregations.get(), data_length);
     cudaDeviceSynchronize();

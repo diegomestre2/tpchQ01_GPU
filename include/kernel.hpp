@@ -188,33 +188,13 @@ namespace cuda{
         char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, u64_t cardinality) {
 
         constexpr size_t N = 18;
-        __shared__ u64_t t_quant[N];
-        __shared__ u64_t t_base[N];
-        __shared__ u64_t t_charge[N];
-        __shared__ u64_t t_disc_price[N];
-        __shared__ u64_t t_disc[N];
-        __shared__ u64_t t_count[N];
+        __shared__ AggrHashTable agg[N];
+        memset(agg, 0, sizeof(AggrHashTable) * N);
 
-        for (int i=0; i<N; i++) {
-            t_quant[i] = 0;
-            t_base[i] = 0;
-            t_charge[i] = 0;
-            t_disc_price[i] = 0;
-            t_disc[i] = 0;
-            t_count[i] = 0;
-        }
-
-        //__shared__ char t_ls[N];
-        //__shared__ char t_rf[N];
-        //if(threadIdx.x == 0)
-        //    for(int i = 0; i!= 18; ++i)hashtable[i] = {0};
-        //__syncthreads();
-
-        u64_t i = VALUES_PER_THREAD * blockIdx.x * blockDim.x + threadIdx.x;
+        u64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
         u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
-        for(; i < end; i++) {
-            atomicAdd(&(aggregations[20].count), 1);
-            if (shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
+        for(; i < end; ++i) {
+            if (shipdate[i] <= 729999) {//todate_(2, 9, 1998)) {
                 const auto disc = discount[i];
                 const auto price = extendedprice[i];
                 const auto disc_1 = Decimal64::ToValue(1, 0) - disc;
@@ -223,31 +203,35 @@ namespace cuda{
                 const auto charge = Decimal64::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
                 
-                t_quant[idx]      += quantity[i];
-                t_base[idx]       += price;
-                t_charge[idx]     += charge;
-                t_disc_price[idx] += disc_price;
-                t_disc[idx]       += disc;
-                t_count[idx]      += 1;
-                //t_ls[idx] = linestatus[i];
-                //t_rf[idx] = eturnflag[i];
+                agg[idx].sum_quantity   += quantity[i];
+                agg[idx].sum_base_price += price;
+                agg[idx].sum_charge     += charge;
+                agg[idx].sum_disc_price += disc_price;
+                agg[idx].sum_disc       += disc;
+                agg[idx].count          += 1;
             }
-            shipdate[i] = 0xDEADBEEF;
         }
         // final aggregation
-        for (i=0; i<N; i++) {
-            //int idx = t_rf[i] >> 8 + t_ls[i];
-            auto idx = i;
-            // FIXME: maybe do 128 bit aggregations here
-            atomicAdd(&(aggregations[idx].sum_quantity), t_quant[i]);
-            atomicAdd(&(aggregations[idx].sum_base_price), t_base[i]);
-            atomicAdd(&(aggregations[idx].sum_charge), t_charge[i]);
-            atomicAdd(&(aggregations[idx].sum_disc_price), t_disc_price[i]);
-            atomicAdd(&(aggregations[idx].sum_disc), t_disc[i]);
-            atomicAdd(&(aggregations[idx].count), t_count[i]);
+        for (i = 0; i < N; ++i) {
+            if (agg[i].count > 0) {
+                auto idx = i;
+                // FIXME: maybe do 128 bit aggregations here
+                atomicAdd(&aggregations[idx].sum_quantity, agg[i].sum_quantity);
+                atomicAdd(&aggregations[idx].sum_base_price, agg[i].sum_base_price);
+                atomicAdd(&aggregations[idx].sum_charge, agg[i].sum_charge);
+                atomicAdd(&aggregations[idx].sum_disc_price, agg[i].sum_disc_price);
+                atomicAdd(&aggregations[idx].sum_disc, agg[i].sum_disc);
+                atomicAdd(&aggregations[idx].count, agg[i].count);
+            }
         }
     }
 }
+
+
+// # A|F | 465958688.0 | 872178205678.8 | 80434685074992.0 | 8365026871473990.72|18255424
+// # N|O | 469566896.0 | 878202612380.80 | 80821015986522.56 | 8406535746533490.56|18405040
+// # N|F | 108427776.0 | 170358257374.40 | 16093673075816.32 | 1673710166678663.68|4248384
+// # R|F | 474097920.0 | 884653163765.76 | 81359376767091.20 | 8461678658048121.28|18566336
 
 
 /*

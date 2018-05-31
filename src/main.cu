@@ -6,6 +6,10 @@
 #include "kernel.hpp"
 #include "../expl_comp_strat/tpch_kit.hpp"
 
+size_t magic_hash(char rf, char ls) {
+    return (((rf - 'A')) - (ls - 'F'));
+}
+
 using timer = std::chrono::high_resolution_clock;
 
 inline bool file_exists (const std::string& name) {
@@ -90,7 +94,7 @@ int main(){
 
     cuda_check_error();
     for (int i = 0; i < nStreams; ++i) {
-        size_t offset = i * TUPLES_PER_STREAM;
+        //size_t offset = i * TUPLES_PER_STREAM;
 
         cudaStreamSynchronize(streams[i]);
         cudaStreamDestroy(streams[i]);
@@ -103,10 +107,22 @@ int main(){
     auto print_dec = [] (auto s, auto x) { printf("%s%ld.%ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
     for (size_t group=0; group<MAX_GROUPS; group++) {
         if (aggrs0[group].count > 0) {
-            char rf = group >> 8;
-            char ls = group & std::numeric_limits<unsigned char>::max();
-
             size_t i = group;
+            char rf = '-', ls = '-';
+            if (group == magic_hash('A', 'F')) {
+                rf = 'A';
+                ls = 'F';
+            } else if (group == magic_hash('N', 'F')) {
+                rf = 'N';
+                ls = 'F';
+
+            } else if (group == magic_hash('N', 'O')) {
+                rf = 'N';
+                ls = 'O';
+            } else if (group == magic_hash('R', 'F')) {
+                rf = 'R';
+                ls = 'F';
+            }
 
             printf("# %c|%c", rf, ls);
             print_dec(" | ", aggrs0[i].sum_quantity);
@@ -117,7 +133,7 @@ int main(){
         }
     }
 
-    double sf = li.l_returnflag.cardinality / 6001215;
+    double sf = cardinality / 6001215.0;
 
     std::chrono::duration<double> duration(end - start);
     uint64_t tuples_per_second = static_cast<uint64_t>(data_length / duration.count());

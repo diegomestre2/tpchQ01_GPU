@@ -1,6 +1,9 @@
+#pragma once
+
 #include <stdio.h>
 #include "helper.hpp"
 #include "dates.hpp"
+#include "constants.hpp"
 #include "../expl_comp_strat/common.hpp"
 #include <cooperative_groups.h>
 
@@ -177,7 +180,7 @@ namespace cuda{
 
     __global__
     void thread_local_tpchQ01(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
-        char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, size_t cardinality) {
+        char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, int64_t cardinality) {
 
         __shared__ u64_t t_quant[18];
         __shared__ u64_t t_base[18];
@@ -188,8 +191,10 @@ namespace cuda{
         //if(threadIdx.x == 0)
         //    for(int i = 0; i!= 18; ++i)hashtable[i] = {0};
         //__syncthreads();
-        int i = 32 * blockIdx.x * blockDim.x + threadIdx.x;
-        int end = min((int)cardinality, i + 32);
+        int64_t i = VALUES_PER_THREAD * blockIdx.x * blockDim.x + threadIdx.x;
+        int64_t end = min((int64_t)cardinality, i + VALUES_PER_THREAD);
+
+        printf("i: %d, end: %d\n", (int)i, (int)end);
 
         for(; i < end; i++) {
 
@@ -200,10 +205,9 @@ namespace cuda{
                 const auto tax_1 = tax[i] + Decimal64::ToValue(1, 0);
                 const auto disc_price = Decimal64::Mul(disc_1, price);
                 const auto charge = Decimal64::Mul(disc_price, tax_1);
-                const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
-                
+                idx_t idx = magic_hash(returnflag[i], linestatus[i]);
+                idx = 0;
                 //if(idx < 0 || idx > 17)
-                    {printf(" idx%d l%d r%d i%d \n",idx,linestatus[i], returnflag[i], i);}
                 t_quant[idx] += (u64_t) quantity[i];
                 t_base[idx] += price;
                 t_charge[idx] += charge;

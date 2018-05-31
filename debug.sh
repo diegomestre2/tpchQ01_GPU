@@ -1,16 +1,17 @@
 #!/bin/bash
+./dependencies.sh
 
-# build cuda-api-wrappers
-cd cuda-api-wrappers
-if [ ! -d "./$lib" ];
+# build project for debugging
+mkdir -p build
+cd build
+if [ ! -d "debug" ]
 then
-	cmake .
-	make
+	mkdir debug
+	cd debug
+	cmake -DCMAKE_BUILD_TYPE=Debug ../..
+	cd ..
 fi
 cd ..
-# build project for debugging
-rm -R debug
-mkdir debug
-cd debug
-cmake -DCMAKE_BUILD_TYPE=Debug ..
-make
+# build project 
+cd build/debug
+make -j 4

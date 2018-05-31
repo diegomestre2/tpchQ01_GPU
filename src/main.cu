@@ -69,10 +69,12 @@ int main(){
 
     for (int i = 0; i < nStreams; ++i) {
         size_t offset = i * TUPLES_PER_STREAM;
-        size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));;
-        size_t amount_of_blocks = TUPLES_PER_STREAM / (VALUES_PER_THREAD * THREADS_PER_BLOCK);
+        assert(offset <= data_length);
+        size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
+        printf("card %lld size %lld\n", cardinality, size);
+        size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
 
-        //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << ">>>" << std::endl;
+        std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << ">>>" << std::endl;
 
         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, 0, streams[i]>>>(
             d_shipdate.get() + offset,

@@ -188,12 +188,12 @@ namespace cuda{
         char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, u64_t cardinality) {
 
         constexpr size_t N = 18;
-        __shared__ int64_t t_quant[N];
-        __shared__ int64_t t_base[N];
-        __shared__ int64_t t_charge[N];
-        __shared__ int64_t t_disc_price[N];
-        __shared__ int64_t t_disc[N];
-        __shared__ int64_t t_count[N];
+        __shared__ u64_t t_quant[N];
+        __shared__ u64_t t_base[N];
+        __shared__ u64_t t_charge[N];
+        __shared__ u64_t t_disc_price[N];
+        __shared__ u64_t t_disc[N];
+        __shared__ u64_t t_count[N];
 
         for (int i=0; i<N; i++) {
             t_quant[i] = 0;
@@ -203,6 +203,7 @@ namespace cuda{
             t_disc[i] = 0;
             t_count[i] = 0;
         }
+
         //__shared__ char t_ls[N];
         //__shared__ char t_rf[N];
         //if(threadIdx.x == 0)
@@ -212,6 +213,7 @@ namespace cuda{
         u64_t i = VALUES_PER_THREAD * blockIdx.x * blockDim.x + threadIdx.x;
         u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
         for(; i < end; i++) {
+            atomicAdd(&(aggregations[20].count), 1);
             if (shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
                 const auto disc = discount[i];
                 const auto price = extendedprice[i];
@@ -228,20 +230,21 @@ namespace cuda{
                 t_disc[idx]       += disc;
                 t_count[idx]      += 1;
                 //t_ls[idx] = linestatus[i];
-                //t_rf[idx] = returnflag[i];
+                //t_rf[idx] = eturnflag[i];
             }
+            shipdate[i] = 0xDEADBEEF;
         }
         // final aggregation
         for (i=0; i<N; i++) {
             //int idx = t_rf[i] >> 8 + t_ls[i];
             auto idx = i;
             // FIXME: maybe do 128 bit aggregations here
-            atomicAdd((u64_t*)&(aggregations[idx].sum_quantity), t_quant[i]);
-            atomicAdd((u64_t*)&(aggregations[idx].sum_base_price), t_base[i]);
-            atomicAdd((u64_t*)&(aggregations[idx].sum_charge), t_charge[i]);
-            atomicAdd((u64_t*)&(aggregations[idx].sum_disc_price), t_disc_price[i]);
-            atomicAdd((u64_t*)&(aggregations[idx].sum_disc), t_disc[i]);
-            atomicAdd((u64_t*)&(aggregations[idx].count), t_count[i]);
+            atomicAdd(&(aggregations[idx].sum_quantity), t_quant[i]);
+            atomicAdd(&(aggregations[idx].sum_base_price), t_base[i]);
+            atomicAdd(&(aggregations[idx].sum_charge), t_charge[i]);
+            atomicAdd(&(aggregations[idx].sum_disc_price), t_disc_price[i]);
+            atomicAdd(&(aggregations[idx].sum_disc), t_disc[i]);
+            atomicAdd(&(aggregations[idx].count), t_count[i]);
         }
     }
 }

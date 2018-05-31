@@ -221,7 +221,7 @@ namespace cuda{
                 const auto charge = Decimal64::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
                 
-                t_quant[idx]      += (int) quantity[i];
+                t_quant[idx]      += quantity[i];
                 t_base[idx]       += price;
                 t_charge[idx]     += charge;
                 t_disc_price[idx] += disc_price;
@@ -231,19 +231,10 @@ namespace cuda{
                 //t_rf[idx] = returnflag[i];
             }
         }
-#if 1
         // final aggregation
         for (i=0; i<N; i++) {
             //int idx = t_rf[i] >> 8 + t_ls[i];
             auto idx = i;
-#if 0
-            aggregations[i].sum_quantity += t_quant[i];
-            aggregations[i].count += t_count[i];
-            aggregations[i].sum_base_price += t_base[i];
-            aggregations[i].sum_disc += t_disc[i];
-            aggregations[i].sum_disc_price += t_disc_price[i];
-            aggregations[i].sum_charge += t_charge[i];
-#else
             // FIXME: maybe do 128 bit aggregations here
             atomicAdd((u64_t*)&(aggregations[idx].sum_quantity), t_quant[i]);
             atomicAdd((u64_t*)&(aggregations[idx].sum_base_price), t_base[i]);
@@ -251,9 +242,7 @@ namespace cuda{
             atomicAdd((u64_t*)&(aggregations[idx].sum_disc_price), t_disc_price[i]);
             atomicAdd((u64_t*)&(aggregations[idx].sum_disc), t_disc[i]);
             atomicAdd((u64_t*)&(aggregations[idx].count), t_count[i]);
-#endif
         }
-#endif
     }
 }
 

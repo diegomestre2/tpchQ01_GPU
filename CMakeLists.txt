@@ -91,6 +91,7 @@ SET(SOURCE_FILES
         src/main.cu
         expl_comp_strat/common.cpp
         expl_comp_strat/tpch_kit.cpp
+        expl_comp_strat/monetdb.cpp
         )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")

@@ -1,5 +1,6 @@
 #include "tpch_kit.hpp"
 #include "common.hpp"
+#include "monetdb.hpp"
 
 #include <fstream>
 #include <cassert>
@@ -149,7 +150,7 @@ Date::Date(const char* v, int64_t len, int plus_days)
 	if (!parse(v, v + len, day, month, year)) {
 		assert(false);
 	}
-	//dte_val = todate(day, month, year);
+	dte_val = todate(day, month, year);
 	dte_val += plus_days;
 }
 

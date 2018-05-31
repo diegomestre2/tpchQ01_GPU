@@ -57,7 +57,7 @@ include(HandleCUDAComputeCapability)
 # avoid implicitly synchronization with other streams
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --default-stream per-thread)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --expt-relaxed-constexpr)
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --restrict --std=c++14 -Xcompiler -D__CORRECT_ISO_CPP11_MATH_H_PROTO -D_MWAITXINTRIN_H_INCLUDED)
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -g --restrict --std=c++14 -Xcompiler -D__CORRECT_ISO_CPP11_MATH_H_PROTO -D_MWAITXINTRIN_H_INCLUDED)
 
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --source-in-ptx)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -Xptxas -dlcm=cg)
@@ -75,7 +75,7 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --generate-code arch=compute_61,code=sm_6
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -Wno-deprecated-declarations)
 
 set(CUDA_NVCC_FLAGS_DEBUG -g -O0 --generate-line-info --keep -DDEBUG)
-set(CUDA_NVCC_FLAGS_RELEASE -O3 --generate-line-info --use_fast_math --keep -DNDEBUG)
+set(CUDA_NVCC_FLAGS_RELEASE -g -O3 --generate-line-info --use_fast_math --keep -DNDEBUG)
 
 set(CUDA_PROPAGATE_HOST_FLAGS ON)
 set(CUDA_SEPARABLE_COMPILATION OFF)
@@ -91,6 +91,7 @@ SET(SOURCE_FILES
         src/main.cu
         expl_comp_strat/common.cpp
         expl_comp_strat/tpch_kit.cpp
+        expl_comp_strat/monetdb.cpp
         )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")

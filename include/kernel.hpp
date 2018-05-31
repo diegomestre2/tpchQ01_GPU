@@ -180,24 +180,29 @@ namespace cuda{
     }
     __inline__ __device__ 
     idx_t magic_hash(char rf, char ls) {
-        return (((rf - 'A')) + 5 - (ls - 'F'));
+        return (((rf - 'A')) - (ls - 'F'));
     }
 
     __global__
-    void thread_local_tpchQ01(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
-        char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, u64_t cardinality) {
+    void thread_local_tpchQ01(
+        int *shipdate,
+        int64_t *discount,
+        int64_t *extendedprice,
+        int64_t *tax,
+        char *returnflag,
+        char *linestatus,
+        int64_t *quantity,
+        AggrHashTable *aggregations,
+        u64_t cardinality) {
 
-        __shared__ int64_t t_quant[18];
-        __shared__ int64_t t_base[18];
-        __shared__ int64_t t_charge[18];
-        __shared__ int64_t t_disc_price[18];
-        __shared__ int64_t t_disc[18];
-        __shared__ int64_t t_count[18];
+        constexpr size_t N = 18;
+        AggrHashTable agg[N];
+        memset(agg, 0, sizeof(AggrHashTable) * N);
 
-        u64_t i = VALUES_PER_THREAD * blockIdx.x * blockDim.x + threadIdx.x;
+        u64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
         u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
-        for(; i < end; i++) {
-            if (shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
+        for(; i < end; ++i) {
+            if (shipdate[i] <= 729999) {
                 const auto disc = discount[i];
                 const auto price = extendedprice[i];
                 const auto disc_1 = Decimal64::ToValue(1, 0) - disc;
@@ -206,29 +211,34 @@ namespace cuda{
                 const auto charge = Decimal64::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
                 
-                t_quant[idx]      += (int) quantity[i];
-                t_base[idx]       += price;
-                t_charge[idx]     += charge;
-                t_disc_price[idx] += disc_price;
-                t_disc[idx]       += disc;
-                t_count[idx]      += 1;
+                agg[idx].sum_quantity   += quantity[i];
+                agg[idx].sum_base_price += price;
+                agg[idx].sum_charge     += charge;
+                agg[idx].sum_disc_price += disc_price;
+                agg[idx].sum_disc       += disc;
+                agg[idx].count          += 1;
+            }
+        }
+        // final aggregation
+        for (i = 0; i < N; ++i) {
+            if (agg[i].count > 0) {
+                // FIXME: maybe do 128 bit aggregations here
+                atomicAdd(&aggregations[i].sum_quantity, agg[i].sum_quantity);
+                atomicAdd(&aggregations[i].sum_base_price, agg[i].sum_base_price);
+                atomicAdd(&aggregations[i].sum_charge, agg[i].sum_charge);
+                atomicAdd(&aggregations[i].sum_disc_price, agg[i].sum_disc_price);
+                atomicAdd(&aggregations[i].sum_disc, agg[i].sum_disc);
+                atomicAdd(&aggregations[i].count, agg[i].count);
             }
         }
     }
 }
 
+// A,F,37734107,56586554400.73,53758257134.8700,55909065222.827692,25.522005853257337,38273.12973462185,0.049985295838398135,1478493
+// N,F,991417,1487504710.38,1413082168.0541,1469649223.194375,25.51647192052298,38284.46776084826,0.050093426674216325,38854
+// N,O,74476040,111701729697.74,106118230307.6056,110367043872.497010,25.502226769584993,38249.117988908765,0.049996586053704065,2920374
+// R,F,37719753,56568041380.90,53741292684.6040,55889619119.831932,25.50579361269077,38250.85462609964,0.050009405830126356,1478870
 
-/*
-# A|F|37734107.0|56586554400.73|5375825713487.0|559090652228276.92|1478493
-# N|F|991417.0|1487504710.38|141308216805.41|14696492231943.75|38854
-# N|O|76633518.0|114935210409.19|10918959189747.20|1135610242630137.82|3004998
-# R|F|37719753.0|56568041380.90|5374129268460.40|558896191198319.32|1478870
-
-# A|F | 18862170.0 | 28284439012.17 | 2687056106082.24 | 279448898345577.64|1478493
-# N|F | 495416.0 | 741540899.0 | 70453555245.0 | 7324666930399.20|38854
-# N|O | 38311390.0 | 57463978052.78 | 5459204398489.66 | 567767112994873.0|3004998
-# R|F | 18875614.0 | 28301392770.17 | 2688523518267.66 | 279609427976298.35|1478870
-*/
 
 /*
     65, 70 -> 0

@@ -6,6 +6,10 @@
 #include "kernel.hpp"
 #include "../expl_comp_strat/tpch_kit.hpp"
 
+size_t magic_hash(char rf, char ls) {
+    return (((rf - 'A')) - (ls - 'F'));
+}
+
 using timer = std::chrono::high_resolution_clock;
 
 inline bool file_exists (const std::string& name) {
@@ -42,6 +46,8 @@ int main(){
     auto d_linestatus    = cuda::memory::host::make_unique< char[]          >(data_length);
     auto d_aggregations  = cuda::memory::host::make_unique< AggrHashTable[] >(MAX_GROUPS);
 
+    cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
+
     /* Transfer data to device */
     cudaStream_t streams[nStreams];
     for (int i = 0; i < nStreams; ++i) {
@@ -67,8 +73,9 @@ int main(){
 
     for (int i = 0; i < nStreams; ++i) {
         size_t offset = i * TUPLES_PER_STREAM;
-        size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));;
-        size_t amount_of_blocks = TUPLES_PER_STREAM / (VALUES_PER_THREAD * THREADS_PER_BLOCK);
+        assert(offset <= data_length);
+        size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
+        size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
 
         //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << ">>>" << std::endl;
         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, 0, streams[i]>>>(
@@ -79,27 +86,56 @@ int main(){
             d_returnflag.get() + offset,
             d_linestatus.get() + offset,
             d_quantity.get() + offset,
-            d_aggregations.get() + offset,
+            d_aggregations.get(),
             (u64_t) size);
     }
-    cudaDeviceSynchronize();
-    auto end = timer::now();
+
     cuda_check_error();
     for (int i = 0; i < nStreams; ++i) {
         //size_t offset = i * TUPLES_PER_STREAM;
-        //cudaMemcpyAsync(&a[offset], &d_a[offset], 
-                          //streamBytes, cudaMemcpyDeviceToHost, streams[i]);
+
         cudaStreamSynchronize(streams[i]);
         cudaStreamDestroy(streams[i]);
     }
 
+    cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);
+    cudaDeviceSynchronize();
+    auto end = timer::now();
+
     auto print_dec = [] (auto s, auto x) { printf("%s%ld.%ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
     for (size_t group=0; group<MAX_GROUPS; group++) {
         if (aggrs0[group].count > 0) {
-            char rf = group >> 8;
-            char ls = group & std::numeric_limits<unsigned char>::max();
-
             size_t i = group;
+            char rf = '-', ls = '-';
+            if (group == magic_hash('A', 'F')) {
+                rf = 'A';
+                ls = 'F';
+                if (cardinality == 6001215) {
+                    assert(aggrs0[i].sum_quantity == 3773410700);
+                    assert(aggrs0[i].count == 1478493);
+                }
+            } else if (group == magic_hash('N', 'F')) {
+                rf = 'N';
+                ls = 'F';
+                if (cardinality == 6001215) {
+                    assert(aggrs0[i].sum_quantity == 99141700);
+                    assert(aggrs0[i].count == 38854);
+                }
+            } else if (group == magic_hash('N', 'O')) {
+                rf = 'N';
+                ls = 'O';
+                if (cardinality == 6001215) {
+                    assert(aggrs0[i].sum_quantity == 7447604000);
+                    assert(aggrs0[i].count == 2920374);
+                }
+            } else if (group == magic_hash('R', 'F')) {
+                rf = 'R';
+                ls = 'F';
+                if (cardinality == 6001215) {
+                    assert(aggrs0[i].sum_quantity == 3771975300);
+                    assert(aggrs0[i].count == 1478870);
+                }
+            }
 
             printf("# %c|%c", rf, ls);
             print_dec(" | ", aggrs0[i].sum_quantity);
@@ -110,7 +146,7 @@ int main(){
         }
     }
 
-    double sf = li.l_returnflag.cardinality / 6001215;
+    double sf = cardinality / 6001215.0;
 
     std::chrono::duration<double> duration(end - start);
     uint64_t tuples_per_second = static_cast<uint64_t>(data_length / duration.count());
@@ -139,22 +175,4 @@ int main(){
     std::cout << "| Theoretical Bandwidth [GB/s]        : " << (5505 * 10e06 * (352 / 8) * 2) / 10e09 << std::endl;
     std::cout << "| Effective Bandwidth [GB/s]          : " << data_length * 25 * 13 / duration.count() << std::endl;
     std::cout << "+-------------------------------------------------------------------------------+\n";
-    /* Test */
-    /*std::cout << std::endl;
-    std::vector<int> in(64, 1);
-    std::vector<int> res(64, 0);  
-    int  *d_in, *d_out, *d_res;
-    cudaMalloc(&d_in,       64 * sizeof(int));
-    cudaMalloc(&d_out,      64 * sizeof(int));
-    cudaMalloc(&d_res,      64 * sizeof(int));
-    cudaMemcpy(d_in,      &in[0],      64 * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_res,      &res[0],      64 * sizeof(int), cudaMemcpyHostToDevice);
-    cuda::filter_k<<<2,32>>>(d_out,d_res, d_in, 64);
-    cudaMemcpy(     &res[0], d_res,      64 * sizeof(int), cudaMemcpyDeviceToHost);
-    for(auto &i : res)
-            printf(" %d ", i);
-    //cuda::deviceReduceKernel<<<1,32>>>(d_out, d_out, 2);
-    cudaFree(d_in);
-    cudaFree(d_out);*/
-
 }

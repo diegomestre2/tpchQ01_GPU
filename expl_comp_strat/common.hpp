@@ -4,6 +4,7 @@
 #define PROFILE
 #define PRINT_RESULTS
 //#define PRINT_MINMAX
+using u64_t = unsigned long long int;
 
 #include <sstream>
 #include <vector>
@@ -149,12 +150,12 @@ using Decimal64 = Decimal<15, 2>;
 using Decimal128 = Decimal<15, 2, int128_t>;
 
 struct AggrHashTable {
-	int64_t sum_quantity;
-	int64_t count;
-	int64_t sum_base_price;
-	int64_t sum_disc;
-	int64_t sum_disc_price;
-	int64_t sum_charge;
+	u64_t sum_quantity;
+	u64_t count;
+	u64_t sum_base_price;
+	u64_t sum_disc;
+	u64_t sum_disc_price;
+	u64_t sum_charge;
 };
 
 

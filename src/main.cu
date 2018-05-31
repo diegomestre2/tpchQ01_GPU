@@ -4,7 +4,6 @@
 #include <iomanip>
 
 #include "kernel.hpp"
-
 #include "../expl_comp_strat/tpch_kit.hpp"
 
 using timer = std::chrono::high_resolution_clock;
@@ -26,24 +25,22 @@ int main(){
     auto current_device = cuda::device::current::get();
 
     auto d_shipdate      = cuda::memory::device::make_unique< int[]            >(current_device, data_length);
-    auto d_discount      = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
-    auto d_extendedprice = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
-    auto d_tax           = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
-    auto d_quantity      = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
+    auto d_discount      = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
+    auto d_extendedprice = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
+    auto d_tax           = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
+    auto d_quantity      = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
     auto d_returnflag    = cuda::memory::device::make_unique< char[]           >(current_device, data_length);
     auto d_linestatus    = cuda::memory::device::make_unique< char[]           >(current_device, data_length);
     auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]  >(current_device, MAX_GROUPS);
 
     auto size_int64        = data_length * sizeof(int64_t);
-    auto size_int        = data_length * sizeof(int);
-
+    auto size_int          = data_length * sizeof(int);
     auto size_char         = data_length * sizeof(char);
     auto size_aggregations = MAX_GROUPS  * sizeof(AggrHashTable);
 
     /* Transfer data to device */
-
     cudaStream_t streams[nStreams];
-    auto streamBytes = streamSize * sizeof(int64_t);
+    auto streamBytes     = streamSize * sizeof(int64_t);
     auto streamBytes_int = streamSize * sizeof(int);
     auto stremBytes_char = streamSize * sizeof(char);
     for (int i = 0; i < nStreams; ++i) {
@@ -52,10 +49,10 @@ int main(){
 
         if (offset + stremBytes_char > data_length) {
             stremBytes_char = data_length - offset;
-            streamBytes = (data_length - offset) * sizeof(int);
+            streamBytes     = (data_length - offset) * sizeof(int);
         }
-    
-        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, streamBytes_int,     streams[i]);
+
+        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, streamBytes_int, streams[i]);
         cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, streamBytes,     streams[i]);
         cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, streamBytes,     streams[i]);
         cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, streamBytes,     streams[i]);
@@ -80,18 +77,18 @@ int main(){
     uint32_t block_size = 128;
     //uint32_t elements_per_block = block_size * elements_per_thread;
 
-    uint32_t block_cnt = ((data_length / 32) + block_size - 1) / block_size;
-    int sharedBytes = 18 * sizeof(AggrHashTableKey);
+    //uint32_t block_cnt = ((data_length / 32) + block_size - 1) / block_size;
+    //int sharedBytes    = 18 * sizeof(AggrHashTableKey);
 
-    std::cout << "launch params: <<<" << (streamSize / block_size) << "," << block_size << ">>>" << std::endl;
+    std::cout << "launch params: <<<" << (streamSize / (block_size * 32)) << "," << block_size << ">>>" << std::endl;
     auto start = timer::now();
     for (int i = 0; i < nStreams; ++i) {
-        auto num = streamSize;
+        auto num   = streamSize;
         int offset = i * streamSize;
         
         cuda::thread_local_tpchQ01<<<(streamSize / (block_size * 32)), block_size, 0, streams[i]>>>(d_shipdate.get(), 
-        d_discount.get(), d_extendedprice.get(), d_tax.get(), d_returnflag.get(), 
-        d_linestatus.get(), d_quantity.get(), d_aggregations.get(), streamSize); 
+            d_discount.get(), d_extendedprice.get(), d_tax.get(), d_returnflag.get(), 
+            d_linestatus.get(), d_quantity.get(), d_aggregations.get(), streamSize); 
         //break;
     }
     cudaDeviceSynchronize();

@@ -9,7 +9,8 @@ using u64_t = unsigned long long int;
 
 namespace cuda{
 
-#define magic_hash(rf, ls) ((rf - 'A') * 16 + (ls - 'F'))
+
+
 
     __global__
     void print() {
@@ -174,6 +175,10 @@ namespace cuda{
 
         return sum;
     }
+    __inline__ __device__ 
+    idx_t magic_hash(char rf, char ls) {
+        return (((rf - 'A')) - (ls - 'F'));
+    }
 
     __global__
     void thread_local_tpchQ01(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
@@ -188,6 +193,7 @@ namespace cuda{
         //if(threadIdx.x == 0)
         //    for(int i = 0; i!= 18; ++i)hashtable[i] = {0};
         //__syncthreads();
+
         int i = 32 * blockIdx.x * blockDim.x + threadIdx.x;
         int end = min((int)cardinality, i + 32);
 
@@ -202,16 +208,12 @@ namespace cuda{
                 const auto charge = Decimal64::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
                 
-                //if(idx < 0 || idx > 17)
-                    {printf(" idx%d l%d r%d i%d \n",idx,linestatus[i], returnflag[i], i);}
-                t_quant[idx] += (u64_t) quantity[i];
-                t_base[idx] += price;
-                t_charge[idx] += charge;
-
+                t_quant[idx]      += (u64_t) quantity[i];
+                t_base[idx]       += price;
+                t_charge[idx]     += charge;
                 t_disc_price[idx] += disc_price;
-
-                t_disc[idx] += disc;
-                t_count[idx] += 1;
+                t_disc[idx]       += disc;
+                t_count[idx]      += 1;
             }
 
         }

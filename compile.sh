@@ -24,16 +24,21 @@ then
 fi
 
 # build cuda-api-wrappers
-cd cuda-api-wrappers
-if [ ! -d "./lib" ] 
+
+if [ ! -d "cuda-api-wrappers/lib" ] 
 then
+	cd cuda-api-wrappers
 	cmake .
 	make
+	cd ..
 fi
-cd ..
+if [ ! -d "build" ]
+then
+	mkdir build
+	cd build
+	cmake ..
+	cd ..
+fi
 # build project 
-rm -Rf build
-mkdir build
 cd build
-cmake ..
 make -j 4

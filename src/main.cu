@@ -24,6 +24,8 @@ int main(){
     lineitem li(7000000ull);
     li.FromFile("lineitem.tbl");
     kernel_prologue();
+
+    assert(cardinality > 0 && "Prevent BS exception");
     const size_t data_length = cardinality;
     const int nStreams = static_cast<int>((data_length + TUPLES_PER_STREAM - 1) / TUPLES_PER_STREAM);
     clear_tables();

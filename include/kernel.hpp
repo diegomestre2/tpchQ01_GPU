@@ -180,7 +180,7 @@ namespace cuda{
     }
     __inline__ __device__ 
     idx_t magic_hash(char rf, char ls) {
-        return (((rf - 'A')) - (ls - 'F'));
+        return (((rf - 'A')) + 5 - (ls - 'F'));
     }
 
     __global__

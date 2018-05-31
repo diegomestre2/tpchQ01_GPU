@@ -37,14 +37,14 @@ int main(){
     /* Allocate memory on device */
     auto current_device = cuda::device::current::get();
 
-    auto d_shipdate      = cuda::memory::host::make_unique< int[]           >(data_length);
-    auto d_discount      = cuda::memory::host::make_unique< int64_t[]       >(data_length);
-    auto d_extendedprice = cuda::memory::host::make_unique< int64_t[]       >(data_length);
-    auto d_tax           = cuda::memory::host::make_unique< int64_t[]       >(data_length);
-    auto d_quantity      = cuda::memory::host::make_unique< int64_t[]       >(data_length);
-    auto d_returnflag    = cuda::memory::host::make_unique< char[]          >(data_length);
-    auto d_linestatus    = cuda::memory::host::make_unique< char[]          >(data_length);
-    auto d_aggregations  = cuda::memory::host::make_unique< AggrHashTable[] >(MAX_GROUPS);
+    auto d_shipdate      = cuda::memory::device::make_unique< int[]           >(current_device,data_length);
+    auto d_discount      = cuda::memory::device::make_unique< int64_t[]       >(current_device,data_length);
+    auto d_extendedprice = cuda::memory::device::make_unique< int64_t[]       >(current_device,data_length);
+    auto d_tax           = cuda::memory::device::make_unique< int64_t[]       >(current_device,data_length);
+    auto d_quantity      = cuda::memory::device::make_unique< int64_t[]       >(current_device,data_length);
+    auto d_returnflag    = cuda::memory::device::make_unique< char[]          >(current_device,data_length);
+    auto d_linestatus    = cuda::memory::device::make_unique< char[]          >(current_device,data_length);
+    auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[] >(current_device,MAX_GROUPS);
 
     cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
 

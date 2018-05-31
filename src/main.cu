@@ -9,8 +9,16 @@
 using timer = std::chrono::high_resolution_clock;
 #define streamSize (32 * 1024)
 
-int main(){
+inline bool file_exists (const std::string& name) {
+  struct stat buffer;
+  return (stat (name.c_str(), &buffer) == 0);
+}
 
+int main(){
+    if (!file_exists("lineitem.tbl")) {
+        fprintf(stderr, "lineitem.tbl not found!\n");
+        exit(1);
+    }
     std::cout << "TPC-H Query 1" << '\n';
     get_device_properties();
     /* load data */

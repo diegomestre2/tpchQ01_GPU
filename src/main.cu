@@ -42,18 +42,22 @@ int main(){
     auto d_linestatus    = cuda::memory::device::make_unique< char[]           >(current_device, data_length);
     auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]  >(current_device, MAX_GROUPS);
 
-    auto size_int64        = data_length * sizeof(int64_t);
-    auto size_int          = data_length * sizeof(int);
-    auto size_char         = data_length * sizeof(char);
-    auto size_aggregations = MAX_GROUPS  * sizeof(AggrHashTable);
+    cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
 
     /* Transfer data to device */
     cudaStream_t streams[nStreams];
     for (int i = 0; i < nStreams; ++i) {
+        cudaStreamCreate(&streams[i]);
+    }
+
+    cuda_check_error();
+    auto start = timer::now();
+    for (int i = 0; i < nStreams; ++i) {
         size_t offset = i * TUPLES_PER_STREAM;
         size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
 
-        cudaStreamCreate(&streams[i]);
+        //std::cout << "Stream " << i << ": " << "[" << offset << " - " << offset + size << "]" << std::endl;
+
         cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, size * sizeof(int),     streams[i]);
         cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, size * sizeof(int64_t),     streams[i]);
         cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, size * sizeof(int64_t),     streams[i]);
@@ -63,16 +67,14 @@ int main(){
         cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, size * sizeof(char), streams[i]);
     }
 
-    uint32_t block_cnt = ((data_length / VALUES_PER_THREAD) + BLOCK_SIZE - 1) / BLOCK_SIZE;
-
-    cuda_check_error();
-    auto start = timer::now();
     for (int i = 0; i < nStreams; ++i) {
         size_t offset = i * TUPLES_PER_STREAM;
         size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));;
-        size_t amount_of_blocks = TUPLES_PER_STREAM / (BLOCK_SIZE * VALUES_PER_THREAD);
+        size_t amount_of_blocks = TUPLES_PER_STREAM / (VALUES_PER_THREAD * THREADS_PER_BLOCK);
 
-        cuda::thread_local_tpchQ01<<<amount_of_blocks, BLOCK_SIZE, 0, streams[i]>>>(
+        //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << ">>>" << std::endl;
+
+        cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, 0, streams[i]>>>(
             d_shipdate.get() + offset,
             d_discount.get() + offset,
             d_extendedprice.get() + offset,
@@ -82,20 +84,19 @@ int main(){
             d_quantity.get() + offset,
             d_aggregations.get(),
             (u64_t) size);
-        //break;
     }
-    cudaDeviceSynchronize();
+
     cuda_check_error();
     for (int i = 0; i < nStreams; ++i) {
         size_t offset = i * TUPLES_PER_STREAM;
+
         cudaStreamSynchronize(streams[i]);
         cudaStreamDestroy(streams[i]);
     }
 
-    cuda::memory::copy(aggrs0, d_aggregations.get(), size_aggregations);
+    cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);
     cudaDeviceSynchronize();
     auto end = timer::now();
-
 
     auto print_dec = [] (auto s, auto x) { printf("%s%ld.%ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
     for (size_t group=0; group<MAX_GROUPS; group++) {
@@ -114,15 +115,24 @@ int main(){
         }
     }
 
+    double sf = li.l_returnflag.cardinality / 6001215;
 
     std::chrono::duration<double> duration(end - start);
     uint64_t tuples_per_second = static_cast<uint64_t>(data_length / duration.count());
-    double effective_memory_throughput = tuples_per_second * sizeof(int) / 1024.0 / 1024.0 / 1024.0;
+    auto size_per_tuple = sizeof(int) + sizeof(int64_t) * 4 + sizeof(char) * 2;
+    double effective_memory_throughput = tuples_per_second * size_per_tuple / 1024.0 / 1024.0 / 1024.0;
     double effective_memory_throughput_read = tuples_per_second * sizeof(int) / 1024.0 / 1024.0 / 1024.0;
     double effective_memory_throughput_write_output = tuples_per_second / 8.0 / 1024.0 / 1024.0 / 1024.0;
     std::cout << "\n+-------------------------------- Statistics -----------------------------------+\n";
     std::cout << "| TPC-H Q01 performance               : " << std::fixed << tuples_per_second << " [tuples/sec]" << std::endl;
     uint64_t cache_line_size = 128; // bytes
+
+    
+
+    std::cout << "| Time taken                          : ~" << std::setprecision(2)
+              << duration.count() << " [s]" << std::endl;
+    std::cout << "| Estimated time for TPC-H SF100      : ~" << std::setprecision(2)
+              << duration.count() * (100 / sf) << " [s]" << std::endl;
     std::cout << "| Effective memory throughput (query) : ~" << std::setprecision(2)
               << effective_memory_throughput << " [GB/s]" << std::endl;
     std::cout << "| Estimated memory throughput (query) : ~" << std::setprecision(2)

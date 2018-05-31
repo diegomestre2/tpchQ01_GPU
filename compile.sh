@@ -7,7 +7,7 @@ if [ ! -d "release" ]
 then
 	mkdir release
 	cd release
-	cmake ../..
+	cmake -DCMAKE_BUILD_TYPE=Release ../..
 	cd ..
 fi
 cd ..

@@ -75,10 +75,9 @@ int main(){
         size_t offset = i * TUPLES_PER_STREAM;
         assert(offset <= data_length);
         size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
-        printf("card %lld size %lld\n", cardinality, size);
         size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
 
-        std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << ">>>" << std::endl;
+        //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << ">>>" << std::endl;
 
         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, 0, streams[i]>>>(
             d_shipdate.get() + offset,
@@ -112,16 +111,31 @@ int main(){
             if (group == magic_hash('A', 'F')) {
                 rf = 'A';
                 ls = 'F';
+                if (cardinality == 6001215) {
+                    assert(aggrs0[i].sum_quantity == 3773410700);
+                    assert(aggrs0[i].count == 1478493);
+                }
             } else if (group == magic_hash('N', 'F')) {
                 rf = 'N';
                 ls = 'F';
-
+                if (cardinality == 6001215) {
+                    assert(aggrs0[i].sum_quantity == 99141700);
+                    assert(aggrs0[i].count == 38854);
+                }
             } else if (group == magic_hash('N', 'O')) {
                 rf = 'N';
                 ls = 'O';
+                if (cardinality == 6001215) {
+                    assert(aggrs0[i].sum_quantity == 7447604000);
+                    assert(aggrs0[i].count == 2920374);
+                }
             } else if (group == magic_hash('R', 'F')) {
                 rf = 'R';
                 ls = 'F';
+                if (cardinality == 6001215) {
+                    assert(aggrs0[i].sum_quantity == 3771975300);
+                    assert(aggrs0[i].count == 1478870);
+                }
             }
 
             printf("# %c|%c", rf, ls);

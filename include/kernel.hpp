@@ -187,20 +187,17 @@ namespace cuda{
     void thread_local_tpchQ01(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
         char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, u64_t cardinality) {
 
-        __shared__ u64_t t_quant[18];
-        __shared__ u64_t t_base[18];
-        __shared__ u64_t t_charge[18];
-        __shared__ u64_t t_disc_price[18];
-        __shared__ u64_t t_disc[18];
-        __shared__ u64_t t_count[18];
-        //if(threadIdx.x == 0)
-        //    for(int i = 0; i!= 18; ++i)hashtable[i] = {0};
-        //__syncthreads();
+        __shared__ int64_t t_quant[18];
+        __shared__ int64_t t_base[18];
+        __shared__ int64_t t_charge[18];
+        __shared__ int64_t t_disc_price[18];
+        __shared__ int64_t t_disc[18];
+        __shared__ int64_t t_count[18];
+
         u64_t i = VALUES_PER_THREAD * blockIdx.x * blockDim.x + threadIdx.x;
         u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
         for(; i < end; i++) {
-
-            if (i < cardinality && shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
+            if (shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
                 const auto disc = discount[i];
                 const auto price = extendedprice[i];
                 const auto disc_1 = Decimal64::ToValue(1, 0) - disc;
@@ -209,59 +206,15 @@ namespace cuda{
                 const auto charge = Decimal64::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
                 
-                t_quant[idx]      += (u64_t) quantity[i];
+                t_quant[idx]      += (int) quantity[i];
                 t_base[idx]       += price;
                 t_charge[idx]     += charge;
                 t_disc_price[idx] += disc_price;
                 t_disc[idx]       += disc;
                 t_count[idx]      += 1;
             }
-
         }
-        // __syncthreads();
     }
-
-    __global__
-    void thread_local_tpchQ01_old(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
-        char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, size_t cardinality) {
-
-        __shared__ AggrHashTableKey hashtable[18];
-        //if(threadIdx.x == 0)
-        //    for(int i = 0; i!= 18; ++i)hashtable[i] = {0};
-        //__syncthreads();
-        int i = blockIdx.x * blockDim.x + threadIdx.x;
-
-        if(i >= cardinality)
-            return;
-
-        if (i < cardinality && shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
-            const auto disc = discount[i];
-            const auto price = extendedprice[i];
-            const auto disc_1 = Decimal64::ToValue(1, 0) - disc;
-            const auto tax_1 = tax[i] + Decimal64::ToValue(1, 0);
-            const auto disc_price = Decimal64::Mul(disc_1, price);
-            const auto charge = Decimal64::Mul(disc_price, tax_1);
-            const idx_t idx = magic_hash(linestatus[i], returnflag[i]);
-            (hashtable[idx].sum_quantity) += quantity[i];
-            (hashtable[idx].sum_base_price) += (u64_t)price;
-            auto old = (hashtable[idx].sum_charge) += charge;
-            //if (old + charge < charge) {
-            //    (hashtable[idx].sum_charge) +=  1;
-            //}
-
-            auto old_2 = (hashtable[idx].sum_disc_price) += disc_price;
-            //if (old_2 + disc_price < disc_price) {
-            //    (hashtable[idx].sum_disc_price) += 1;
-            //}
-            (hashtable[idx].sum_disc) += (u64_t)disc;
-            (hashtable[idx].count) += (u64_t)1;
-        }
-        // __syncthreads();
-
-    //}
-}
-
-
 }
 
 

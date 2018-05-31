@@ -4,7 +4,6 @@
 #include <iomanip>
 
 #include "kernel.hpp"
-
 #include "../expl_comp_strat/tpch_kit.hpp"
 
 using timer = std::chrono::high_resolution_clock;
@@ -33,22 +32,20 @@ int main(){
     auto current_device = cuda::device::current::get();
 
     auto d_shipdate      = cuda::memory::device::make_unique< int[]            >(current_device, data_length);
-    auto d_discount      = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
-    auto d_extendedprice = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
-    auto d_tax           = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
-    auto d_quantity      = cuda::memory::device::make_unique< int64_t[]            >(current_device, data_length);
+    auto d_discount      = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
+    auto d_extendedprice = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
+    auto d_tax           = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
+    auto d_quantity      = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
     auto d_returnflag    = cuda::memory::device::make_unique< char[]           >(current_device, data_length);
     auto d_linestatus    = cuda::memory::device::make_unique< char[]           >(current_device, data_length);
     auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]  >(current_device, MAX_GROUPS);
 
     auto size_int64        = data_length * sizeof(int64_t);
-    auto size_int        = data_length * sizeof(int);
-
+    auto size_int          = data_length * sizeof(int);
     auto size_char         = data_length * sizeof(char);
     auto size_aggregations = MAX_GROUPS  * sizeof(AggrHashTable);
 
     /* Transfer data to device */
-
     cudaStream_t streams[nStreams];
     for (int i = 0; i < nStreams; ++i) {
         size_t offset = i * TUPLES_PER_STREAM;

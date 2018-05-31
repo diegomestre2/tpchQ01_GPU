@@ -180,19 +180,31 @@ namespace cuda{
     }
     __inline__ __device__ 
     idx_t magic_hash(char rf, char ls) {
-        return (((rf - 'A')) + 5 - (ls - 'F'));
+        return (((rf - 'A')) - (ls - 'F'));
     }
 
     __global__
     void thread_local_tpchQ01(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
         char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, u64_t cardinality) {
 
-        __shared__ u64_t t_quant[18];
-        __shared__ u64_t t_base[18];
-        __shared__ u64_t t_charge[18];
-        __shared__ u64_t t_disc_price[18];
-        __shared__ u64_t t_disc[18];
-        __shared__ u64_t t_count[18];
+        constexpr size_t N = 18;
+        __shared__ u64_t t_quant[N];
+        __shared__ u64_t t_base[N];
+        __shared__ u64_t t_charge[N];
+        __shared__ u64_t t_disc_price[N];
+        __shared__ u64_t t_disc[N];
+        __shared__ u64_t t_count[N];
+
+        for (int i=0; i<N; i++) {
+            t_quant[i] = 0;
+            t_base[i] = 0;
+            t_charge[i] = 0;
+            t_disc_price[i] = 0;
+            t_disc[i] = 0;
+            t_count[i] = 0;
+        }
+        //__shared__ char t_ls[N];
+        //__shared__ char t_rf[N];
         //if(threadIdx.x == 0)
         //    for(int i = 0; i!= 18; ++i)hashtable[i] = {0};
         //__syncthreads();
@@ -215,10 +227,34 @@ namespace cuda{
                 t_disc_price[idx] += disc_price;
                 t_disc[idx]       += disc;
                 t_count[idx]      += 1;
+                //t_ls[idx] = linestatus[i];
+                //t_rf[idx] = returnflag[i];
             }
 
         }
-        // __syncthreads();
+#if 1
+        // final aggregation
+        for (i=0; i<N; i++) {
+            //int idx = t_rf[i] >> 8 + t_ls[i];
+            auto idx = i;
+#if 0
+            aggregations[i].sum_quantity += t_quant[i];
+            aggregations[i].count += t_count[i];
+            aggregations[i].sum_base_price += t_base[i];
+            aggregations[i].sum_disc += t_disc[i];
+            aggregations[i].sum_disc_price += t_disc_price[i];
+            aggregations[i].sum_charge += t_charge[i];
+#else
+            // FIXME: maybe do 128 bit aggregations here
+            atomicAdd((u64_t*)&(aggregations[idx].sum_quantity), t_quant[i]);
+            atomicAdd((u64_t*)&(aggregations[idx].sum_base_price), t_base[i]);
+            atomicAdd((u64_t*)&(aggregations[idx].sum_charge), t_charge[i]);
+            atomicAdd((u64_t*)&(aggregations[idx].sum_disc_price), t_disc_price[i]);
+            atomicAdd((u64_t*)&(aggregations[idx].sum_disc), t_disc[i]);
+            atomicAdd((u64_t*)&(aggregations[idx].count), t_count[i]);
+#endif
+        }
+#endif
     }
 
     __global__

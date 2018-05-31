@@ -61,25 +61,9 @@ int main(){
         cuda::memory::async::copy(d_quantity.get()      + offset, quantity      + offset, size * sizeof(int64_t),     streams[i]);
         cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, size * sizeof(char), streams[i]);
         cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, size * sizeof(char), streams[i]);
-        //break;
     }
 
-    /*cuda::memory::copy(d_shipdate.get(),      shipdate,      size_int);
-    cuda::memory::copy(d_discount.get(),      discount,      size_int64);
-    cuda::memory::copy(d_extendedprice.get(), extendedprice, size_int64);
-    cuda::memory::copy(d_tax.get(),           tax,           size_int64);
-    cuda::memory::copy(d_quantity.get(),      quantity,      size_int64);
-    cuda::memory::copy(d_returnflag.get(),    returnflag,    size_char);
-    cuda::memory::copy(d_linestatus.get(),    linestatus,    size_char);
-    cuda::memory::copy(d_aggregations.get(),  aggrs0,        size_aggregations);*/
-
-    /* Setup to launch kernel */
-    //uint32_t warp_size = 32;
-    //uint32_t elements_per_thread = warp_size;
-    //uint32_t elements_per_block = BLOCK_SIZE * elements_per_thread;
-
     uint32_t block_cnt = ((data_length / VALUES_PER_THREAD) + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    int sharedBytes = 18 * sizeof(AggrHashTableKey);
 
     cuda_check_error();
     auto start = timer::now();
@@ -96,35 +80,23 @@ int main(){
             d_returnflag.get() + offset,
             d_linestatus.get() + offset,
             d_quantity.get() + offset,
-            d_aggregations.get() + offset,
+            d_aggregations.get(),
             (u64_t) size);
         //break;
     }
     cudaDeviceSynchronize();
     cuda_check_error();
-    auto end = timer::now();
     for (int i = 0; i < nStreams; ++i) {
         size_t offset = i * TUPLES_PER_STREAM;
-        //cudaMemcpyAsync(&a[offset], &d_a[offset], 
-                          //streamBytes, cudaMemcpyDeviceToHost, streams[i]);
         cudaStreamSynchronize(streams[i]);
         cudaStreamDestroy(streams[i]);
-        //break;
     }
 
-
-    /* Launching Kernel 
-    std::cout << "launch params: <<<" << block_cnt << "," << BLOCK_SIZE << ">>>" << std::endl;
-    std::cout << todate_(2, 9, 1998) << std::endl;
-        auto start = timer::now();
-    cuda::naive_tpchQ01<<<block_cnt , BLOCK_SIZE, sharedBytes>>>(d_shipdate.get(), 
-        d_discount.get(), d_extendedprice.get(), d_tax.get(), d_returnflag.get(), 
-        d_linestatus.get(), d_quantity.get(), d_aggregations.get(), data_length);
-    cudaDeviceSynchronize();
-    cuda_check_error();
-    auto end = timer::now();
     cuda::memory::copy(aggrs0, d_aggregations.get(), size_aggregations);
-*/
+    cudaDeviceSynchronize();
+    auto end = timer::now();
+
+
     auto print_dec = [] (auto s, auto x) { printf("%s%ld.%ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
     for (size_t group=0; group<MAX_GROUPS; group++) {
         if (aggrs0[group].count > 0) {
@@ -162,22 +134,4 @@ int main(){
     std::cout << "| Theoretical Bandwidth [GB/s]        : " << (5505 * 10e06 * (352 / 8) * 2) / 10e09 << std::endl;
     std::cout << "| Effective Bandwidth [GB/s]          : " << data_length * 25 * 13 / duration.count() << std::endl;
     std::cout << "+-------------------------------------------------------------------------------+\n";
-    /* Test */
-    /*std::cout << std::endl;
-    std::vector<int> in(64, 1);
-    std::vector<int> res(64, 0);  
-    int  *d_in, *d_out, *d_res;
-    cudaMalloc(&d_in,       64 * sizeof(int));
-    cudaMalloc(&d_out,      64 * sizeof(int));
-    cudaMalloc(&d_res,      64 * sizeof(int));
-    cudaMemcpy(d_in,      &in[0],      64 * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_res,      &res[0],      64 * sizeof(int), cudaMemcpyHostToDevice);
-    cuda::filter_k<<<2,32>>>(d_out,d_res, d_in, 64);
-    cudaMemcpy(     &res[0], d_res,      64 * sizeof(int), cudaMemcpyDeviceToHost);
-    for(auto &i : res)
-            printf(" %d ", i);
-    //cuda::deviceReduceKernel<<<1,32>>>(d_out, d_out, 2);
-    cudaFree(d_in);
-    cudaFree(d_out);*/
-
 }

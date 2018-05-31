@@ -33,14 +33,14 @@ int main(){
     /* Allocate memory on device */
     auto current_device = cuda::device::current::get();
 
-    auto d_shipdate      = cuda::memory::device::make_unique< int[]            >(current_device, data_length);
-    auto d_discount      = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
-    auto d_extendedprice = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
-    auto d_tax           = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
-    auto d_quantity      = cuda::memory::device::make_unique< int64_t[]        >(current_device, data_length);
-    auto d_returnflag    = cuda::memory::device::make_unique< char[]           >(current_device, data_length);
-    auto d_linestatus    = cuda::memory::device::make_unique< char[]           >(current_device, data_length);
-    auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]  >(current_device, MAX_GROUPS);
+    auto d_shipdate      = cuda::memory::host::make_unique< int[]           >(data_length);
+    auto d_discount      = cuda::memory::host::make_unique< int64_t[]       >(data_length);
+    auto d_extendedprice = cuda::memory::host::make_unique< int64_t[]       >(data_length);
+    auto d_tax           = cuda::memory::host::make_unique< int64_t[]       >(data_length);
+    auto d_quantity      = cuda::memory::host::make_unique< int64_t[]       >(data_length);
+    auto d_returnflag    = cuda::memory::host::make_unique< char[]          >(data_length);
+    auto d_linestatus    = cuda::memory::host::make_unique< char[]          >(data_length);
+    auto d_aggregations  = cuda::memory::host::make_unique< AggrHashTable[] >(MAX_GROUPS);
 
     /* Transfer data to device */
     cudaStream_t streams[nStreams];
@@ -57,12 +57,12 @@ int main(){
         //std::cout << "Stream " << i << ": " << "[" << offset << " - " << offset + size << "]" << std::endl;
 
         cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, size * sizeof(int),     streams[i]);
-        cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, size * sizeof(int64_t),     streams[i]);
-        cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, size * sizeof(int64_t),     streams[i]);
-        cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, size * sizeof(int64_t),     streams[i]);
-        cuda::memory::async::copy(d_quantity.get()      + offset, quantity      + offset, size * sizeof(int64_t),     streams[i]);
-        cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, size * sizeof(char), streams[i]);
-        cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, size * sizeof(char), streams[i]);
+        cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, size * sizeof(int64_t), streams[i]);
+        cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, size * sizeof(int64_t), streams[i]);
+        cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, size * sizeof(int64_t), streams[i]);
+        cuda::memory::async::copy(d_quantity.get()      + offset, quantity      + offset, size * sizeof(int64_t), streams[i]);
+        cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, size * sizeof(char),    streams[i]);
+        cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, size * sizeof(char),    streams[i]);
     }
 
     for (int i = 0; i < nStreams; ++i) {
@@ -71,7 +71,6 @@ int main(){
         size_t amount_of_blocks = TUPLES_PER_STREAM / (VALUES_PER_THREAD * THREADS_PER_BLOCK);
 
         //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << ">>>" << std::endl;
-
         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, 0, streams[i]>>>(
             d_shipdate.get() + offset,
             d_discount.get() + offset,

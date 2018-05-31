@@ -25,7 +25,7 @@ int main(){
     li.FromFile("lineitem.tbl");
     kernel_prologue();
     const size_t data_length = cardinality;
-    const int nStreams = static_cast<int>(data_length / TUPLES_PER_STREAM) - 1;
+    const int nStreams = static_cast<int>((data_length + TUPLES_PER_STREAM - 1) / TUPLES_PER_STREAM);
     clear_tables();
 
     /* Allocate memory on device */
@@ -50,7 +50,7 @@ int main(){
     for (int i = 0; i < nStreams; ++i) {
         size_t offset = i * TUPLES_PER_STREAM;
         size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
-        std::cout << "Offset:" << offset << ", Size: " << size << ", Data Length: " << data_length << std::endl;
+
         cudaStreamCreate(&streams[i]);
         cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, size * sizeof(int),     streams[i]);
         cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, size * sizeof(int64_t),     streams[i]);
@@ -85,8 +85,6 @@ int main(){
         size_t offset = i * TUPLES_PER_STREAM;
         size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));;
         size_t amount_of_blocks = TUPLES_PER_STREAM / (BLOCK_SIZE * VALUES_PER_THREAD);
-        std::cout << "launch params: <<<" << amount_of_blocks << "," << BLOCK_SIZE << ">>>" << std::endl;
-        std::cout << "Offset:" << offset << ", Size: " << size << ", Data Length: " << data_length << std::endl;
 
         cuda::thread_local_tpchQ01<<<amount_of_blocks, BLOCK_SIZE, 0, streams[i]>>>(
             d_shipdate.get() + offset,
@@ -97,7 +95,7 @@ int main(){
             d_linestatus.get() + offset,
             d_quantity.get() + offset,
             d_aggregations.get() + offset,
-            (int64_t) size);
+            (u64_t) size);
         //break;
     }
     cudaDeviceSynchronize();

@@ -1,20 +1,15 @@
 
 
-
-build/release/bin/tpch_01:
+all:
 	./compile.sh
 
-build/debug/bin/tpch_01:
-	./debug.sh
-
-all: build/debug/bin/tpch_01 build/release/bin/tpch_01
-
-test: all
+test:
+	./compile.sh
 	./build/release/bin/tpch_01
 
 clean:
 	rm -rf build
 
-debug: build/debug/bin/tpch_01
+debug:
 	./debug.sh
 	gdb -ex run --args ./build/debug/bin/tpch_01

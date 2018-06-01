@@ -5,3 +5,4 @@ cmake
 tpch-dbgen
 scripts
 lineitem.tbl
+debug

@@ -153,7 +153,7 @@ int main(){
     cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);
     cudaDeviceSynchronize();
     auto end = timer::now();
-
+    std::cout << "\n+--------------------------------- Results -------------------------------------+\n";
     auto print_dec = [] (auto s, auto x) { printf("%s%ld.%ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
     for (size_t group=0; group<MAX_GROUPS; group++) {
         if (aggrs0[group].count > 0) {
@@ -189,7 +189,7 @@ int main(){
                 }
             }
 
-            printf("# %c|%c", rf, ls);
+            printf("| # %c|%c", rf, ls);
             print_dec(" | ",  aggrs0[i].sum_quantity);
             print_dec(" | ",  aggrs0[i].sum_base_price);
             print_dec(" | ",  aggrs0[i].sum_disc_price);
@@ -197,6 +197,7 @@ int main(){
             printf("|%llu\n", aggrs0[i].count);
         }
     }
+    std::cout << "+-------------------------------------------------------------------------------+\n";
 
     double sf = cardinality / 6001215.0;
     uint64_t cache_line_size = 128; // bytes

@@ -19,18 +19,18 @@ One more way to run TPC-H Query 01...
 ## How to Run
 
 - Syncronize the project using sshfs in the bricks16
-- Run the compile.sh script. It will do all the work.
+- Type command make all in the Terminal. It will do all the work.
 
 #### Note: In case of error during the build of cuda-api_wrappers, the line include_directories(../cub/cub) should be included in its CMakeLists.txt file.
 
 ## Important Dates
 
-- Paper Submission: Friday, 8 June, 2018
+- Paper Submission: Friday, 8 June, 2018 (Extended to 11 June, 2018)
 - Notification of Acceptance: Friday, 29 June, 2018
 - Camera-ready Submission: Friday, 20 July, 2018
 - Workshop Date: Monday, 27 August, 2018
 
-
+...sql
 TPC-H Query 1
 SELECT
     l_returnflag,
@@ -53,3 +53,4 @@ GROUP BY
 ORDER BY
     l_returnflag,
     l_linestatus;
+...

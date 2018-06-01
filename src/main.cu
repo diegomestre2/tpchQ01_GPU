@@ -10,6 +10,10 @@ size_t magic_hash(char rf, char ls) {
     return (((rf - 'A')) - (ls - 'F'));
 }
 
+#define GIGA (1024 * 1024 * 1024)
+#define MEGA (1024 * 1024)
+#define KILO (1024)
+
 using timer = std::chrono::high_resolution_clock;
 
 inline bool file_exists (const std::string& name) {
@@ -37,39 +41,39 @@ int main(){
         lineitem li(7000000ull);
         li.FromFile("lineitem.tbl");
 
-        auto _shipdate = li.l_shipdate.get();
-        auto _returnflag = li.l_returnflag.get();
-        auto _linestatus = li.l_linestatus.get();
-        auto _discount = li.l_discount.get();
-        auto _tax = li.l_tax.get();
+        auto _shipdate      = li.l_shipdate.get();
+        auto _returnflag    = li.l_returnflag.get();
+        auto _linestatus    = li.l_linestatus.get();
+        auto _discount      = li.l_discount.get();
+        auto _tax           = li.l_tax.get();
         auto _extendedprice = li.l_extendedprice.get();
-        auto _quantity = li.l_quantity.get();
-        cardinality = li.l_extendedprice.cardinality;
+        auto _quantity      = li.l_quantity.get();
+        cardinality         = li.l_extendedprice.cardinality;
 
-        shipdate = (SHIPDATE_TYPE*) malloc(sizeof(SHIPDATE_TYPE) * cardinality);
-        discount = (DISCOUNT_TYPE*) malloc(sizeof(DISCOUNT_TYPE) * cardinality);
+        shipdate      = (SHIPDATE_TYPE*)      malloc(sizeof(SHIPDATE_TYPE)      * cardinality);
+        discount      = (DISCOUNT_TYPE*)      malloc(sizeof(DISCOUNT_TYPE)      * cardinality);
         extendedprice = (EXTENDEDPRICE_TYPE*) malloc(sizeof(EXTENDEDPRICE_TYPE) * cardinality);
-        linestatus = (LINESTATUS_TYPE*) malloc(sizeof(LINESTATUS_TYPE) * cardinality);
-        returnflag = (RETURNFLAG_TYPE*) malloc(sizeof(RETURNFLAG_TYPE) * cardinality);
-        quantity = (QUANTITY_TYPE*) malloc(sizeof(QUANTITY_TYPE) * cardinality);
-        tax = (TAX_TYPE*) malloc(sizeof(TAX_TYPE) * cardinality);
-        printf("%d\n", todate_(01, 01,1992));
+        linestatus    = (LINESTATUS_TYPE*)    malloc(sizeof(LINESTATUS_TYPE)    * cardinality);
+        returnflag    = (RETURNFLAG_TYPE*)    malloc(sizeof(RETURNFLAG_TYPE)    * cardinality);
+        quantity      = (QUANTITY_TYPE*)      malloc(sizeof(QUANTITY_TYPE)      * cardinality);
+        tax           = (TAX_TYPE*)           malloc(sizeof(TAX_TYPE)           * cardinality);
+ 
         for(size_t i = 0; i < cardinality; i++) {
-            shipdate[i] = _shipdate[i] - SHIPDATE_MIN;
-            discount[i] = _discount[i];
+            shipdate[i]      = _shipdate[i] - SHIPDATE_MIN;
+            discount[i]      = _discount[i];
             extendedprice[i] = _extendedprice[i];
-            linestatus[i] = _linestatus[i];
-            returnflag[i] = _returnflag[i];
-            quantity[i] = _quantity[i] / 100;
-            tax[i] = _tax[i];
+            linestatus[i]    = _linestatus[i];
+            returnflag[i]    = _returnflag[i];
+            quantity[i]      = _quantity[i] / 100;
+            tax[i]           = _tax[i];
 
-            assert((int)shipdate[i] == _shipdate[i] - SHIPDATE_MIN);
-            assert((int64_t) discount[i] == _discount[i]);
+            assert((int)shipdate[i]           == _shipdate[i] - SHIPDATE_MIN);
+            assert((int64_t) discount[i]      == _discount[i]);
             assert((int64_t) extendedprice[i] == _extendedprice[i]);
-            assert((char) linestatus[i] == _linestatus[i]);
-            assert((char) returnflag[i] == _returnflag[i]);
-            assert((int64_t) quantity[i] == _quantity[i] / 100);
-            assert((int64_t) tax[i] == _tax[i]);
+            assert((char) linestatus[i]       == _linestatus[i]);
+            assert((char) returnflag[i]       == _returnflag[i]);
+            assert((int64_t) quantity[i]      == _quantity[i] / 100);
+            assert((int64_t) tax[i]           == _tax[i]);
         }
 
     }
@@ -83,14 +87,14 @@ int main(){
     /* Allocate memory on device */
     auto current_device = cuda::device::current::get();
 
-    auto d_shipdate      = cuda::memory::device::make_unique< SHIPDATE_TYPE[]           >(current_device,data_length);
-    auto d_discount      = cuda::memory::device::make_unique< DISCOUNT_TYPE[]       >(current_device,data_length);
-    auto d_extendedprice = cuda::memory::device::make_unique< EXTENDEDPRICE_TYPE[]       >(current_device,data_length);
-    auto d_tax           = cuda::memory::device::make_unique< TAX_TYPE[]       >(current_device,data_length);
-    auto d_quantity      = cuda::memory::device::make_unique< QUANTITY_TYPE[]       >(current_device,data_length);
-    auto d_returnflag    = cuda::memory::device::make_unique< RETURNFLAG_TYPE[]          >(current_device,data_length);
-    auto d_linestatus    = cuda::memory::device::make_unique< LINESTATUS_TYPE[]          >(current_device,data_length);
-    auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[] >(current_device,MAX_GROUPS);
+    auto d_shipdate      = cuda::memory::device::make_unique< SHIPDATE_TYPE[]      >(current_device,data_length);
+    auto d_discount      = cuda::memory::device::make_unique< DISCOUNT_TYPE[]      >(current_device,data_length);
+    auto d_extendedprice = cuda::memory::device::make_unique< EXTENDEDPRICE_TYPE[] >(current_device,data_length);
+    auto d_tax           = cuda::memory::device::make_unique< TAX_TYPE[]           >(current_device,data_length);
+    auto d_quantity      = cuda::memory::device::make_unique< QUANTITY_TYPE[]      >(current_device,data_length);
+    auto d_returnflag    = cuda::memory::device::make_unique< RETURNFLAG_TYPE[]    >(current_device,data_length);
+    auto d_linestatus    = cuda::memory::device::make_unique< LINESTATUS_TYPE[]    >(current_device,data_length);
+    auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]      >(current_device,MAX_GROUPS);
 
     cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
 
@@ -127,13 +131,13 @@ int main(){
 
         //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << ">>>" << std::endl;
         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, 0, streams[i]>>>(
-            d_shipdate.get() + offset,
-            d_discount.get() + offset,
+            d_shipdate.get()      + offset,
+            d_discount.get()      + offset,
             d_extendedprice.get() + offset,
-            d_tax.get() + offset,
-            d_returnflag.get() + offset,
-            d_linestatus.get() + offset,
-            d_quantity.get() + offset,
+            d_tax.get()           + offset,
+            d_returnflag.get()    + offset,
+            d_linestatus.get()    + offset,
+            d_quantity.get()      + offset,
             d_aggregations.get(),
             (u64_t) size);
     }
@@ -186,41 +190,45 @@ int main(){
             }
 
             printf("# %c|%c", rf, ls);
-            print_dec(" | ", aggrs0[i].sum_quantity);
-            print_dec(" | ", aggrs0[i].sum_base_price);
-            print_dec(" | ", aggrs0[i].sum_disc_price);
-            print_dec(" | ", aggrs0[i].sum_charge);
-            printf("|%ld\n", aggrs0[i].count);
+            print_dec(" | ",  aggrs0[i].sum_quantity);
+            print_dec(" | ",  aggrs0[i].sum_base_price);
+            print_dec(" | ",  aggrs0[i].sum_disc_price);
+            print_dec(" | ",  aggrs0[i].sum_charge);
+            printf("|%llu\n", aggrs0[i].count);
         }
     }
 
     double sf = cardinality / 6001215.0;
-
-    std::chrono::duration<double> duration(end - start);
-    uint64_t tuples_per_second = static_cast<uint64_t>(data_length / duration.count());
-    auto size_per_tuple = sizeof(int) + sizeof(int64_t) * 4 + sizeof(char) * 2;
-    double effective_memory_throughput = tuples_per_second * size_per_tuple / 1024.0 / 1024.0 / 1024.0;
-    double effective_memory_throughput_read = tuples_per_second * sizeof(int) / 1024.0 / 1024.0 / 1024.0;
-    double effective_memory_throughput_write_output = tuples_per_second / 8.0 / 1024.0 / 1024.0 / 1024.0;
-    std::cout << "\n+-------------------------------- Statistics -----------------------------------+\n";
-    std::cout << "| TPC-H Q01 performance               : " << std::fixed << tuples_per_second << " [tuples/sec]" << std::endl;
     uint64_t cache_line_size = 128; // bytes
 
+    std::chrono::duration<double> duration(end - start);
+    uint64_t tuples_per_second               = static_cast<uint64_t>(data_length / duration.count());
+    auto size_per_tuple                      = sizeof(int) + sizeof(int64_t) * 4 + sizeof(char) * 2;
+    double effective_memory_throughput       = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
+    double estimated_memory_throughput       = static_cast<double>((tuples_per_second * cache_line_size) / GIGA);
+    double effective_memory_throughput_read  = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
+    double effective_memory_throughput_write = static_cast<double>(tuples_per_second / (size_per_tuple * GIGA));
+    double theretical_memory_bandwidth       = static_cast<double>((5505 * 10e06 * (352 / 8) * 2) / 10e09);
+    double efective_memory_bandwidth         = static_cast<double>((data_length * size_per_tuple) / (duration.count() * GIGA));
     
-
-    std::cout << "| Time taken                          : ~" << std::setprecision(2)
-              << duration.count() << " [s]" << std::endl;
-    std::cout << "| Estimated time for TPC-H SF100      : ~" << std::setprecision(2)
-              << duration.count() * (100 / sf) << " [s]" << std::endl;
-    std::cout << "| Effective memory throughput (query) : ~" << std::setprecision(2)
-              << effective_memory_throughput << " [GB/s]" << std::endl;
-    std::cout << "| Estimated memory throughput (query) : ~" << std::setprecision(2)
-              << (tuples_per_second * cache_line_size / 1024.0 / 1024.0 / 1024.0) << " [GB/s]" << std::endl;
-    std::cout << "| Effective memory throughput (read)  : ~" << std::setprecision(2)
-              << effective_memory_throughput_read << " [GB/s]" << std::endl;
-    std::cout << "| Memory throughput (write)           : ~" << std::setprecision(2)
-              << effective_memory_throughput_write_output << " [GB/s]" << std::endl;
-    std::cout << "| Theoretical Bandwidth [GB/s]        : " << (5505 * 10e06 * (352 / 8) * 2) / 10e09 << std::endl;
-    std::cout << "| Effective Bandwidth [GB/s]          : " << data_length * 25 * 13 / duration.count() << std::endl;
+    std::cout << "\n+-------------------------------- Statistics -----------------------------------+\n";
+    std::cout << "| TPC-H Q01 performance               : "           << std::fixed 
+              << tuples_per_second <<                 " [tuples/sec]" << std::endl;
+    std::cout << "| Time taken                          : ~"          << std::setprecision(2)
+              << duration.count() <<                  " [s]"          << std::endl;
+    std::cout << "| Estimated time for TPC-H SF100      : ~"          << std::setprecision(2)
+              << duration.count() * (100 / sf) <<     " [s]"          << std::endl;
+    std::cout << "| Effective memory throughput (query) : ~"          << std::setprecision(2)
+              << effective_memory_throughput <<       " [GB/s]"       << std::endl;
+    std::cout << "| Estimated memory throughput (query) : ~"          << std::setprecision(2)
+              << estimated_memory_throughput <<       " [GB/s]"       << std::endl;
+    std::cout << "| Effective memory throughput (read)  : ~"          << std::setprecision(2)
+              << effective_memory_throughput_read <<  " [GB/s]"       << std::endl;
+    std::cout << "| Memory throughput (write)           : ~"          << std::setprecision(2)
+              << effective_memory_throughput_write << " [GB/s]"       << std::endl;
+    std::cout << "| Theoretical Bandwidth               : ~"          << std::setprecision(2)
+              << theretical_memory_bandwidth <<       " [GB/s]"       << std::endl;
+    std::cout << "| Effective Bandwidth                 : ~"          << std::setprecision(2)
+              << efective_memory_bandwidth <<         " [GB/s]"       << std::endl;
     std::cout << "+-------------------------------------------------------------------------------+\n";
 }

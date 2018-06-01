@@ -151,12 +151,12 @@ using Decimal64 = Decimal<15, 2>;
 using Decimal128 = Decimal<15, 2, int128_t>;
 
 struct AggrHashTableLocal {
-	int sum_quantity;
-	int count;
-	int sum_base_price;
-	int sum_disc;
-	int sum_disc_price;
-	int sum_charge;
+	u64_t sum_quantity;
+	u64_t count;
+	u64_t sum_base_price;
+	u64_t sum_disc;
+	u64_t sum_disc_price;
+	u64_t sum_charge;
 };
 
 struct AggrHashTable {

@@ -10,6 +10,16 @@
 using namespace cooperative_groups;
 using u64_t = unsigned long long int;
 
+using SHIPDATE_TYPE = short;
+using DISCOUNT_TYPE = char;
+using EXTENDEDPRICE_TYPE = int;
+using TAX_TYPE = char;
+using QUANTITY_TYPE = char;
+using RETURNFLAG_TYPE = char;
+using LINESTATUS_TYPE = char;
+
+#define SHIPDATE_MIN 727563
+
 namespace cuda{
 
 
@@ -134,8 +144,8 @@ namespace cuda{
     }
 
     __global__
-    void naive_tpchQ01(int *shipdate, int64_t *discount, int64_t *extendedprice, int64_t *tax, 
-        char *returnflag, char *linestatus, int64_t *quantity, AggrHashTable *aggregations, size_t cardinality){
+    void naive_tpchQ01(SHIPDATE_TYPE *shipdate, DISCOUNT_TYPE *discount, EXTENDEDPRICE_TYPE *extendedprice, TAX_TYPE *tax, 
+        RETURNFLAG_TYPE *returnflag, LINESTATUS_TYPE *linestatus, QUANTITY_TYPE *quantity, AggrHashTable *aggregations, size_t cardinality){
 
         int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i < cardinality && shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
@@ -185,33 +195,33 @@ namespace cuda{
 
     __global__
     void thread_local_tpchQ01(
-        int *shipdate,
-        int64_t *discount,
-        int64_t *extendedprice,
-        int64_t *tax,
-        char *returnflag,
-        char *linestatus,
-        int64_t *quantity,
+        SHIPDATE_TYPE *shipdate,
+        DISCOUNT_TYPE *discount,
+        EXTENDEDPRICE_TYPE *extendedprice,
+        TAX_TYPE *tax,
+        RETURNFLAG_TYPE *returnflag,
+        LINESTATUS_TYPE *linestatus,
+        QUANTITY_TYPE *quantity,
         AggrHashTable *aggregations,
         u64_t cardinality) {
 
         constexpr size_t N = 18;
-        AggrHashTable agg[N];
-        memset(agg, 0, sizeof(AggrHashTable) * N);
+        AggrHashTableLocal agg[N];
+        memset(agg, 0, sizeof(AggrHashTableLocal) * N);
 
         u64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
         u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
         for(; i < end; ++i) {
-            if (shipdate[i] <= 729999) {
-                const auto disc = discount[i];
-                const auto price = extendedprice[i];
-                const auto disc_1 = Decimal64::ToValue(1, 0) - disc;
-                const auto tax_1 = tax[i] + Decimal64::ToValue(1, 0);
-                const auto disc_price = Decimal64::Mul(disc_1, price);
-                const auto charge = Decimal64::Mul(disc_price, tax_1);
+            if (shipdate[i] <= 729999 - SHIPDATE_MIN) {
+                const int disc = discount[i];
+                const int price = extendedprice[i];
+                const int disc_1 = Decimal32::ToValue(1, 0) - disc;
+                const int tax_1 = tax[i] + Decimal32::ToValue(1, 0);
+                const int disc_price = Decimal32::Mul(disc_1, price);
+                const int charge = Decimal32::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
                 
-                agg[idx].sum_quantity   += quantity[i];
+                agg[idx].sum_quantity   += quantity[i] * 100;
                 agg[idx].sum_base_price += price;
                 agg[idx].sum_charge     += charge;
                 agg[idx].sum_disc_price += disc_price;
@@ -223,12 +233,12 @@ namespace cuda{
         for (i = 0; i < N; ++i) {
             if (agg[i].count > 0) {
                 // FIXME: maybe do 128 bit aggregations here
-                atomicAdd(&aggregations[i].sum_quantity, agg[i].sum_quantity);
-                atomicAdd(&aggregations[i].sum_base_price, agg[i].sum_base_price);
-                atomicAdd(&aggregations[i].sum_charge, agg[i].sum_charge);
-                atomicAdd(&aggregations[i].sum_disc_price, agg[i].sum_disc_price);
-                atomicAdd(&aggregations[i].sum_disc, agg[i].sum_disc);
-                atomicAdd(&aggregations[i].count, agg[i].count);
+                atomicAdd(&aggregations[i].sum_quantity, (u64_t) agg[i].sum_quantity);
+                atomicAdd(&aggregations[i].sum_base_price, (u64_t) agg[i].sum_base_price);
+                atomicAdd(&aggregations[i].sum_charge, (u64_t) agg[i].sum_charge);
+                atomicAdd(&aggregations[i].sum_disc_price, (u64_t) agg[i].sum_disc_price);
+                atomicAdd(&aggregations[i].sum_disc, (u64_t) agg[i].sum_disc);
+                atomicAdd(&aggregations[i].count, (u64_t) agg[i].count);
             }
         }
     }

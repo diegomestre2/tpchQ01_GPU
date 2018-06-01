@@ -146,8 +146,18 @@ rdtsc()
 #endif
 }
 
+using Decimal32 = Decimal<9, 2>;
 using Decimal64 = Decimal<15, 2>;
 using Decimal128 = Decimal<15, 2, int128_t>;
+
+struct AggrHashTableLocal {
+	int sum_quantity;
+	int count;
+	int sum_base_price;
+	int sum_disc;
+	int sum_disc_price;
+	int sum_charge;
+};
 
 struct AggrHashTable {
 	u64_t sum_quantity;
@@ -157,7 +167,6 @@ struct AggrHashTable {
 	u64_t sum_disc_price;
 	u64_t sum_charge;
 };
-
 
 struct AggrHashTableKey {
 	int32_t key;

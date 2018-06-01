@@ -36,17 +36,28 @@ int main(){
 
     /* Allocate memory on device */
     auto current_device = cuda::device::current::get();
-
-    auto d_shipdate      = cuda::memory::device::make_unique< int[]           >(current_device,data_length);
-    auto d_discount      = cuda::memory::device::make_unique< int64_t[]       >(current_device,data_length);
+    int64_t *d_discount, *d_extendedprice, *d_tax, d_quantity;
+    int *d_shipdate;
+    char *d_returnflag, *d_linestatus;
+    AggrHashTable *d_aggregations;
+    cudaMallocHost((void**)&d_shipdate, data_length * sizeof(int));
+    cudaMallocHost((void**)&d_discount, data_length * sizeof(int64_t));
+    cudaMallocHost((void**)&d_extendedprice, data_length * sizeof(int64_t));
+    cudaMallocHost((void**)&d_tax, data_length * sizeof(int64_t));
+    cudaMallocHost((void**)&d_quantity, data_length * sizeof(int64_t));
+    cudaMallocHost((void**)&d_returnflag, data_length * sizeof(char));
+    cudaMallocHost((void**)&d_linestatus, data_length * sizeof(char));
+    cudaMallocHost((void**)&d_aggregations, data_length * sizeof(AggrHashTable));
+    //cuda::memory::device::make_unique< int[]           >(current_device,data_length);
+    /*auto d_discount      = cuda::memory::device::make_unique< int64_t[]       >(current_device,data_length);
     auto d_extendedprice = cuda::memory::device::make_unique< int64_t[]       >(current_device,data_length);
     auto d_tax           = cuda::memory::device::make_unique< int64_t[]       >(current_device,data_length);
     auto d_quantity      = cuda::memory::device::make_unique< int64_t[]       >(current_device,data_length);
     auto d_returnflag    = cuda::memory::device::make_unique< char[]          >(current_device,data_length);
     auto d_linestatus    = cuda::memory::device::make_unique< char[]          >(current_device,data_length);
-    auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[] >(current_device,MAX_GROUPS);
+    auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[] >(current_device,MAX_GROUPS);*/
 
-    cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
+    cudaMemset(d_aggregations, 0, sizeof(AggrHashTable)*MAX_GROUPS);
 
     /* Transfer data to device */
     cudaStream_t streams[nStreams];
@@ -62,13 +73,13 @@ int main(){
 
         //std::cout << "Stream " << i << ": " << "[" << offset << " - " << offset + size << "]" << std::endl;
 
-        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, size * sizeof(int),     streams[i]);
-        cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, size * sizeof(int64_t), streams[i]);
-        cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, size * sizeof(int64_t), streams[i]);
-        cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, size * sizeof(int64_t), streams[i]);
-        cuda::memory::async::copy(d_quantity.get()      + offset, quantity      + offset, size * sizeof(int64_t), streams[i]);
-        cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, size * sizeof(char),    streams[i]);
-        cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, size * sizeof(char),    streams[i]);
+        cuda::memory::async::copy(&d_shipdate[offset], shipdate      + offset, size * sizeof(int),     streams[i]);
+        cuda::memory::async::copy(&d_discount[offset], discount      + offset, size * sizeof(int64_t), streams[i]);
+        cuda::memory::async::copy(&d_extendedprice[offset], extendedprice + offset, size * sizeof(int64_t), streams[i]);
+        cuda::memory::async::copy(&d_tax[offset], tax           + offset, size * sizeof(int64_t), streams[i]);
+        cuda::memory::async::copy(&d_quantity[offset], quantity      + offset, size * sizeof(int64_t), streams[i]);
+        cuda::memory::async::copy(&d_returnflag[offset], returnflag    + offset, size * sizeof(char),    streams[i]);
+        cuda::memory::async::copy(&d_linestatus[offset], linestatus    + offset, size * sizeof(char),    streams[i]);
     }
 
     for (int i = 0; i < nStreams; ++i) {
@@ -79,14 +90,14 @@ int main(){
 
         //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << ">>>" << std::endl;
         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, 0, streams[i]>>>(
-            d_shipdate.get() + offset,
-            d_discount.get() + offset,
-            d_extendedprice.get() + offset,
-            d_tax.get() + offset,
-            d_returnflag.get() + offset,
-            d_linestatus.get() + offset,
-            d_quantity.get() + offset,
-            d_aggregations.get(),
+            d_shipdate,
+            d_discount,
+            d_extendedprice,
+            d_tax,
+            d_returnflag,
+            d_linestatus,
+            d_quantity,
+            d_aggregations,
             (u64_t) size);
     }
 

@@ -21,7 +21,31 @@ inline bool file_exists (const std::string& name) {
   return (stat (name.c_str(), &buffer) == 0);
 }
 
-int main(){
+#define INITIALIZE_MEMORY(ptrfunc) { \
+    auto _shipdate      = ptrfunc< SHIPDATE_TYPE[]       >(cardinality); \
+    auto _discount      = ptrfunc< DISCOUNT_TYPE[]       >(cardinality); \
+    auto _extendedprice = ptrfunc< EXTENDEDPRICE_TYPE[]  >(cardinality); \
+    auto _tax           = ptrfunc< TAX_TYPE[]            >(cardinality); \
+    auto _quantity      = ptrfunc< QUANTITY_TYPE[]       >(cardinality); \
+    auto _returnflag    = ptrfunc< RETURNFLAG_TYPE[]     >(cardinality); \
+    auto _linestatus    = ptrfunc< LINESTATUS_TYPE[]     >(cardinality); \
+    shipdate = _shipdate.get(); \
+    discount = _discount.get(); \
+    extendedprice = _extendedprice.get(); \
+    tax = _tax.get(); \
+    quantity = _quantity.get(); \
+    returnflag = _returnflag.get(); \
+    linestatus = _linestatus.get(); \
+    _shipdate.release(); \
+    _discount.release(); \
+    _extendedprice.release(); \
+    _tax.release(); \
+    _quantity.release(); \
+    _returnflag.release(); \
+    _linestatus.release(); \
+}
+
+int main(int argc, char** argv) {
     if (!file_exists("lineitem.tbl")) {
         fprintf(stderr, "lineitem.tbl not found!\n");
         exit(1);
@@ -36,15 +60,32 @@ int main(){
     auto end_csv = timer::now();
     kernel_prologue();
 
+    bool USE_PINNED_MEMORY = true;
+
+    for(int i = 0; i < argc; i++) {
+        auto arg = std::string(argv[i]);
+        if (arg == "--no-pinned-memory") {
+            USE_PINNED_MEMORY = false;
+        }
+    }
+
+    auto size_per_tuple = sizeof(SHIPDATE_TYPE) + sizeof(DISCOUNT_TYPE) + sizeof(EXTENDEDPRICE_TYPE) + sizeof(TAX_TYPE) + sizeof(QUANTITY_TYPE) + sizeof(RETURNFLAG_TYPE) + sizeof(LINESTATUS_TYPE);
+
     auto start_preprocess = timer::now();
-    auto shipdate      = cuda::memory::host::make_unique< SHIPDATE_TYPE[]       >(cardinality);
-    auto discount      = cuda::memory::host::make_unique< DISCOUNT_TYPE[]       >(cardinality);
-    auto extendedprice = cuda::memory::host::make_unique< EXTENDEDPRICE_TYPE[]  >(cardinality);
-    auto tax           = cuda::memory::host::make_unique< TAX_TYPE[]            >(cardinality);
-    auto quantity      = cuda::memory::host::make_unique< QUANTITY_TYPE[]       >(cardinality);
-    auto returnflag    = cuda::memory::host::make_unique< RETURNFLAG_TYPE[]     >(cardinality);
-    auto linestatus    = cuda::memory::host::make_unique< LINESTATUS_TYPE[]     >(cardinality);
-    printf("%d\n", todate_(01, 01,1992));
+
+    SHIPDATE_TYPE* shipdate;
+    DISCOUNT_TYPE* discount;
+    EXTENDEDPRICE_TYPE* extendedprice;
+    TAX_TYPE* tax;
+    QUANTITY_TYPE* quantity;
+    RETURNFLAG_TYPE* returnflag;
+    LINESTATUS_TYPE* linestatus;
+    if (USE_PINNED_MEMORY) {
+        INITIALIZE_MEMORY(cuda::memory::host::make_unique);
+    } else {
+        INITIALIZE_MEMORY(std::make_unique);
+    }
+
     for(size_t i = 0; i < cardinality; i++) {
         shipdate[i]      = _shipdate[i] - SHIPDATE_MIN;
         discount[i]      = _discount[i];
@@ -102,13 +143,13 @@ int main(){
         //std::cout << "Stream " << i << ": " << "[" << offset << " - " << offset + size << "]" << std::endl;
 
         auto start_copy = timer::now();
-        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate.get()      + offset, size * sizeof(SHIPDATE_TYPE),     streams[i]);
-        cuda::memory::async::copy(d_discount.get()      + offset, discount.get()      + offset, size * sizeof(DISCOUNT_TYPE), streams[i]);
-        cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice.get() + offset, size * sizeof(EXTENDEDPRICE_TYPE), streams[i]);
-        cuda::memory::async::copy(d_tax.get()           + offset, tax.get()           + offset, size * sizeof(TAX_TYPE), streams[i]);
-        cuda::memory::async::copy(d_quantity.get()      + offset, quantity.get()      + offset, size * sizeof(QUANTITY_TYPE), streams[i]);
-        cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag.get()    + offset, size * sizeof(RETURNFLAG_TYPE),    streams[i]);
-        cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus.get()    + offset, size * sizeof(LINESTATUS_TYPE),    streams[i]);
+        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, size * sizeof(SHIPDATE_TYPE),     streams[i]);
+        cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, size * sizeof(DISCOUNT_TYPE), streams[i]);
+        cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, size * sizeof(EXTENDEDPRICE_TYPE), streams[i]);
+        cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, size * sizeof(TAX_TYPE), streams[i]);
+        cuda::memory::async::copy(d_quantity.get()      + offset, quantity      + offset, size * sizeof(QUANTITY_TYPE), streams[i]);
+        cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, size * sizeof(RETURNFLAG_TYPE),    streams[i]);
+        cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, size * sizeof(LINESTATUS_TYPE),    streams[i]);
         auto end_copy = timer::now();
         copy_time += std::chrono::duration<double>(end_copy - start_copy).count();
 #if 0
@@ -120,10 +161,10 @@ int main(){
         size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
 #endif
         size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
-
+        size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
         auto start_kernel = timer::now();
-        //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << ">>>" << std::endl;
-        cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, 0, streams[i]>>>(
+        //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << "," << SHARED_MEMORY << ">>>" << std::endl;
+        cuda::global_ht_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, streams[i]>>>(
             d_shipdate.get()      + offset,
             d_discount.get()      + offset,
             d_extendedprice.get() + offset,
@@ -200,7 +241,6 @@ int main(){
 
     std::chrono::duration<double> duration(end - start);
     uint64_t tuples_per_second               = static_cast<uint64_t>(data_length / duration.count());
-    auto size_per_tuple                      = sizeof(int) + sizeof(int64_t) * 4 + sizeof(char) * 2;
     double effective_memory_throughput       = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
     double estimated_memory_throughput       = static_cast<double>((tuples_per_second * cache_line_size) / GIGA);
     double effective_memory_throughput_read  = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);

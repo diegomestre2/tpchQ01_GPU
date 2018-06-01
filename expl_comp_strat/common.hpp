@@ -179,14 +179,14 @@ struct AggrHashTableKey {
 };
 
 #define kernel_prologue() \
-	auto shipdate = li.l_shipdate.get(); \
-	auto returnflag = li.l_returnflag.get(); \
-	auto linestatus = li.l_linestatus.get(); \
-	auto discount = li.l_discount.get(); \
-	auto tax = li.l_tax.get(); \
-	auto extendedprice = li.l_extendedprice.get(); \
-	auto quantity = li.l_quantity.get(); \
-	const size_t cardinality = li.l_extendedprice.cardinality;
+	auto _shipdate = li.l_shipdate.get(); \
+	auto _returnflag = li.l_returnflag.get(); \
+	auto _linestatus = li.l_linestatus.get(); \
+	auto _discount = li.l_discount.get(); \
+	auto _tax = li.l_tax.get(); \
+	auto _extendedprice = li.l_extendedprice.get(); \
+	auto _quantity = li.l_quantity.get(); \
+	cardinality = li.l_extendedprice.cardinality;
 
 #define kernel_epilogue()
 

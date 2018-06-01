@@ -1,11 +1,11 @@
 #pragma once
 
 #include <stdio.h>
+#include <cooperative_groups.h>
 #include "helper.hpp"
 #include "dates.hpp"
 #include "constants.hpp"
 #include "../expl_comp_strat/common.hpp"
-#include <cooperative_groups.h>
 
 using namespace cooperative_groups;
 using u64_t = unsigned long long int;
@@ -32,18 +32,6 @@ namespace cuda{
         int lid = warp_local_thread_id();
         printf(" Global Warp: %d Local Warp: %d \n", wid, lid);
     }
-    /*__device__ 
-    int atomicAggInc_primitives(int *ctr) {
-        unsigned int active = __activemask();
-        int leader = __ffs(active) - 1;
-        int change = __popc(active);
-        unsigned int rank = __popc(active & __lanemask_lt());
-        int warp_res;
-        if(rank == 0)
-            warp_res = atomicAdd(ctr, change);
-        warp_res = __shfl_sync(active, warp_res, leader);
-        return warp_res + rank;
-    }*/
 
     __device__ 
     int atomicAggInc(int *ctr) {

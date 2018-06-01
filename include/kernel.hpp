@@ -10,11 +10,11 @@
 using namespace cooperative_groups;
 using u64_t = unsigned long long int;
 
-using SHIPDATE_TYPE = short;
-using DISCOUNT_TYPE = char;
-using EXTENDEDPRICE_TYPE = int;
-using TAX_TYPE = char;
-using QUANTITY_TYPE = char;
+using SHIPDATE_TYPE = int;
+using DISCOUNT_TYPE = int64_t;
+using EXTENDEDPRICE_TYPE = int64_t;
+using TAX_TYPE = int64_t;
+using QUANTITY_TYPE = int64_t;
 using RETURNFLAG_TYPE = char;
 using LINESTATUS_TYPE = char;
 
@@ -182,6 +182,40 @@ namespace cuda{
     }
 
     __global__
+    void global_ht_tpchQ01(
+        SHIPDATE_TYPE *shipdate,
+        DISCOUNT_TYPE *discount,
+        EXTENDEDPRICE_TYPE *extendedprice,
+        TAX_TYPE *tax,
+        RETURNFLAG_TYPE *returnflag,
+        LINESTATUS_TYPE *linestatus,
+        QUANTITY_TYPE *quantity,
+        AggrHashTable *aggregations,
+        u64_t cardinality) {
+
+        u64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
+        u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
+        for(; i < end; ++i) {
+            if (shipdate[i] <= 729999 - SHIPDATE_MIN) {
+                const int disc = discount[i];
+                const int price = extendedprice[i];
+                const int disc_1 = Decimal64::ToValue(1, 0) - disc;
+                const int tax_1 = tax[i] + Decimal64::ToValue(1, 0);
+                const int disc_price = Decimal64::Mul(disc_1, price);
+                const int charge = Decimal64::Mul(disc_price, tax_1);
+                const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
+                
+                atomicAdd(&aggregations[idx].sum_quantity, (u64_t) quantity[i] * 100);
+                atomicAdd(&aggregations[idx].sum_base_price, (u64_t) price);
+                atomicAdd(&aggregations[idx].sum_charge, (u64_t) charge);
+                atomicAdd(&aggregations[idx].sum_disc_price, (u64_t) disc_price);
+                atomicAdd(&aggregations[idx].sum_disc, (u64_t) disc);
+                atomicAdd(&aggregations[idx].count, (u64_t) 1);
+            }
+        }
+    }
+
+    __global__
     void thread_local_tpchQ01(
         SHIPDATE_TYPE *shipdate,
         DISCOUNT_TYPE *discount,
@@ -203,10 +237,10 @@ namespace cuda{
             if (shipdate[i] <= 729999 - SHIPDATE_MIN) {
                 const int disc = discount[i];
                 const int price = extendedprice[i];
-                const int disc_1 = Decimal32::ToValue(1, 0) - disc;
-                const int tax_1 = tax[i] + Decimal32::ToValue(1, 0);
-                const int disc_price = Decimal32::Mul(disc_1, price);
-                const int charge = Decimal32::Mul(disc_price, tax_1);
+                const int disc_1 = Decimal64::ToValue(1, 0) - disc;
+                const int tax_1 = tax[i] + Decimal64::ToValue(1, 0);
+                const int disc_price = Decimal64::Mul(disc_1, price);
+                const int charge = Decimal64::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
                 
                 agg[idx].sum_quantity   += quantity[i] * 100;

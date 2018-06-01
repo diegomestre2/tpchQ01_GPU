@@ -30,7 +30,7 @@ One more way to run TPC-H Query 01...
 - Camera-ready Submission: Friday, 20 July, 2018
 - Workshop Date: Monday, 27 August, 2018
 
-...sql
+```sql
 TPC-H Query 1
 SELECT
     l_returnflag,
@@ -53,4 +53,4 @@ GROUP BY
 ORDER BY
     l_returnflag,
     l_linestatus;
-...
+```

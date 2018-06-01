@@ -247,6 +247,8 @@ int main(int argc, char** argv) {
     double effective_memory_throughput_write = static_cast<double>(tuples_per_second / (size_per_tuple * GIGA));
     double theretical_memory_bandwidth       = static_cast<double>((5505 * 10e06 * (352 / 8) * 2) / 10e09);
     double efective_memory_bandwidth         = static_cast<double>((data_length * size_per_tuple) / (duration.count() * GIGA));
+    double csv_time = std::chrono::duration<double>(end_csv - start_csv).count();
+    double pre_process_time = std::chrono::duration<double>(end_preprocess - start_preprocess).count();
     
     std::cout << "\n+-------------------------------- Statistics -----------------------------------+\n";
     std::cout << "| TPC-H Q01 performance               : "           << std::fixed 
@@ -255,14 +257,14 @@ int main(int argc, char** argv) {
               << duration.count() <<                  " [s]"          << std::endl;
     std::cout << "| Estimated time for TPC-H SF100      : ~"          << std::setprecision(2)
               << duration.count() * (100 / sf) <<     " [s]"          << std::endl;
-    std::cout << "| CSV Time                            : ~" << std::setprecision(2)
-              << std::chrono::duration<double>(end_csv - start_csv).count() << " [s]" << std::endl;
-    std::cout << "| Preprocess Time                     : ~" << std::setprecision(2)
-              << std::chrono::duration<double>(end_preprocess - start_preprocess).count() << " [s]" << std::endl;
-    std::cout << "| Copy Time                           : ~" << std::setprecision(2)
-              << copy_time << " [s]" << std::endl;
-    std::cout << "| Computation Time                    : ~" << std::setprecision(2)
-              << computation_time << " [s]" << std::endl;
+    std::cout << "| CSV Time                            : ~"          << std::setprecision(2)
+              <<  csv_time <<                         " [s]"          << std::endl;
+    std::cout << "| Preprocess Time                     : ~"          << std::setprecision(2)
+              <<  pre_process_time <<                 " [s]"          << std::endl;
+    std::cout << "| Copy Time                           : ~"          << std::setprecision(2)
+              << copy_time <<                         " [s]"          << std::endl;
+    std::cout << "| Computation Time                    : ~"          << std::setprecision(2)
+              << computation_time <<                  " [s]"          << std::endl;
     std::cout << "| Effective memory throughput (query) : ~"          << std::setprecision(2)
               << effective_memory_throughput <<       " [GB/s]"       << std::endl;
     std::cout << "| Estimated memory throughput (query) : ~"          << std::setprecision(2)

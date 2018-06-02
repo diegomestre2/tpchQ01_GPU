@@ -238,7 +238,8 @@ int main(int argc, char** argv) {
 
     double sf = cardinality / 6001215.0;
     uint64_t cache_line_size = 128; // bytes
-
+    uint64_t num_loads =  1478493 + 38854 + 2920374 + 1478870 + 6;
+    uint64_t num_stores = 19;
     std::chrono::duration<double> duration(end - start);
     uint64_t tuples_per_second               = static_cast<uint64_t>(data_length / duration.count());
     double effective_memory_throughput       = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
@@ -246,36 +247,36 @@ int main(int argc, char** argv) {
     double effective_memory_throughput_read  = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
     double effective_memory_throughput_write = static_cast<double>(tuples_per_second / (size_per_tuple * GIGA));
     double theretical_memory_bandwidth       = static_cast<double>((5505 * 10e06 * (352 / 8) * 2) / 10e09);
-    double efective_memory_bandwidth         = static_cast<double>((data_length * size_per_tuple) / (duration.count() * GIGA));
+    double efective_memory_bandwidth         = static_cast<double>(((data_length * sizeof(SHIPDATE_TYPE)) + (num_loads * size_per_tuple) + (num_loads * num_stores))  / (duration.count() * 10e09));
     double csv_time = std::chrono::duration<double>(end_csv - start_csv).count();
     double pre_process_time = std::chrono::duration<double>(end_preprocess - start_preprocess).count();
     
     std::cout << "\n+-------------------------------- Statistics -----------------------------------+\n";
-    std::cout << "| TPC-H Q01 performance               : "           << std::fixed 
+    std::cout << "| TPC-H Q01 performance               : ="          << std::fixed 
               << tuples_per_second <<                 " [tuples/sec]" << std::endl;
     std::cout << "| Time taken                          : ~"          << std::setprecision(2)
-              << duration.count() <<                  " [s]"          << std::endl;
+              << duration.count() <<                  "  [s]"          << std::endl;
     std::cout << "| Estimated time for TPC-H SF100      : ~"          << std::setprecision(2)
-              << duration.count() * (100 / sf) <<     " [s]"          << std::endl;
+              << duration.count() * (100 / sf) <<     "  [s]"          << std::endl;
     std::cout << "| CSV Time                            : ~"          << std::setprecision(2)
-              <<  csv_time <<                         " [s]"          << std::endl;
+              <<  csv_time <<                         "  [s]"          << std::endl;
     std::cout << "| Preprocess Time                     : ~"          << std::setprecision(2)
-              <<  pre_process_time <<                 " [s]"          << std::endl;
+              <<  pre_process_time <<                 "  [s]"          << std::endl;
     std::cout << "| Copy Time                           : ~"          << std::setprecision(2)
-              << copy_time <<                         " [s]"          << std::endl;
+              << copy_time <<                         "  [s]"          << std::endl;
     std::cout << "| Computation Time                    : ~"          << std::setprecision(2)
-              << computation_time <<                  " [s]"          << std::endl;
+              << computation_time <<                  "  [s]"          << std::endl;
     std::cout << "| Effective memory throughput (query) : ~"          << std::setprecision(2)
-              << effective_memory_throughput <<       " [GB/s]"       << std::endl;
-    std::cout << "| Estimated memory throughput (query) : ~"          << std::setprecision(2)
-              << estimated_memory_throughput <<       " [GB/s]"       << std::endl;
+              << effective_memory_throughput <<       "  [GB/s]"       << std::endl;
+    std::cout << "| Estimated memory throughput (query) : ~"          << std::setprecision(1)
+              << estimated_memory_throughput <<       "  [GB/s]"       << std::endl;
     std::cout << "| Effective memory throughput (read)  : ~"          << std::setprecision(2)
-              << effective_memory_throughput_read <<  " [GB/s]"       << std::endl;
+              << effective_memory_throughput_read <<  "  [GB/s]"       << std::endl;
     std::cout << "| Memory throughput (write)           : ~"          << std::setprecision(2)
-              << effective_memory_throughput_write << " [GB/s]"       << std::endl;
-    std::cout << "| Theoretical Bandwidth               : ~"          << std::setprecision(2)
+              << effective_memory_throughput_write << "  [GB/s]"       << std::endl;
+    std::cout << "| Theoretical Bandwidth               : ="          << std::setprecision(1)
               << theretical_memory_bandwidth <<       " [GB/s]"       << std::endl;
     std::cout << "| Effective Bandwidth                 : ~"          << std::setprecision(2)
-              << efective_memory_bandwidth <<         " [GB/s]"       << std::endl;
+              << efective_memory_bandwidth <<         "  [GB/s]"       << std::endl;
     std::cout << "+-------------------------------------------------------------------------------+\n";
 }

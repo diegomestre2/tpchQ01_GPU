@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
         size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
         auto start_kernel = timer::now();
         //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << "," << SHARED_MEMORY << ">>>" << std::endl;
-        cuda::global_ht_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, streams[i]>>>(
+        cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, streams[i]>>>(
             d_shipdate.get()      + offset,
             d_discount.get()      + offset,
             d_extendedprice.get() + offset,

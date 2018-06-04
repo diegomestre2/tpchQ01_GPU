@@ -166,6 +166,8 @@ struct AggrHashTable {
 	u64_t sum_disc;
 	u64_t sum_disc_price;
 	u64_t sum_charge;
+	u64_t sum_disc_price_hi;
+	u64_t sum_charge_hi;
 };
 
 struct AggrHashTableKey {

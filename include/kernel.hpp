@@ -243,7 +243,7 @@ namespace cuda{
                 const int charge = Decimal64::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
                 
-                agg[idx].sum_quantity   += quantity[i] * 100;
+                agg[idx].sum_quantity   += quantity[i];
                 agg[idx].sum_base_price += price;
                 agg[idx].sum_charge     += charge;
                 agg[idx].sum_disc_price += disc_price;
@@ -256,7 +256,7 @@ namespace cuda{
             if (!agg[i].count) {
                 continue;
             }
-            atomicAdd(&aggregations[i].sum_quantity, (u64_t) agg[i].sum_quantity);
+            atomicAdd(&aggregations[i].sum_quantity, (u64_t) agg[i].sum_quantity * 100);
             atomicAdd(&aggregations[i].sum_base_price, (u64_t) agg[i].sum_base_price);
             if (atomicAdd(&aggregations[i].sum_charge, (u64_t) agg[i].sum_charge) < agg[i].sum_charge) {
                 atomicAdd(&aggregations[i].sum_charge_hi, 1);

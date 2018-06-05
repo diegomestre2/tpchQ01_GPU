@@ -198,7 +198,7 @@ int main(int argc, char** argv) {
             size_t size = std::min((size_t) MAX_TUPLES_PER_STREAM, (size_t) (data_length - offset));
 
             if (id < 3 && size > MIN_TUPLES_PER_STREAM) {
-                size = MIN_TUPLES_PER_STREAM;
+                size = std::min((size_t) MIN_TUPLES_PER_STREAM, (size_t) (data_length - offset));
             }
 
             auto& stream = streams.GetNewStream();
@@ -234,9 +234,11 @@ int main(int argc, char** argv) {
     cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);
 
     auto end = timer::now();    
-
-    std::cout << "\n+--------------------------------- Results -------------------------------------+\n";
-    auto print_dec = [] (auto s, auto x) { printf("%s%ld.%ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
+    std::cout << "\n"
+                 "+--------------------------------------------------- Results ---------------------------------------------------+\n";
+    std::cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";
+    std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+    auto print_dec = [] (auto s, auto x) { printf("%s%16ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
     for (size_t group=0; group<MAX_GROUPS; group++) {
         if (aggrs0[group].count > 0) {
             size_t i = group;
@@ -271,15 +273,15 @@ int main(int argc, char** argv) {
                 }
             }
 
-            printf("| # %c|%c", rf, ls);
+            printf("| # %c | %c ", rf, ls);
             print_dec(" | ",  aggrs0[i].sum_quantity);
             print_dec(" | ",  aggrs0[i].sum_base_price);
             print_dec(" | ",  aggrs0[i].sum_disc_price);
             print_dec(" | ",  aggrs0[i].sum_charge);
-            printf("|%llu\n", aggrs0[i].count);
+            printf(" | %10llu |\n", aggrs0[i].count);
         }
     }
-    std::cout << "+-------------------------------------------------------------------------------+\n";
+    std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
 
     double sf = cardinality / 6001215.0;
     uint64_t cache_line_size = 128; // bytes
@@ -296,7 +298,7 @@ int main(int argc, char** argv) {
     double csv_time = std::chrono::duration<double>(end_csv - start_csv).count();
     double pre_process_time = std::chrono::duration<double>(end_preprocess - start_preprocess).count();
     
-    std::cout << "\n+-------------------------------- Statistics -----------------------------------+\n";
+    std::cout << "\n+------------------------------------------------- Statistics --------------------------------------------------+\n";
     std::cout << "| TPC-H Q01 performance               : ="          << std::fixed 
               << tuples_per_second <<                 " [tuples/sec]" << std::endl;
     std::cout << "| Time taken                          : ~"          << std::setprecision(2)
@@ -323,5 +325,5 @@ int main(int argc, char** argv) {
               << theretical_memory_bandwidth <<       " [GB/s]"       << std::endl;
     std::cout << "| Effective Bandwidth                 : ~"          << std::setprecision(2)
               << efective_memory_bandwidth <<         "  [GB/s]"       << std::endl;
-    std::cout << "+-------------------------------------------------------------------------------+\n";
+    std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
 }

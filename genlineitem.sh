@@ -6,5 +6,5 @@ fi
 cd tpch-dbgen
 cmake -G "Unix Makefiles" .
 make
-./dbgen -f -T L -s $1
+./dbgen -f -T L -s ${1:-1}
 mv lineitem.tbl ..

@@ -13,4 +13,4 @@ fi
 cd ..
 # build project 
 cd build/release
-make -j 4
+make

@@ -21,7 +21,7 @@ One more way to run TPC-H Query 01...
 - Syncronize the project using sshfs in the bricks16
 - Type command make all in the Terminal. It will do all the work.
 
-#### Note: In case of error during the build of cuda-api_wrappers, the line include_directories(../cub/cub) should be included in its CMakeLists.txt file.
+#### Note: For testing purposes use the command make test
 
 ## Important Dates
 

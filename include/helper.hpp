@@ -14,7 +14,7 @@ void get_device_properties(){
 
     for (int i = 0; i < device_cnt; i++) {
         cudaGetDeviceProperties(&device_prop, i);
-        std::cout << "+-------------------------------------------------------------------------------+\n";
+        std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
         printf("| Device id: %d\t", i);
         printf("  Device name: %s\t", device_prop.name);
         printf("  Compute capability: %d.%d\n", device_prop.major, device_prop.minor);
@@ -50,7 +50,7 @@ void get_device_properties(){
                device_prop.concurrentManagedAccess);
         printf("| Number of async. engines: %d\n",
                device_prop.asyncEngineCount);
-        std::cout << "+-------------------------------------------------------------------------------+\n";
+        std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
     }
 }
 

@@ -228,7 +228,7 @@ namespace cuda{
         u64_t cardinality) {
 
         constexpr size_t N = 18;
-        __shared__ AggrHashTableLocal agg[N];
+        AggrHashTableLocal agg[N];
         memset(agg, 0, sizeof(AggrHashTableLocal) * N);
 
         u64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);

@@ -32,14 +32,14 @@ namespace cuda {
                 const int charge = Decimal64::Mul(disc_price, tax_1);
                 
                 if(returnflag[i] == 'A' && linestatus[i] == 'F'){
-                    agg[0].sum_quantity   += quantity[i] * 100;
+                    agg[0].sum_quantity   += quantity[i];
                     agg[0].sum_base_price += price;
                     agg[0].sum_charge     += charge;
                     agg[0].sum_disc_price += disc_price;
                     agg[0].sum_disc       += disc;
                     agg[0].count          += 1;
                 }else if(returnflag[i] == 'N' && linestatus[i] == 'F'){
-                    agg[1].sum_quantity   += quantity[i] * 100;
+                    agg[1].sum_quantity   += quantity[i];
                     agg[1].sum_base_price += price;
                     agg[1].sum_charge     += charge;
                     agg[1].sum_disc_price += disc_price;
@@ -47,7 +47,7 @@ namespace cuda {
                     agg[1].count          += 1;
 
                 }else if(returnflag[i] == 'N' && linestatus[i] == 'O'){
-                    agg[2].sum_quantity   += quantity[i] * 100;
+                    agg[2].sum_quantity   += quantity[i];
                     agg[2].sum_base_price += price;
                     agg[2].sum_charge     += charge;
                     agg[2].sum_disc_price += disc_price;
@@ -55,7 +55,7 @@ namespace cuda {
                     agg[2].count          += 1;
 
                 }else if(returnflag[i] == 'R' && linestatus[i] == 'F'){
-                    agg[3].sum_quantity   += quantity[i] * 100;
+                    agg[3].sum_quantity   += quantity[i];
                     agg[3].sum_base_price += price;
                     agg[3].sum_charge     += charge;
                     agg[3].sum_disc_price += disc_price;
@@ -67,7 +67,7 @@ namespace cuda {
         // final aggregation
         #pragma unroll
         for (i = 0; i < N; ++i) {
-            atomicAdd(&aggregations[i].sum_quantity, (u64_t) agg[i].sum_quantity);
+            atomicAdd(&aggregations[i].sum_quantity, (u64_t) agg[i].sum_quantity * 100);
             atomicAdd(&aggregations[i].sum_base_price, (u64_t) agg[i].sum_base_price);
             if (atomicAdd(&aggregations[i].sum_charge, (u64_t) agg[i].sum_charge) < agg[i].sum_charge) {
                 atomicAdd(&aggregations[i].sum_charge_hi, 1);

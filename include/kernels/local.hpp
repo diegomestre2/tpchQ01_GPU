@@ -87,7 +87,7 @@ namespace cuda {
                 const uint8_t lstatus = (linestatus[i / 8] & LINESTATUS_MASK[i % 8]) >> (i % 8);
                 const uint8_t idx = rflag + 4 * lstatus;
                 
-                agg[idx].sum_quantity   += quantity[i] * 100;
+                agg[idx].sum_quantity   += quantity[i];
                 agg[idx].sum_base_price += price;
                 agg[idx].sum_charge     += charge;
                 agg[idx].sum_disc_price += disc_price;
@@ -100,7 +100,7 @@ namespace cuda {
             if (!agg[i].count) {
                 continue;
             }
-            atomicAdd(&aggregations[i].sum_quantity, (u64_t) agg[i].sum_quantity);
+            atomicAdd(&aggregations[i].sum_quantity, (u64_t) agg[i].sum_quantity * 100);
             atomicAdd(&aggregations[i].sum_base_price, (u64_t) agg[i].sum_base_price);
             atomicAdd(&aggregations[i].sum_charge, (u64_t) agg[i].sum_charge);
             atomicAdd(&aggregations[i].sum_disc_price, (u64_t) agg[i].sum_disc_price);

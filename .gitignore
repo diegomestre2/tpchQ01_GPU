@@ -6,3 +6,9 @@ tpch-dbgen
 scripts
 lineitem.tbl
 debug
+.project
+.cproject
+*.orig
+*.rej
+*.diff
+.settings/

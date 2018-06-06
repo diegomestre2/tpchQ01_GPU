@@ -22,13 +22,15 @@ inline bool file_exists (const std::string& name) {
 }
 
 #define INITIALIZE_MEMORY(ptrfunc) { \
-    auto _shipdate      = ptrfunc< SHIPDATE_TYPE[]       >(cardinality); \
-    auto _discount      = ptrfunc< DISCOUNT_TYPE[]       >(cardinality); \
-    auto _extendedprice = ptrfunc< EXTENDEDPRICE_TYPE[]  >(cardinality); \
-    auto _tax           = ptrfunc< TAX_TYPE[]            >(cardinality); \
-    auto _quantity      = ptrfunc< QUANTITY_TYPE[]       >(cardinality); \
-    auto _returnflag    = ptrfunc< RETURNFLAG_TYPE[]     >(cardinality); \
-    auto _linestatus    = ptrfunc< LINESTATUS_TYPE[]     >(cardinality); \
+    auto _shipdate                 = ptrfunc< SHIPDATE_TYPE[]       >(cardinality);           \
+    auto _discount                 = ptrfunc< DISCOUNT_TYPE[]       >(cardinality);           \
+    auto _extendedprice            = ptrfunc< EXTENDEDPRICE_TYPE[]  >(cardinality);           \
+    auto _tax                      = ptrfunc< TAX_TYPE[]            >(cardinality);           \
+    auto _quantity                 = ptrfunc< QUANTITY_TYPE[]       >(cardinality);           \
+    auto _returnflag               = ptrfunc< RETURNFLAG_TYPE[]     >(cardinality);           \
+    auto _linestatus               = ptrfunc< LINESTATUS_TYPE[]     >(cardinality);           \
+    auto _returnflag_compressed    = ptrfunc< LINESTATUS_TYPE[]     >((cardinality + 3) / 4); \
+    auto _linestatus_compressed    = ptrfunc< LINESTATUS_TYPE[]     >((cardinality + 7) / 8); \
     shipdate = _shipdate.get(); \
     discount = _discount.get(); \
     extendedprice = _extendedprice.get(); \
@@ -36,6 +38,8 @@ inline bool file_exists (const std::string& name) {
     quantity = _quantity.get(); \
     returnflag = _returnflag.get(); \
     linestatus = _linestatus.get(); \
+    returnflag_compressed = _returnflag_compressed.get(); \
+    linestatus_compressed = _linestatus_compressed.get(); \
     _shipdate.release(); \
     _discount.release(); \
     _extendedprice.release(); \
@@ -43,6 +47,8 @@ inline bool file_exists (const std::string& name) {
     _quantity.release(); \
     _returnflag.release(); \
     _linestatus.release(); \
+    _returnflag_compressed.release(); \
+    _linestatus_compressed.release(); \
 }
 
 int main(int argc, char** argv) {
@@ -78,8 +84,8 @@ int main(int argc, char** argv) {
     EXTENDEDPRICE_TYPE* extendedprice;
     TAX_TYPE* tax;
     QUANTITY_TYPE* quantity;
-    RETURNFLAG_TYPE* returnflag;
-    LINESTATUS_TYPE* linestatus;
+    RETURNFLAG_TYPE* returnflag, *returnflag_compressed;
+    LINESTATUS_TYPE* linestatus, *linestatus_compressed;
     if (USE_PINNED_MEMORY) {
         INITIALIZE_MEMORY(cuda::memory::host::make_unique);
     } else {
@@ -94,6 +100,21 @@ int main(int argc, char** argv) {
         returnflag[i]    = _returnflag[i];
         quantity[i]      = _quantity[i] / 100;
         tax[i]           = _tax[i];
+        if (i % 4 == 0) {
+            returnflag_compressed[i / 4] = 0;
+            for(size_t j = 0; j < std::min((size_t) 4, cardinality - i); j++) {
+                // 'N' = 0x00, 'R' = 0x01, 'A' = 0x10
+                returnflag_compressed[i / 4] |= 
+                    (_returnflag[i + j] == 'N' ? 0x00 : (_returnflag[i + j] == 'R' ? 0x01 : 0x02)) << (j * 2);
+            }
+        }
+        if (i % 8 == 0) {
+            linestatus_compressed[i / 8] = 0;
+            for(size_t j = 0; j < std::min((size_t) 8, cardinality - i); j++) {
+                // 'O' = 0, 'F' = 1
+                linestatus_compressed[i / 8] |= (_linestatus[i + j] == 'F' ? 1 : 0) << j;
+            }
+        }
 
         assert((int)shipdate[i]           == _shipdate[i] - SHIPDATE_MIN);
         assert((int64_t) discount[i]      == _discount[i]);
@@ -113,14 +134,16 @@ int main(int argc, char** argv) {
     /* Allocate memory on device */
     auto current_device = cuda::device::current::get();
 
-    auto d_shipdate      = cuda::memory::device::make_unique< SHIPDATE_TYPE[]      >(current_device, data_length);
-    auto d_discount      = cuda::memory::device::make_unique< DISCOUNT_TYPE[]      >(current_device, data_length);
-    auto d_extendedprice = cuda::memory::device::make_unique< EXTENDEDPRICE_TYPE[] >(current_device, data_length);
-    auto d_tax           = cuda::memory::device::make_unique< TAX_TYPE[]           >(current_device, data_length);
-    auto d_quantity      = cuda::memory::device::make_unique< QUANTITY_TYPE[]      >(current_device, data_length);
-    auto d_returnflag    = cuda::memory::device::make_unique< RETURNFLAG_TYPE[]    >(current_device, data_length);
-    auto d_linestatus    = cuda::memory::device::make_unique< LINESTATUS_TYPE[]    >(current_device, data_length);
-    auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]      >(current_device, MAX_GROUPS);
+    auto d_shipdate                 = cuda::memory::device::make_unique< SHIPDATE_TYPE[]      >(current_device, data_length);
+    auto d_discount                 = cuda::memory::device::make_unique< DISCOUNT_TYPE[]      >(current_device, data_length);
+    auto d_extendedprice            = cuda::memory::device::make_unique< EXTENDEDPRICE_TYPE[] >(current_device, data_length);
+    auto d_tax                      = cuda::memory::device::make_unique< TAX_TYPE[]           >(current_device, data_length);
+    auto d_quantity                 = cuda::memory::device::make_unique< QUANTITY_TYPE[]      >(current_device, data_length);
+    auto d_returnflag               = cuda::memory::device::make_unique< RETURNFLAG_TYPE[]    >(current_device, data_length);
+    auto d_linestatus               = cuda::memory::device::make_unique< LINESTATUS_TYPE[]    >(current_device, data_length);
+    auto d_returnflag_compressed    = cuda::memory::device::make_unique< RETURNFLAG_TYPE[]    >(current_device, (data_length + 3) / 4);
+    auto d_linestatus_compressed    = cuda::memory::device::make_unique< LINESTATUS_TYPE[]    >(current_device, (data_length + 7) / 8);
+    auto d_aggregations             = cuda::memory::device::make_unique< AggrHashTable[]      >(current_device, MAX_GROUPS);
 
     cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
 
@@ -143,13 +166,13 @@ int main(int argc, char** argv) {
         //std::cout << "Stream " << i << ": " << "[" << offset << " - " << offset + size << "]" << std::endl;
 
         auto start_copy = timer::now();
-        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, size * sizeof(SHIPDATE_TYPE),     streams[i]);
-        cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, size * sizeof(DISCOUNT_TYPE), streams[i]);
-        cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, size * sizeof(EXTENDEDPRICE_TYPE), streams[i]);
-        cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, size * sizeof(TAX_TYPE), streams[i]);
-        cuda::memory::async::copy(d_quantity.get()      + offset, quantity      + offset, size * sizeof(QUANTITY_TYPE), streams[i]);
-        cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, size * sizeof(RETURNFLAG_TYPE),    streams[i]);
-        cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, size * sizeof(LINESTATUS_TYPE),    streams[i]);
+        cuda::memory::async::copy(d_shipdate.get()                 + offset, shipdate                     + offset, size * sizeof(SHIPDATE_TYPE),     streams[i]);
+        cuda::memory::async::copy(d_discount.get()                 + offset, discount                     + offset, size * sizeof(DISCOUNT_TYPE), streams[i]);
+        cuda::memory::async::copy(d_extendedprice.get()            + offset, extendedprice                + offset, size * sizeof(EXTENDEDPRICE_TYPE), streams[i]);
+        cuda::memory::async::copy(d_tax.get()                      + offset, tax                          + offset, size * sizeof(TAX_TYPE), streams[i]);
+        cuda::memory::async::copy(d_quantity.get()                 + offset, quantity                     + offset, size * sizeof(QUANTITY_TYPE), streams[i]);
+        cuda::memory::async::copy(d_returnflag_compressed.get()    + (offset / 4), returnflag_compressed    + (offset / 4), (size * sizeof(RETURNFLAG_TYPE) + 3) / 4,    streams[i]);
+        cuda::memory::async::copy(d_linestatus_compressed.get()    + (offset / 8), linestatus_compressed    + (offset / 8), (size * sizeof(LINESTATUS_TYPE) + 7) / 8,    streams[i]);
         auto end_copy = timer::now();
         copy_time += std::chrono::duration<double>(end_copy - start_copy).count();
 #if 0
@@ -165,13 +188,13 @@ int main(int argc, char** argv) {
         auto start_kernel = timer::now();
         //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << "," << SHARED_MEMORY << ">>>" << std::endl;
         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, streams[i]>>>(
-            d_shipdate.get()      + offset,
-            d_discount.get()      + offset,
-            d_extendedprice.get() + offset,
-            d_tax.get()           + offset,
-            d_returnflag.get()    + offset,
-            d_linestatus.get()    + offset,
-            d_quantity.get()      + offset,
+            d_shipdate.get()                 + offset,
+            d_discount.get()                 + offset,
+            d_extendedprice.get()            + offset,
+            d_tax.get()                      + offset,
+            d_returnflag_compressed.get()    + offset / 4,
+            d_linestatus_compressed.get()    + offset / 8,
+            d_quantity.get()                 + offset,
             d_aggregations.get(),
             (u64_t) size);
         auto end_kernel = timer::now();
@@ -195,38 +218,43 @@ int main(int argc, char** argv) {
     std::cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";
     std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
     auto print_dec = [] (auto s, auto x) { printf("%s%16ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
-    for (size_t group=0; group<MAX_GROUPS; group++) {
+    // A/F - N/F - N/O, R/F
+    constexpr int group_order[] = { 6, 4, 0, 5 };
+    for (size_t idx=0; idx < 4; idx++) {
+        int group = group_order[idx];
         if (aggrs0[group].count > 0) {
             size_t i = group;
             char rf = '-', ls = '-';
-            if (group == magic_hash('A', 'F')) {
+            if (group == 6) { // A, F = 2 + 4
                 rf = 'A';
                 ls = 'F';
                 if (cardinality == 6001215) {
                     assert(aggrs0[i].sum_quantity == 3773410700);
                     assert(aggrs0[i].count == 1478493);
                 }
-            } else if (group == magic_hash('N', 'F')) {
+            } else if (group == 4) { // N, F = 0 + 4
                 rf = 'N';
                 ls = 'F';
                 if (cardinality == 6001215) {
                     assert(aggrs0[i].sum_quantity == 99141700);
                     assert(aggrs0[i].count == 38854);
                 }
-            } else if (group == magic_hash('N', 'O')) {
+            } else if (group == 0) { // N, O = 0 + 0
                 rf = 'N';
                 ls = 'O';
                 if (cardinality == 6001215) {
                     assert(aggrs0[i].sum_quantity == 7447604000);
                     assert(aggrs0[i].count == 2920374);
                 }
-            } else if (group == magic_hash('R', 'F')) {
+            } else if (group == 5) { // R, F = 1 + 4
                 rf = 'R';
                 ls = 'F';
                 if (cardinality == 6001215) {
                     assert(aggrs0[i].sum_quantity == 3771975300);
                     assert(aggrs0[i].count == 1478870);
                 }
+            } else {
+                printf("%d\n", group);
             }
 
             printf("| # %c | %c ", rf, ls);

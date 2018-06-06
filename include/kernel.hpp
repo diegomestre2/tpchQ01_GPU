@@ -176,6 +176,7 @@ namespace cuda{
 
         return sum;
     }
+
     __inline__ __device__ 
     idx_t magic_hash(char rf, char ls) {
         return (((rf - 'A')) - (ls - 'F'));
@@ -227,7 +228,10 @@ namespace cuda{
         AggrHashTable *aggregations,
         u64_t cardinality) {
 
-        constexpr size_t N = 18;
+        constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
+        constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
+
+        constexpr size_t N = 8;
         AggrHashTableLocal agg[N];
         memset(agg, 0, sizeof(AggrHashTableLocal) * N);
 
@@ -241,7 +245,9 @@ namespace cuda{
                 const int tax_1 = tax[i] + Decimal64::ToValue(1, 0);
                 const int disc_price = Decimal64::Mul(disc_1, price);
                 const int charge = Decimal64::Mul(disc_price, tax_1);
-                const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
+                const uint8_t rflag = (returnflag[i / 4] & RETURNFLAG_MASK[i % 4]) >> (2 * (i % 4));
+                const uint8_t lstatus = (linestatus[i / 8] & LINESTATUS_MASK[i % 8]) >> (i % 8);
+                const uint8_t idx = rflag + 4 * lstatus;
                 
                 agg[idx].sum_quantity   += quantity[i] * 100;
                 agg[idx].sum_base_price += price;

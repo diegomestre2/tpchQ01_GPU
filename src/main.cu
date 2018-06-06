@@ -4,10 +4,21 @@
 #include <iomanip>
 
 #include "kernel.hpp"
+#include "kernels/naive.hpp"
+#include "kernels/local.hpp"
+#include "kernels/global.hpp"
+#include "kernels/coalesced.hpp"
 #include "../expl_comp_strat/tpch_kit.hpp"
 
 size_t magic_hash(char rf, char ls) {
     return (((rf - 'A')) - (ls - 'F'));
+}
+
+void assert_always(bool a) {
+    if (!a) {
+        fprintf(stderr, "Assert always failed!");
+        exit(1);
+    }
 }
 
 #define GIGA (1024 * 1024 * 1024)
@@ -22,13 +33,13 @@ inline bool file_exists (const std::string& name) {
 }
 
 #define INITIALIZE_MEMORY(ptrfunc) { \
-    auto _shipdate      = ptrfunc< SHIPDATE_TYPE[]       >(cardinality); \
-    auto _discount      = ptrfunc< DISCOUNT_TYPE[]       >(cardinality); \
-    auto _extendedprice = ptrfunc< EXTENDEDPRICE_TYPE[]  >(cardinality); \
-    auto _tax           = ptrfunc< TAX_TYPE[]            >(cardinality); \
-    auto _quantity      = ptrfunc< QUANTITY_TYPE[]       >(cardinality); \
-    auto _returnflag    = ptrfunc< RETURNFLAG_TYPE[]     >(cardinality); \
-    auto _linestatus    = ptrfunc< LINESTATUS_TYPE[]     >(cardinality); \
+    auto _shipdate                       = ptrfunc< SHIPDATE_TYPE[]             >(cardinality);           \
+    auto _discount                       = ptrfunc< DISCOUNT_TYPE[]             >(cardinality);           \
+    auto _extendedprice                  = ptrfunc< EXTENDEDPRICE_TYPE[]        >(cardinality);           \
+    auto _tax                            = ptrfunc< TAX_TYPE[]                  >(cardinality);           \
+    auto _quantity                       = ptrfunc< QUANTITY_TYPE[]             >(cardinality);           \
+    auto _returnflag                     = ptrfunc< RETURNFLAG_TYPE[]           >(cardinality);           \
+    auto _linestatus                     = ptrfunc< LINESTATUS_TYPE[]           >(cardinality);           \
     shipdate = _shipdate.get(); \
     discount = _discount.get(); \
     extendedprice = _extendedprice.get(); \
@@ -43,6 +54,27 @@ inline bool file_exists (const std::string& name) {
     _quantity.release(); \
     _returnflag.release(); \
     _linestatus.release(); \
+    auto _shipdate_small                 = ptrfunc< SHIPDATE_TYPE_SMALL[]       >(cardinality);           \
+    auto _discount_small                 = ptrfunc< DISCOUNT_TYPE_SMALL[]       >(cardinality);           \
+    auto _extendedprice_small            = ptrfunc< EXTENDEDPRICE_TYPE_SMALL[]  >(cardinality);           \
+    auto _tax_small                      = ptrfunc< TAX_TYPE_SMALL[]            >(cardinality);           \
+    auto _quantity_small                 = ptrfunc< QUANTITY_TYPE_SMALL[]       >(cardinality);           \
+    auto _returnflag_small               = ptrfunc< RETURNFLAG_TYPE_SMALL[]     >((cardinality + 3) / 4); \
+    auto _linestatus_small               = ptrfunc< LINESTATUS_TYPE_SMALL[]     >((cardinality + 7) / 8); \
+    shipdate_small = _shipdate_small.get(); \
+    discount_small = _discount_small.get(); \
+    extendedprice_small = _extendedprice_small.get(); \
+    tax_small = _tax_small.get(); \
+    quantity_small = _quantity_small.get(); \
+    returnflag_small = _returnflag_small.get(); \
+    linestatus_small = _linestatus_small.get(); \
+    _shipdate_small.release(); \
+    _discount_small.release(); \
+    _extendedprice_small.release(); \
+    _tax_small.release(); \
+    _quantity_small.release(); \
+    _returnflag_small.release(); \
+    _linestatus_small.release(); \
 }
 
 
@@ -72,13 +104,6 @@ struct Stream {
 
     void Sync() {
         cudaStreamSynchronize(stream);
-    }
-
-    void Run(AggrHashTable* aggrs, size_t size) {
-        size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
-        size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
-         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, stream>>>(
-            shipdate, discount, eprice, tax, rf, ls, quantity, aggrs, (u64_t) size);
     }
 
     ~Stream() {
@@ -113,31 +138,46 @@ public:
 
 
 int main(int argc, char** argv) {
-    if (!file_exists("lineitem.tbl")) {
-        fprintf(stderr, "lineitem.tbl not found!\n");
-        exit(1);
-    }
     std::cout << "TPC-H Query 1" << '\n';
     get_device_properties();
     /* load data */
     auto start_csv = timer::now();
     size_t cardinality;
-    lineitem li(7000000ull);
-    li.FromFile("lineitem.tbl");
-    auto end_csv = timer::now();
-    kernel_prologue();
+
+    std::string input_file = "lineitem.tbl";
 
     bool USE_PINNED_MEMORY = true;
+    bool USE_GLOBAL_HT = false;
+    bool USE_SMALL_DATATYPES = false;
 
+    std::string input_argument = "--use-input-file=";
     for(int i = 0; i < argc; i++) {
         auto arg = std::string(argv[i]);
         if (arg == "--no-pinned-memory") {
             USE_PINNED_MEMORY = false;
+        } else if (arg == "--use-global-ht") {
+            USE_GLOBAL_HT = true;
+        } else if (arg == "--use-small-datatypes") {
+            USE_SMALL_DATATYPES = true;
+        } else if (arg.substr(0, input_argument.size()) == input_argument) {
+            input_file = arg.substr(input_argument.size());
         }
     }
 
-    auto size_per_tuple = sizeof(SHIPDATE_TYPE) + sizeof(DISCOUNT_TYPE) + sizeof(EXTENDEDPRICE_TYPE) + sizeof(TAX_TYPE) + sizeof(QUANTITY_TYPE) + sizeof(RETURNFLAG_TYPE) + sizeof(LINESTATUS_TYPE);
+    if (!file_exists(input_file.c_str())) {
+        fprintf(stderr, "lineitem.tbl not found!\n");
+        exit(1);
+    }
 
+    lineitem li(7000000ull);
+    li.FromFile(input_file.c_str());
+    auto end_csv = timer::now();
+    kernel_prologue();
+
+    auto size_per_tuple = sizeof(SHIPDATE_TYPE) + sizeof(DISCOUNT_TYPE) + sizeof(EXTENDEDPRICE_TYPE) + sizeof(TAX_TYPE) + sizeof(QUANTITY_TYPE) + sizeof(RETURNFLAG_TYPE) + sizeof(LINESTATUS_TYPE);
+    if (USE_SMALL_DATATYPES) {
+        size_per_tuple = sizeof(SHIPDATE_TYPE_SMALL) + sizeof(DISCOUNT_TYPE_SMALL) + sizeof(EXTENDEDPRICE_TYPE_SMALL) + sizeof(TAX_TYPE_SMALL) + sizeof(QUANTITY_TYPE_SMALL) + sizeof(RETURNFLAG_TYPE_SMALL) + sizeof(LINESTATUS_TYPE_SMALL);
+    }
     auto start_preprocess = timer::now();
 
     SHIPDATE_TYPE* shipdate;
@@ -147,6 +187,14 @@ int main(int argc, char** argv) {
     QUANTITY_TYPE* quantity;
     RETURNFLAG_TYPE* returnflag;
     LINESTATUS_TYPE* linestatus;
+
+    SHIPDATE_TYPE_SMALL* shipdate_small;
+    DISCOUNT_TYPE_SMALL* discount_small;
+    EXTENDEDPRICE_TYPE_SMALL* extendedprice_small;
+    TAX_TYPE_SMALL* tax_small;
+    QUANTITY_TYPE_SMALL* quantity_small;
+    RETURNFLAG_TYPE_SMALL* returnflag_small;
+    LINESTATUS_TYPE_SMALL* linestatus_small;
     if (USE_PINNED_MEMORY) {
         INITIALIZE_MEMORY(cuda::memory::host::make_unique);
     } else {
@@ -154,21 +202,49 @@ int main(int argc, char** argv) {
     }
 
     for(size_t i = 0; i < cardinality; i++) {
-        shipdate[i]      = _shipdate[i] - SHIPDATE_MIN;
-        discount[i]      = _discount[i];
+        shipdate[i] = _shipdate[i];
+        discount[i] = _discount[i];
         extendedprice[i] = _extendedprice[i];
-        linestatus[i]    = _linestatus[i];
-        returnflag[i]    = _returnflag[i];
-        quantity[i]      = _quantity[i] / 100;
-        tax[i]           = _tax[i];
+        quantity[i] = _quantity[i];
+        tax[i] = _tax[i];
+        returnflag[i] = _returnflag[i];
+        linestatus[i] = _linestatus[i];
 
-        assert((int)shipdate[i]           == _shipdate[i] - SHIPDATE_MIN);
-        assert((int64_t) discount[i]      == _discount[i]);
-        assert((int64_t) extendedprice[i] == _extendedprice[i]);
-        assert((char) linestatus[i]       == _linestatus[i]);
-        assert((char) returnflag[i]       == _returnflag[i]);
-        assert((int64_t) quantity[i]      == _quantity[i] / 100);
-        assert((int64_t) tax[i]           == _tax[i]);
+        shipdate_small[i]      = shipdate[i] - SHIPDATE_MIN;
+        discount_small[i]      = discount[i];
+        extendedprice_small[i] = extendedprice[i];
+        quantity_small[i]      = quantity[i] / 100;
+        tax_small[i]           = tax[i];
+        if (i % 4 == 0) {
+            returnflag_small[i / 4] = 0;
+            for(size_t j = 0; j < std::min((size_t) 4, cardinality - i); j++) {
+                // 'N' = 0x00, 'R' = 0x01, 'A' = 0x10
+                returnflag_small[i / 4] |= 
+                    (_returnflag[i + j] == 'N' ? 0x00 : (_returnflag[i + j] == 'R' ? 0x01 : 0x02)) << (j * 2);
+            }
+        }
+        if (i % 8 == 0) {
+            linestatus_small[i / 8] = 0;
+            for(size_t j = 0; j < std::min((size_t) 8, cardinality - i); j++) {
+                // 'O' = 0, 'F' = 1
+                linestatus_small[i / 8] |= (_linestatus[i + j] == 'F' ? 1 : 0) << j;
+            }
+        }
+
+        assert_always((int)shipdate_small[i]           == shipdate[i] - SHIPDATE_MIN);
+        assert_always((int64_t) discount_small[i]      == discount[i]);
+        assert_always((int64_t) extendedprice_small[i] == extendedprice[i]);
+        assert_always((int64_t) quantity_small[i]      == quantity[i] / 100);
+        assert_always((int64_t) tax_small[i]           == tax[i]);
+    }
+
+    constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
+    constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
+    for(size_t i = 0; i < cardinality; i++) {
+        uint8_t retflag = (returnflag_small[i / 4] & RETURNFLAG_MASK[i % 4]) >> (2 * (i % 4));
+        uint8_t lstatus = (linestatus_small[i / 8] & LINESTATUS_MASK[i % 8]) >> (i % 8);
+        assert_always(retflag == (returnflag[i] == 'N' ? 0x00 : (returnflag[i] == 'R' ? 0x01 : 0x02)));
+        assert_always(lstatus == (linestatus[i] == 'F' ? 1 : 0));
     }
     auto end_preprocess = timer::now();
 
@@ -195,21 +271,86 @@ int main(int argc, char** argv) {
 
         while (offset < data_length) {
             size_t size = std::min((size_t) MAX_TUPLES_PER_STREAM, (size_t) (data_length - offset));
+
+#if 0
             if (id < 3 && size > MIN_TUPLES_PER_STREAM) {
                 size = std::min((size_t) MIN_TUPLES_PER_STREAM, (size_t) (data_length - offset));
             }
-
+#endif
             auto& stream = streams.GetNewStream();
+            auto& s = stream;
 
-            cuda::memory::async::copy(stream.shipdate, shipdate      + offset, size * sizeof(SHIPDATE_TYPE),     stream.stream);
-            cuda::memory::async::copy(stream.discount, discount      + offset, size * sizeof(DISCOUNT_TYPE), stream.stream);
-            cuda::memory::async::copy(stream.eprice, extendedprice   + offset, size * sizeof(EXTENDEDPRICE_TYPE), stream.stream);
-            cuda::memory::async::copy(stream.tax, tax                + offset, size * sizeof(TAX_TYPE), stream.stream);
-            cuda::memory::async::copy(stream.quantity, quantity      + offset, size * sizeof(QUANTITY_TYPE), stream.stream);
-            cuda::memory::async::copy(stream.rf, returnflag          + offset, size * sizeof(RETURNFLAG_TYPE),    stream.stream);
-            cuda::memory::async::copy(stream.ls, linestatus          + offset, size * sizeof(LINESTATUS_TYPE),    stream.stream);
+            if (USE_SMALL_DATATYPES) {
+                cuda::memory::async::copy(stream.shipdate, shipdate_small      + offset, size * sizeof(SHIPDATE_TYPE_SMALL),     stream.stream);
+                cuda::memory::async::copy(stream.discount, discount_small      + offset, size * sizeof(DISCOUNT_TYPE_SMALL), stream.stream);
+                cuda::memory::async::copy(stream.eprice, extendedprice_small   + offset, size * sizeof(EXTENDEDPRICE_TYPE_SMALL), stream.stream);
+                cuda::memory::async::copy(stream.tax, tax_small                + offset, size * sizeof(TAX_TYPE_SMALL), stream.stream);
+                cuda::memory::async::copy(stream.quantity, quantity_small      + offset, size * sizeof(QUANTITY_TYPE_SMALL), stream.stream);
+                cuda::memory::async::copy(stream.rf, returnflag_small          + offset / 4, size * sizeof(RETURNFLAG_TYPE_SMALL),    stream.stream);
+                cuda::memory::async::copy(stream.ls, linestatus_small          + offset / 8, size * sizeof(LINESTATUS_TYPE_SMALL),    stream.stream);    
+            } else {
+                cuda::memory::async::copy(stream.shipdate, shipdate      + offset, size * sizeof(SHIPDATE_TYPE),     stream.stream);
+                cuda::memory::async::copy(stream.discount, discount      + offset, size * sizeof(DISCOUNT_TYPE), stream.stream);
+                cuda::memory::async::copy(stream.eprice, extendedprice   + offset, size * sizeof(EXTENDEDPRICE_TYPE), stream.stream);
+                cuda::memory::async::copy(stream.tax, tax                + offset, size * sizeof(TAX_TYPE), stream.stream);
+                cuda::memory::async::copy(stream.quantity, quantity      + offset, size * sizeof(QUANTITY_TYPE), stream.stream);
+                cuda::memory::async::copy(stream.rf, returnflag          + offset, size * sizeof(RETURNFLAG_TYPE),    stream.stream);
+                cuda::memory::async::copy(stream.ls, linestatus          + offset, size * sizeof(LINESTATUS_TYPE),    stream.stream);    
+            }
+            
 
-            stream.Run(d_aggregations.get(), size);
+            size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
+            size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
+            auto start_kernel = timer::now();
+            if (!USE_GLOBAL_HT) {
+                if (USE_SMALL_DATATYPES) {
+                    cuda::thread_local_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                        s.shipdate,
+                        s.discount,
+                        s.eprice,
+                        s.tax,
+                        (RETURNFLAG_TYPE_SMALL*)s.rf,
+                        (LINESTATUS_TYPE_SMALL*)s.ls,
+                        s.quantity,
+                        d_aggregations.get(),
+                        (u64_t) size);
+                } else {
+                    cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                        s.shipdate,
+                        s.discount,
+                        s.eprice,
+                        s.tax,
+                        s.rf,
+                        s.ls,
+                        s.quantity,
+                        d_aggregations.get(),
+                        (u64_t) size);
+                }
+            } else {
+                if (USE_SMALL_DATATYPES) {
+                    cuda::global_ht_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                        s.shipdate,
+                        s.discount,
+                        s.eprice,
+                        s.tax,
+                        (RETURNFLAG_TYPE_SMALL*)s.rf,
+                        (LINESTATUS_TYPE_SMALL*)s.ls,
+                        s.quantity,
+                        d_aggregations.get(),
+                        (u64_t) size);
+                } else {
+                    cuda::global_ht_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                        s.shipdate,
+                        s.discount,
+                        s.eprice,
+                        s.tax,
+                        s.rf,
+                        s.ls,
+                        s.quantity,
+                        d_aggregations.get(),
+                        (u64_t) size);
+                }
+            }
 
             offset += size;
         }
@@ -225,38 +366,54 @@ int main(int argc, char** argv) {
     std::cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";
     std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
     auto print_dec = [] (auto s, auto x) { printf("%s%16ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
-    for (size_t group=0; group<MAX_GROUPS; group++) {
+    // A/F - N/F - N/O, R/F
+    int group_order[4];
+    if (USE_SMALL_DATATYPES) {
+        group_order[0] = 6;
+        group_order[1] = 4;
+        group_order[2] = 0;
+        group_order[3] = 5;
+    } else {
+        group_order[0] = magic_hash('A', 'F');
+        group_order[1] = magic_hash('N', 'F');
+        group_order[2] = magic_hash('N', 'O');
+        group_order[3] = magic_hash('R', 'F');
+    }
+    for (size_t idx=0; idx < 4; idx++) {
+        int group = group_order[idx];
         if (aggrs0[group].count > 0) {
             size_t i = group;
             char rf = '-', ls = '-';
-            if (group == magic_hash('A', 'F')) {
+            if (idx == 0) { // A, F = 2 + 4
                 rf = 'A';
                 ls = 'F';
                 if (cardinality == 6001215) {
                     assert(aggrs0[i].sum_quantity == 3773410700);
                     assert(aggrs0[i].count == 1478493);
                 }
-            } else if (group == magic_hash('N', 'F')) {
+            } else if (idx == 1) { // N, F = 0 + 4
                 rf = 'N';
                 ls = 'F';
                 if (cardinality == 6001215) {
                     assert(aggrs0[i].sum_quantity == 99141700);
                     assert(aggrs0[i].count == 38854);
                 }
-            } else if (group == magic_hash('N', 'O')) {
+            } else if (idx == 2) { // N, O = 0 + 0
                 rf = 'N';
                 ls = 'O';
                 if (cardinality == 6001215) {
                     assert(aggrs0[i].sum_quantity == 7447604000);
                     assert(aggrs0[i].count == 2920374);
                 }
-            } else if (group == magic_hash('R', 'F')) {
+            } else if (idx == 3) { // R, F = 1 + 4
                 rf = 'R';
                 ls = 'F';
                 if (cardinality == 6001215) {
                     assert(aggrs0[i].sum_quantity == 3771975300);
                     assert(aggrs0[i].count == 1478870);
                 }
+            } else {
+                printf("%d\n", group);
             }
 
             printf("| # %c | %c ", rf, ls);

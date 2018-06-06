@@ -2,6 +2,7 @@
 #include <cuda/api_wrappers.h>
 #include <vector>
 #include <iomanip>
+#include <fstream>
 
 #include "kernel.hpp"
 #include "kernels/naive.hpp"
@@ -21,6 +22,10 @@ void assert_always(bool a) {
     }
 }
 
+void syscall(std::string command) {
+    system(command.c_str());
+}
+
 #define GIGA (1024 * 1024 * 1024)
 #define MEGA (1024 * 1024)
 #define KILO (1024)
@@ -30,6 +35,15 @@ using timer = std::chrono::high_resolution_clock;
 inline bool file_exists (const std::string& name) {
   struct stat buffer;
   return (stat (name.c_str(), &buffer) == 0);
+}
+
+inline std::string join_path(std::string a, std::string b) {
+    return a + "/" + b;
+}
+
+std::ifstream::pos_type filesize(std::string filename) {
+    std::ifstream in(filename.c_str(), std::ifstream::ate | std::ifstream::binary);
+    return in.tellg(); 
 }
 
 #define INITIALIZE_MEMORY(ptrfunc) { \
@@ -76,7 +90,6 @@ inline bool file_exists (const std::string& name) {
     _returnflag_small.release(); \
     _linestatus_small.release(); \
 }
-
 
 struct Stream {
     cudaStream_t stream;
@@ -136,21 +149,44 @@ public:
 };
 
 
+#define LOAD_BINARY(variable, tpe, fname) { \
+        std::string fpath = join_path(tpch_directory, fname); \
+        FILE* pFile = fopen(fpath.c_str(), "rb"); \
+        variable = (tpe*) malloc(sizeof(tpe) * cardinality); \
+        assert_always(variable && pFile); \
+        fread(variable, sizeof(tpe), cardinality, pFile); \
+        fclose(pFile); \
+    }
+    
+
+#define WRITE_BINARY(variable, tpe, fname) { \
+        std::string fpath = join_path(tpch_directory, fname); \
+        FILE* pFile = fopen(fpath.c_str(), "wb+"); \
+        assert_always(pFile); \
+        fwrite(variable, sizeof(tpe), cardinality, pFile); \
+        fclose(pFile); \
+    }
 
 int main(int argc, char** argv) {
     std::cout << "TPC-H Query 1" << '\n';
     get_device_properties();
     /* load data */
     auto start_csv = timer::now();
+    SHIPDATE_TYPE* _shipdate;
+    RETURNFLAG_TYPE* _returnflag;
+    LINESTATUS_TYPE* _linestatus;
+    DISCOUNT_TYPE* _discount;
+    TAX_TYPE* _tax;
+    EXTENDEDPRICE_TYPE* _extendedprice;
+    QUANTITY_TYPE* _quantity;
     size_t cardinality;
-
-    std::string input_file = "lineitem.tbl";
 
     bool USE_PINNED_MEMORY = true;
     bool USE_GLOBAL_HT = false;
     bool USE_SMALL_DATATYPES = false;
 
-    std::string input_argument = "--use-input-file=";
+    double sf = 1;
+    std::string sf_argument = "--sf=";
     for(int i = 0; i < argc; i++) {
         auto arg = std::string(argv[i]);
         if (arg == "--no-pinned-memory") {
@@ -159,20 +195,53 @@ int main(int argc, char** argv) {
             USE_GLOBAL_HT = true;
         } else if (arg == "--use-small-datatypes") {
             USE_SMALL_DATATYPES = true;
-        } else if (arg.substr(0, input_argument.size()) == input_argument) {
-            input_file = arg.substr(input_argument.size());
+        } else if (arg.substr(0, sf_argument.size()) == sf_argument) {
+            sf = std::stod(arg.substr(sf_argument.size()));
         }
     }
-
-    if (!file_exists(input_file.c_str())) {
-        fprintf(stderr, "lineitem.tbl not found!\n");
-        exit(1);
+    lineitem li((size_t)(7000000 * sf));
+    syscall("mkdir -p tpch");
+    std::string tpch_directory = join_path("tpch", std::to_string(sf));
+    syscall(std::string("mkdir -p ") + tpch_directory);
+    if (file_exists(join_path(tpch_directory, "shipdate.bin"))) {
+        std::cout << "Loading from binary." << std::endl;
+        // binary files exist, load them
+        cardinality = filesize(join_path(tpch_directory, "shipdate.bin")) / sizeof(SHIPDATE_TYPE);
+        LOAD_BINARY(_shipdate, SHIPDATE_TYPE, "shipdate.bin");
+        LOAD_BINARY(_returnflag, RETURNFLAG_TYPE, "returnflag.bin");
+        LOAD_BINARY(_linestatus, LINESTATUS_TYPE, "linestatus.bin");
+        LOAD_BINARY(_discount, DISCOUNT_TYPE, "discount.bin");
+        LOAD_BINARY(_tax, TAX_TYPE, "tax.bin");
+        LOAD_BINARY(_extendedprice, EXTENDEDPRICE_TYPE, "extendedprice.bin");
+        LOAD_BINARY(_quantity, QUANTITY_TYPE, "quantity.bin");
+    } else {
+        std::cout << "Reading CSV file and writing to binary." << std::endl;
+        std::string input_file = join_path(tpch_directory, "lineitem.tbl");
+        if (!file_exists(input_file.c_str())) {
+            // have to generate lineitem file
+            syscall("./genlineitem.sh " + std::to_string(sf));
+            syscall("mv lineitem.tbl " + input_file);
+        }
+        li.FromFile(input_file.c_str());
+        _shipdate = li.l_shipdate.get();
+        _returnflag = li.l_returnflag.get();
+        _linestatus = li.l_linestatus.get();
+        _discount = li.l_discount.get();
+        _tax = li.l_tax.get();
+        _extendedprice = li.l_extendedprice.get();
+        _quantity = li.l_quantity.get();
+        cardinality = li.l_extendedprice.cardinality;
+        WRITE_BINARY(_shipdate, SHIPDATE_TYPE, "shipdate.bin");
+        WRITE_BINARY(_returnflag, RETURNFLAG_TYPE, "returnflag.bin");
+        WRITE_BINARY(_linestatus, LINESTATUS_TYPE, "linestatus.bin");
+        WRITE_BINARY(_discount, DISCOUNT_TYPE, "discount.bin");
+        WRITE_BINARY(_tax, TAX_TYPE, "tax.bin");
+        WRITE_BINARY(_extendedprice, EXTENDEDPRICE_TYPE, "extendedprice.bin");
+        WRITE_BINARY(_quantity, QUANTITY_TYPE, "quantity.bin");
     }
 
-    lineitem li(7000000ull);
-    li.FromFile(input_file.c_str());
+
     auto end_csv = timer::now();
-    kernel_prologue();
 
     auto size_per_tuple = sizeof(SHIPDATE_TYPE) + sizeof(DISCOUNT_TYPE) + sizeof(EXTENDEDPRICE_TYPE) + sizeof(TAX_TYPE) + sizeof(QUANTITY_TYPE) + sizeof(RETURNFLAG_TYPE) + sizeof(LINESTATUS_TYPE);
     if (USE_SMALL_DATATYPES) {
@@ -426,7 +495,6 @@ int main(int argc, char** argv) {
     }
     std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
 
-    double sf = cardinality / 6001215.0;
     uint64_t cache_line_size = 128; // bytes
     uint64_t num_loads =  1478493 + 38854 + 2920374 + 1478870 + 6;
     uint64_t num_stores = 19;

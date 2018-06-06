@@ -141,7 +141,7 @@ struct lineitem {
 	Column<int64_t> l_tax; // 8, DECIMAL(15,2)
 	Column<int> l_shipdate; // 11
 public:
-	lineitem(size_t init_cap)
+	lineitem(size_t init_cap = 1024)
 	 : l_returnflag(init_cap), l_linestatus(init_cap), l_quantity(init_cap), l_extendedprice(init_cap), l_discount(init_cap), l_tax(init_cap), l_shipdate(init_cap) {
 	}
 

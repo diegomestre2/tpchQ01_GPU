@@ -10,13 +10,13 @@
 using namespace cooperative_groups;
 using u64_t = unsigned long long int;
 
-using SHIPDATE_TYPE = int;
-using DISCOUNT_TYPE = int64_t;
-using EXTENDEDPRICE_TYPE = int64_t;
-using TAX_TYPE = int64_t;
-using QUANTITY_TYPE = int64_t;
-using RETURNFLAG_TYPE = char;
-using LINESTATUS_TYPE = char;
+using ship_date_t = int;
+using discount_t = int64_t;
+using extended_price_t = int64_t;
+using tax_t = int64_t;
+using quantity_t = int64_t;
+using return_flag_t = char;
+using line_status_t = char;
 
 #define SHIPDATE_MIN 727563
 
@@ -132,8 +132,8 @@ namespace cuda{
     }
 
     __global__
-    void naive_tpchQ01(SHIPDATE_TYPE *shipdate, DISCOUNT_TYPE *discount, EXTENDEDPRICE_TYPE *extendedprice, TAX_TYPE *tax, 
-        RETURNFLAG_TYPE *returnflag, LINESTATUS_TYPE *linestatus, QUANTITY_TYPE *quantity, AggrHashTable *aggregations, size_t cardinality){
+    void naive_tpchQ01(ship_date_t *shipdate, discount_t *discount, extended_price_t *extendedprice, tax_t *tax,
+        return_flag_t *returnflag, line_status_t *linestatus, quantity_t *quantity, AggrHashTable *aggregations, size_t cardinality){
 
         int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i < cardinality && shipdate[i] <= 729999){//todate_(2, 9, 1998)) {
@@ -183,13 +183,13 @@ namespace cuda{
 
     __global__
     void global_ht_tpchQ01(
-        SHIPDATE_TYPE *shipdate,
-        DISCOUNT_TYPE *discount,
-        EXTENDEDPRICE_TYPE *extendedprice,
-        TAX_TYPE *tax,
-        RETURNFLAG_TYPE *returnflag,
-        LINESTATUS_TYPE *linestatus,
-        QUANTITY_TYPE *quantity,
+        ship_date_t *shipdate,
+        discount_t *discount,
+        extended_price_t *extendedprice,
+        tax_t *tax,
+        return_flag_t *returnflag,
+        line_status_t *linestatus,
+        quantity_t *quantity,
         AggrHashTable *aggregations,
         u64_t cardinality) {
 
@@ -217,13 +217,13 @@ namespace cuda{
 
     __global__
     void thread_local_tpchQ01(
-        SHIPDATE_TYPE *shipdate,
-        DISCOUNT_TYPE *discount,
-        EXTENDEDPRICE_TYPE *extendedprice,
-        TAX_TYPE *tax,
-        RETURNFLAG_TYPE *returnflag,
-        LINESTATUS_TYPE *linestatus,
-        QUANTITY_TYPE *quantity,
+        ship_date_t *shipdate,
+        discount_t *discount,
+        extended_price_t *extendedprice,
+        tax_t *tax,
+        return_flag_t *returnflag,
+        line_status_t *linestatus,
+        quantity_t *quantity,
         AggrHashTable *aggregations,
         u64_t cardinality) {
 
@@ -271,13 +271,13 @@ namespace cuda{
 
     __global__
     void thread_local_coalesced_tpchQ01(
-        SHIPDATE_TYPE *shipdate,
-        DISCOUNT_TYPE *discount,
-        EXTENDEDPRICE_TYPE *extendedprice,
-        TAX_TYPE *tax,
-        RETURNFLAG_TYPE *returnflag,
-        LINESTATUS_TYPE *linestatus,
-        QUANTITY_TYPE *quantity,
+        ship_date_t *shipdate,
+        discount_t *discount,
+        extended_price_t *extendedprice,
+        tax_t *tax,
+        return_flag_t *returnflag,
+        line_status_t *linestatus,
+        quantity_t *quantity,
         AggrHashTable *aggregations,
         u64_t cardinality) {
 
@@ -360,3 +360,5 @@ namespace cuda{
     78, 79 -> 2
     82, 70 -> 3
     */
+
+

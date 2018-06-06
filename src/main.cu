@@ -3,12 +3,26 @@
 #include <vector>
 #include <iomanip>
 
+using record_count_t = uint32_t;
+
+using bit_container_t             = cuda::native_word_t;
+static_assert(std::is_same<bit_container_t,uint32_t>{}, "Expecting the bit container to hold 32 bits");
+using compressed_date_t           = uint16_t;
+using compressed_discount_t       = uint8_t;
+using compressed_tax_t            = uint8_t;
+using compressed_extended_price_t = uint32_t;
+
+// Most of these happen to be the same, but that is, in a sense, arbitrary;
+// they could just as well have had different types.
+using sum_quantity_t              = uint64_t;
+using sum_base_price_t            = uint64_t;
+using sum_discounted_price_t      = uint64_t;
+using sum_charge_t                = uint64_t;
+using sum_discount_t              = uint64_t;
+using record_count_t              = uint32_t;
+
 #include "kernel.hpp"
 #include "../expl_comp_strat/tpch_kit.hpp"
-
-size_t magic_hash(char rf, char ls) {
-    return (((rf - 'A')) - (ls - 'F'));
-}
 
 #define GIGA (1024 * 1024 * 1024)
 #define MEGA (1024 * 1024)
@@ -22,13 +36,13 @@ inline bool file_exists (const std::string& name) {
 }
 
 #define INITIALIZE_MEMORY(ptrfunc) { \
-    auto _shipdate      = ptrfunc< SHIPDATE_TYPE[]       >(cardinality); \
-    auto _discount      = ptrfunc< DISCOUNT_TYPE[]       >(cardinality); \
-    auto _extendedprice = ptrfunc< EXTENDEDPRICE_TYPE[]  >(cardinality); \
-    auto _tax           = ptrfunc< TAX_TYPE[]            >(cardinality); \
-    auto _quantity      = ptrfunc< QUANTITY_TYPE[]       >(cardinality); \
-    auto _returnflag    = ptrfunc< RETURNFLAG_TYPE[]     >(cardinality); \
-    auto _linestatus    = ptrfunc< LINESTATUS_TYPE[]     >(cardinality); \
+    auto _shipdate      = ptrfunc< ship_date_t[]      >(cardinality); \
+    auto _discount      = ptrfunc< discount_t[]       >(cardinality); \
+    auto _extendedprice = ptrfunc< extended_price_t[] >(cardinality); \
+    auto _tax           = ptrfunc< tax_t[]            >(cardinality); \
+    auto _quantity      = ptrfunc< quantity_t[]       >(cardinality); \
+    auto _returnflag    = ptrfunc< return_flag_t[]    >(cardinality); \
+    auto _linestatus    = ptrfunc< line_status_t[]    >(cardinality); \
     shipdate = _shipdate.get(); \
     discount = _discount.get(); \
     extendedprice = _extendedprice.get(); \
@@ -43,6 +57,20 @@ inline bool file_exists (const std::string& name) {
     _quantity.release(); \
     _returnflag.release(); \
     _linestatus.release(); \
+}
+
+// Note: This will force casts to int. It's not a problem
+// the way our code is written, but otherwise it needs to be generalized
+constexpr inline int div_rounding_up(const int& dividend, const int& divisor)
+{
+    // This is not the fastest implementation, but it's safe, in that there's never overflow
+#if __cplusplus >= 201402L
+    std::div_t div_result = std::div(dividend, divisor);
+    return div_result.quot + !(!div_result.rem);
+#else
+    // Hopefully the compiler will optimize the two calls away.
+    return std::div(dividend, divisor).quot + !(!std::div(dividend, divisor).rem);
+#endif
 }
 
 int main(int argc, char** argv) {
@@ -69,17 +97,15 @@ int main(int argc, char** argv) {
         }
     }
 
-    auto size_per_tuple = sizeof(SHIPDATE_TYPE) + sizeof(DISCOUNT_TYPE) + sizeof(EXTENDEDPRICE_TYPE) + sizeof(TAX_TYPE) + sizeof(QUANTITY_TYPE) + sizeof(RETURNFLAG_TYPE) + sizeof(LINESTATUS_TYPE);
-
     auto start_preprocess = timer::now();
 
-    SHIPDATE_TYPE* shipdate;
-    DISCOUNT_TYPE* discount;
-    EXTENDEDPRICE_TYPE* extendedprice;
-    TAX_TYPE* tax;
-    QUANTITY_TYPE* quantity;
-    RETURNFLAG_TYPE* returnflag;
-    LINESTATUS_TYPE* linestatus;
+    ship_date_t* shipdate;
+    discount_t* discount;
+    extended_price_t* extendedprice;
+    tax_t* tax;
+    quantity_t* quantity;
+    return_flag_t* returnflag;
+    line_status_t* linestatus;
     if (USE_PINNED_MEMORY) {
         INITIALIZE_MEMORY(cuda::memory::host::make_unique);
     } else {
@@ -107,134 +133,231 @@ int main(int argc, char** argv) {
 
     assert(cardinality > 0 && "Prevent BS exception");
     const size_t data_length = cardinality;
-    const int nStreams = static_cast<int>((data_length + TUPLES_PER_STREAM - 1) / TUPLES_PER_STREAM);
-    clear_tables();
+
+    // Note:
+    // We are not timing the host-side allocations here. In a real DBMS, these will likely only be
+    // a few sub-allocations, which would take very little time (dozens of clock cycles overall) -
+    // no system calls.
+
+    struct {
+        std::unique_ptr<sum_quantity_t[]        > sum_quantity;
+        std::unique_ptr<sum_base_price_t[]      > sum_base_price;
+        std::unique_ptr<sum_discounted_price_t[]> sum_discounted_price;
+        std::unique_ptr<sum_charge_t[]          > sum_charge;
+        std::unique_ptr<sum_discount_t[]        > sum_discount;
+        std::unique_ptr<record_count_t[]        > record_count;
+        // Why aren't we computing these?
+        // struct {
+        //     std::unique_ptr<avg_quantity_t[]        > avg_quantity;
+        //     std::unique_ptr<avg_extended_price_t[]  > avg_extended_price;
+        //     std::unique_ptr<avg_discount_t[]        > avg_discount;
+        // } derived;
+    } aggregates_on_host = {
+        std::make_unique< sum_quantity_t[]         >(num_potential_groups),
+        std::make_unique< sum_base_price_t[]       >(num_potential_groups),
+        std::make_unique< sum_discounted_price_t[] >(num_potential_groups),
+        std::make_unique< sum_charge_t []          >(num_potential_groups),
+        std::make_unique< sum_discount_t[]         >(num_potential_groups),
+        std::make_unique< record_count_t[]         >(num_potential_groups)
+        // ,
+        // {
+        //      std::make_unique< avg_quantity_t[]         >(num_potential_groups),
+        //      std::make_unique< avg_extended_price_t[]   >(num_potential_groups),
+        //      std::make_unique< avg_discount_t[]         >(num_potential_groups),
+        // }
+    };
+    // Note:
+
 
     /* Allocate memory on device */
-    auto current_device = cuda::device::current::get();
 
-    auto d_shipdate      = cuda::memory::device::make_unique< SHIPDATE_TYPE[]      >(current_device, data_length);
-    auto d_discount      = cuda::memory::device::make_unique< DISCOUNT_TYPE[]      >(current_device, data_length);
-    auto d_extendedprice = cuda::memory::device::make_unique< EXTENDEDPRICE_TYPE[] >(current_device, data_length);
-    auto d_tax           = cuda::memory::device::make_unique< TAX_TYPE[]           >(current_device, data_length);
-    auto d_quantity      = cuda::memory::device::make_unique< QUANTITY_TYPE[]      >(current_device, data_length);
-    auto d_returnflag    = cuda::memory::device::make_unique< RETURNFLAG_TYPE[]    >(current_device, data_length);
-    auto d_linestatus    = cuda::memory::device::make_unique< LINESTATUS_TYPE[]    >(current_device, data_length);
-    auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]      >(current_device, MAX_GROUPS);
+    // Note:
+    // We are not timing the allocations here. In a real DBMS, actual CUDA allocations would
+    // happen with the DBMS is brought up, and when a query is processed, it will only be
+    // a few sub-allocations, which would take very little time (dozens of clock cycles overall) -
+    // no CUDA API nor system calls. We _will_, however, time the initialization of the buffers.
 
-    cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
+    auto cuda_device = cuda::device::current::get();
 
-    /* Transfer data to device */
-    cudaStream_t streams[nStreams];
-    for (int i = 0; i < nStreams; ++i) {
-        cudaStreamCreate(&streams[i]);
+    struct {
+        cuda::memory::device::unique_ptr< sum_quantity_t[]         > sum_quantity;
+        cuda::memory::device::unique_ptr< sum_base_price_t[]       > sum_base_price;
+        cuda::memory::device::unique_ptr< sum_discounted_price_t[] > sum_discounted_price;
+        cuda::memory::device::unique_ptr< sum_charge_t[]           > sum_charge;
+        cuda::memory::device::unique_ptr< sum_discount_t[]         > sum_discount;
+        cuda::memory::device::unique_ptr< record_count_t[]         > record_count;
+    } aggregates_on_device = {
+        cuda::memory::device::make_unique< sum_quantity_t[]         >(cuda_device, num_potential_groups),
+        cuda::memory::device::make_unique< sum_base_price_t[]       >(cuda_device, num_potential_groups),
+        cuda::memory::device::make_unique< sum_discounted_price_t[] >(cuda_device, num_potential_groups),
+        cuda::memory::device::make_unique< sum_charge_t []          >(cuda_device, num_potential_groups),
+        cuda::memory::device::make_unique< sum_discount_t[]         >(cuda_device, num_potential_groups),
+        cuda::memory::device::make_unique< record_count_t[]         >(cuda_device, num_potential_groups)
+    };
+
+    struct stream_input_buffer_set {
+        cuda::memory::device::unique_ptr< ship_date_t[]      > shipdate;
+        cuda::memory::device::unique_ptr< discount_t[]       > discount;
+        cuda::memory::device::unique_ptr< extended_price_t[] > extendedprice;
+        cuda::memory::device::unique_ptr< tax_t[]            > tax;
+        cuda::memory::device::unique_ptr< quantity_t[]       > quantity;
+        cuda::memory::device::unique_ptr< bit_container_t[]  > returnflag;
+        cuda::memory::device::unique_ptr< bit_container_t[]  > linestatus;
+    };
+
+    std::vector<stream_input_buffer_set> stream_input_buffer_sets;
+    std::vector<cuda::stream_t<>> streams;
+        // We'll be scheduling (most of) our work in a round-robin fashion on all of
+        // the streams, to prevent the GPU from idling.
+
+
+    for (int i = 0; i < num_gpu_streams; ++i) {
+        auto input_buffers = stream_input_buffer_set{
+            cuda::memory::device::make_unique< ship_date_t[]      >(cuda_device, records_per_scheduled_kernel),
+            cuda::memory::device::make_unique< discount_t[]       >(cuda_device, records_per_scheduled_kernel),
+            cuda::memory::device::make_unique< extended_price_t[] >(cuda_device, records_per_scheduled_kernel),
+            cuda::memory::device::make_unique< tax_t[]            >(cuda_device, records_per_scheduled_kernel),
+            cuda::memory::device::make_unique< quantity_t[]       >(cuda_device, records_per_scheduled_kernel),
+            cuda::memory::device::make_unique< bit_container_t[]  >(cuda_device, div_rounding_up(records_per_scheduled_kernel, return_flag_values_per_container)),
+            cuda::memory::device::make_unique< bit_container_t[]  >(cuda_device, div_rounding_up(records_per_scheduled_kernel, line_status_values_per_container))
+        };
+        stream_input_buffer_sets.emplace_back(std::move(input_buffers));
+        auto stream = cuda_device.create_stream(cuda::stream::async);
+        streams.emplace_back(stream);
     }
 
     double copy_time = 0;
     double computation_time = 0;
-
-    cuda_check_error();
     auto start = timer::now();
-    for (int i = 0; i < nStreams; ++i) {
 
-        size_t offset = i * TUPLES_PER_STREAM;
-        size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
+    // Initialize the aggregates; perhaps we should do this in a single kernel? ... probably not worth it
+    streams[0].enqueue.memset(aggregates_on_device.sum_quantity.get(),         0, num_potential_groups * sizeof(sum_quantity_t));
+    streams[0].enqueue.memset(aggregates_on_device.sum_base_price.get(),       0, num_potential_groups * sizeof(sum_base_price_t));
+    streams[0].enqueue.memset(aggregates_on_device.sum_discounted_price.get(), 0, num_potential_groups * sizeof(sum_discounted_price_t));
+    streams[0].enqueue.memset(aggregates_on_device.sum_charge.get(),           0, num_potential_groups * sizeof(sum_charge_t));
+    streams[0].enqueue.memset(aggregates_on_device.sum_discount.get(),         0, num_potential_groups * sizeof(sum_discount_t));
+    streams[0].enqueue.memset(aggregates_on_device.record_count.get(),         0, num_potential_groups * sizeof(record_count_t));
 
-        //std::cout << "Stream " << i << ": " << "[" << offset << " - " << offset + size << "]" << std::endl;
-
-        auto start_copy = timer::now();
-        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, size * sizeof(SHIPDATE_TYPE),     streams[i]);
-        cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, size * sizeof(DISCOUNT_TYPE), streams[i]);
-        cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, size * sizeof(EXTENDEDPRICE_TYPE), streams[i]);
-        cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, size * sizeof(TAX_TYPE), streams[i]);
-        cuda::memory::async::copy(d_quantity.get()      + offset, quantity      + offset, size * sizeof(QUANTITY_TYPE), streams[i]);
-        cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, size * sizeof(RETURNFLAG_TYPE),    streams[i]);
-        cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, size * sizeof(LINESTATUS_TYPE),    streams[i]);
-        auto end_copy = timer::now();
-        copy_time += std::chrono::duration<double>(end_copy - start_copy).count();
-#if 0
+    cuda::event_t aggregates_initialized_event = cuda_device.create_event(
+            cuda::event::sync_by_blocking, cuda::event::dont_record_timings, cuda::event::not_interprocess);
+    aggregates_initialized_event.record(streams[0].id());
+    for (int i = 1; i < num_gpu_streams; ++i) {
+        streams[i].enqueue.event(aggregates_initialized_event);
+        // The other streams also require the aggregates to be initialized before doing any work
     }
 
-    for (int i = 0; i < nStreams; ++i) {
-        size_t offset = i * TUPLES_PER_STREAM;
-        assert(offset <= data_length);
-        size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
-#endif
-        size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
-        size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
-        auto start_kernel = timer::now();
+    for (size_t offset_in_table = 0; offset_in_table < cardinality; offset_in_table += records_per_scheduled_kernel) {
+
+        auto num_records_for_this_launch = std::min<record_count_t>(records_per_scheduled_kernel, cardinality - offset_in_table);
+
+        // auto start_copy = timer::now();  // This can't work, since copying is asynchronous.
+        auto stream_index = offset_in_table % num_gpu_streams; // so this loop willl act on streams in a round-robin fashion
+        auto& stream = streams[stream_index];
+        auto& stream_input_buffers = stream_input_buffer_sets[stream_index];
+        stream.enqueue.copy(stream_input_buffers.shipdate.get()     , shipdate      + offset_in_table, num_records_for_this_launch * sizeof(ship_date_t));
+        stream.enqueue.copy(stream_input_buffers.discount.get()     , discount      + offset_in_table, num_records_for_this_launch * sizeof(discount_t));
+        stream.enqueue.copy(stream_input_buffers.extendedprice.get(), extendedprice + offset_in_table, num_records_for_this_launch * sizeof(extended_price_t));
+        stream.enqueue.copy(stream_input_buffers.tax.get()          , tax           + offset_in_table, num_records_for_this_launch * sizeof(tax_t));
+        stream.enqueue.copy(stream_input_buffers.quantity.get()     , quantity      + offset_in_table, num_records_for_this_launch * sizeof(quantity_t));
+        stream.enqueue.copy(stream_input_buffers.returnflag.get()   , returnflag    + offset_in_table, num_records_for_this_launch * sizeof(return_flag_t));
+        stream.enqueue.copy(stream_input_buffers.linestatus.get()   , linestatus    + offset_in_table, num_records_for_this_launch * sizeof(line_status_t));
+        // auto end_copy = timer::now();
+        // copy_time += std::chrono::duration<double>(end_copy - start_copy).count();
+
+        auto num_blocks = div_rounding_up(num_records_for_this_launch, THREADS_PER_BLOCK);
+        auto launch_config = cuda::make_launch_config(num_blocks, THREADS_PER_BLOCK);
+
+        // auto start_kernel = timer::now(); // This won't work either, kernels are asynchronous
         //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << "," << SHARED_MEMORY << ">>>" << std::endl;
-        cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, streams[i]>>>(
-            d_shipdate.get()      + offset,
-            d_discount.get()      + offset,
-            d_extendedprice.get() + offset,
-            d_tax.get()           + offset,
-            d_returnflag.get()    + offset,
-            d_linestatus.get()    + offset,
-            d_quantity.get()      + offset,
-            d_aggregations.get(),
-            (u64_t) size);
-        auto end_kernel = timer::now();
-        computation_time += std::chrono::duration<double>(end_kernel - start_kernel).count();
+
+/*
+        stream.enqueue.kernel_launch(
+            cuda::thread_local_tpchQ01,
+            launch_config,
+            aggregates_on_device.sum_quantity.get(),
+            aggregates_on_device.sum_base_price.get(),
+            aggregates_on_device.sum_discounted_price.get(),
+            aggregates_on_device.sum_charge.get(),
+            aggregates_on_device.sum_discount.get(),
+            aggregates_on_device.record_count.get(),
+            stream_input_buffers.shipdate.get(),
+            stream_input_buffers.discount.get(),
+            stream_input_buffers.extendedprice.get(),
+            stream_input_buffers.tax.get(),
+            stream_input_buffers.returnflag.get(),
+            stream_input_buffers.linestatus.get(),
+            stream_input_buffers.quantity.get(),
+            num_records_for_this_launch);
+*/
+
+        // auto end_kernel = timer::now();
+        // computation_time += std::chrono::duration<double>(end_kernel - start_kernel).count();
     }
 
-    cuda_check_error();
-    for (int i = 0; i < nStreams; ++i) {
-        //size_t offset = i * TUPLES_PER_STREAM;
+//    for (auto& stream : streams) { stream.synchronize(); }
 
-        cudaStreamSynchronize(streams[i]);
-        cudaStreamDestroy(streams[i]);
-    }
-    cudaDeviceSynchronize();
+    streams[0].enqueue.copy(aggregates_on_host.sum_quantity.get(),         aggregates_on_device.sum_quantity.get(),         num_potential_groups * sizeof(sum_quantity_t));
+    streams[0].enqueue.copy(aggregates_on_host.sum_base_price.get(),       aggregates_on_device.sum_base_price.get(),       num_potential_groups * sizeof(sum_base_price_t));
+    streams[0].enqueue.copy(aggregates_on_host.sum_discounted_price.get(), aggregates_on_device.sum_discounted_price.get(), num_potential_groups * sizeof(sum_discounted_price_t));
+    streams[0].enqueue.copy(aggregates_on_host.sum_charge.get(),           aggregates_on_device.sum_charge.get(),           num_potential_groups * sizeof(sum_charge_t));
+    streams[0].enqueue.copy(aggregates_on_host.sum_discount.get(),         aggregates_on_device.sum_discount.get(),         num_potential_groups * sizeof(sum_discount_t));
+    streams[0].enqueue.copy(aggregates_on_host.record_count.get(),         aggregates_on_device.record_count.get(),         num_potential_groups * sizeof(record_count_t));
+
+    // What about the remainder of the computation? :
+    //
+    // 1. Filter out potential groups with no elements (count 0)
+    // 2. Normalize values (w.r.t. decimal scaling)
+    // 3. Calculate averages using sums
+
     auto end = timer::now();
-
-    cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);
 
     std::cout << "\n"
                  "+--------------------------------------------------- Results ---------------------------------------------------+\n";
     std::cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";
     std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
     auto print_dec = [] (auto s, auto x) { printf("%s%16ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
-    for (size_t group=0; group<MAX_GROUPS; group++) {
-        if (aggrs0[group].count > 0) {
-            size_t i = group;
+    for (size_t group=0; group<num_potential_groups; group++) {
+        if (aggregates_on_host.record_count[group] > 0) {
             char rf = '-', ls = '-';
-            if (group == magic_hash('A', 'F')) {
-                rf = 'A';
-                ls = 'F';
+            auto return_flag_group_id = group >> 1;
+            auto line_status_group_id = group & 0x1;
+            switch(return_flag_group_id) {
+            case 0:  rf = 'A';
+            case 1:  rf = 'F';
+            case 2:  rf = 'N';
+            default: rf = '-';
+            }
+            ls = (line_status_group_id == 0 ? 'F' : 'O');
+            if (rf == 'A' and ls == 'F') {
                 if (cardinality == 6001215) {
-                    assert(aggrs0[i].sum_quantity == 3773410700);
-                    assert(aggrs0[i].count == 1478493);
+                    assert(aggregates_on_host.sum_quantity[i] == 3773410700);
+                    assert(aggregates_on_host.record_count[i] == 1478493);
                 }
-            } else if (group == magic_hash('N', 'F')) {
-                rf = 'N';
-                ls = 'F';
+            } else if (rf == 'N' and ls == 'F') {
                 if (cardinality == 6001215) {
-                    assert(aggrs0[i].sum_quantity == 99141700);
-                    assert(aggrs0[i].count == 38854);
+                    assert(aggregates_on_host.sum_quantity[i] == 99141700);
+                    assert(aggregates_on_host.record_count[i] == 38854);
                 }
-            } else if (group == magic_hash('N', 'O')) {
+            } else if (rf == 'N' and ls == 'O') {
                 rf = 'N';
                 ls = 'O';
                 if (cardinality == 6001215) {
-                    assert(aggrs0[i].sum_quantity == 7447604000);
-                    assert(aggrs0[i].count == 2920374);
+                    assert(aggregates_on_host.sum_quantity[i] == 7447604000);
+                    assert(aggregates_on_host.record_count[i] == 2920374);
                 }
-            } else if (group == magic_hash('R', 'F')) {
-                rf = 'R';
-                ls = 'F';
+            } else if (rf == 'R' and ls == 'F') {
                 if (cardinality == 6001215) {
-                    assert(aggrs0[i].sum_quantity == 3771975300);
-                    assert(aggrs0[i].count == 1478870);
+                    assert(aggregates_on_host.sum_quantity[i]== 3771975300);
+                    assert(aggregates_on_host.record_count[i]== 1478870);
                 }
             }
 
             printf("| # %c | %c ", rf, ls);
-            print_dec(" | ",  aggrs0[i].sum_quantity);
-            print_dec(" | ",  aggrs0[i].sum_base_price);
-            print_dec(" | ",  aggrs0[i].sum_disc_price);
-            print_dec(" | ",  aggrs0[i].sum_charge);
-            printf(" | %10llu |\n", aggrs0[i].count);
+            print_dec(" | ",  aggregates_on_host.sum_quantity.get()[group]);
+            print_dec(" | ",  aggregates_on_host.sum_base_price.get()[group]);
+            print_dec(" | ",  aggregates_on_host.sum_discounted_price.get()[group]);
+            print_dec(" | ",  aggregates_on_host.sum_charge.get()[group]);
+            printf(" | %10u |\n", aggregates_on_host.record_count.get()[group]);
         }
     }
     std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
@@ -245,12 +368,13 @@ int main(int argc, char** argv) {
     uint64_t num_stores = 19;
     std::chrono::duration<double> duration(end - start);
     uint64_t tuples_per_second               = static_cast<uint64_t>(data_length / duration.count());
+    auto size_per_tuple = sizeof(ship_date_t) + sizeof(discount_t) + sizeof(extended_price_t) + sizeof(tax_t) + sizeof(quantity_t) + sizeof(return_flag_t) + sizeof(line_status_t);
     double effective_memory_throughput       = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
     double estimated_memory_throughput       = static_cast<double>((tuples_per_second * cache_line_size) / GIGA);
     double effective_memory_throughput_read  = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
     double effective_memory_throughput_write = static_cast<double>(tuples_per_second / (size_per_tuple * GIGA));
     double theretical_memory_bandwidth       = static_cast<double>((5505 * 10e06 * (352 / 8) * 2) / 10e09);
-    double efective_memory_bandwidth         = static_cast<double>(((data_length * sizeof(SHIPDATE_TYPE)) + (num_loads * size_per_tuple) + (num_loads * num_stores))  / (duration.count() * 10e09));
+    double efective_memory_bandwidth         = static_cast<double>(((data_length * sizeof(ship_date_t)) + (num_loads * size_per_tuple) + (num_loads * num_stores))  / (duration.count() * 10e09));
     double csv_time = std::chrono::duration<double>(end_csv - start_csv).count();
     double pre_process_time = std::chrono::duration<double>(end_preprocess - start_preprocess).count();
     

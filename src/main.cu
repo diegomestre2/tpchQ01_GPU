@@ -48,7 +48,7 @@ inline bool file_exists (const std::string& name) {
 
 struct Stream {
     cudaStream_t stream;
-    size_t size;
+    size_t id;
 #define EXPAND(A) \
     A(shipdate, SHIPDATE_TYPE) \
     A(discount, DISCOUNT_TYPE) \
@@ -62,8 +62,7 @@ struct Stream {
     EXPAND(DECLARE)
 #undef DECLARE
 
-    Stream(size_t siz) {
-        size = siz;
+    Stream(size_t size, size_t id) : id(id) {
         cudaStreamCreate(&stream);
 #define ALLOC(name, type) cudaMalloc((void**)&name, size * sizeof(type));
     EXPAND(ALLOC)
@@ -75,10 +74,10 @@ struct Stream {
         cudaStreamSynchronize(stream);
     }
 
-    void Run(AggrHashTable* aggrs) {
+    void Run(AggrHashTable* aggrs, size_t size) {
         size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
         size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
-         cuda::global_ht_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, stream>>>(
+         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, stream>>>(
             shipdate, discount, eprice, tax, rf, ls, quantity, aggrs, (u64_t) size);
     }
 
@@ -101,7 +100,7 @@ public:
     StreamManager(size_t size, size_t max_streams) {
         streams.reserve(max_streams);
         for (size_t i=0; i<max_streams; i++) {
-            streams.emplace_back(size);    
+            streams.emplace_back(size, i);    
         }
         pos = 0;
     }
@@ -196,7 +195,6 @@ int main(int argc, char** argv) {
 
         while (offset < data_length) {
             size_t size = std::min((size_t) MAX_TUPLES_PER_STREAM, (size_t) (data_length - offset));
-
             if (id < 3 && size > MIN_TUPLES_PER_STREAM) {
                 size = std::min((size_t) MIN_TUPLES_PER_STREAM, (size_t) (data_length - offset));
             }
@@ -211,24 +209,12 @@ int main(int argc, char** argv) {
             cuda::memory::async::copy(stream.rf, returnflag          + offset, size * sizeof(RETURNFLAG_TYPE),    stream.stream);
             cuda::memory::async::copy(stream.ls, linestatus          + offset, size * sizeof(LINESTATUS_TYPE),    stream.stream);
 
-            stream.Run(d_aggregations.get());
+            stream.Run(d_aggregations.get(), size);
 
             offset += size;
         }
     }
-#if 0
-+--------------------------------- Results -------------------------------------+
-| # A|F | 3775189380.0 | 5660869596562.20 | 537782526840245.51 | 22063606742391.34|148050313
-| # N|O | 7436420042.0 | 11150901563909.83 | 1059336243097923.30 | 43356696188178.99|291624201
-| # N|F | 98554592.0 | 147773414130.5 | 14038716137845.53 | 559629940888.35|3864648
-| # R|F | 3775791821.0 | 5661703040583.64 | 537860853669941.8 | 21965858049188.54|148069804
 
-# A|F|3775127758.0|5660776097194.45|537773639818393.74|55928474295159270.26|148047881
-# N|F|98553062.0|147771098385.98|14038496596503.48|1459997930327758.29|3864590
-# N|O|7436302976.0|11150725681373.59|1059319530823485.23|-74298118255258961.-49|291619617
-# R|F|3775724970.0|5661603032745.34|537851356391540.97|55936622526669161.61|148067261
-
-#endif
     cuda_check_error();
     cudaDeviceSynchronize();
     cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);

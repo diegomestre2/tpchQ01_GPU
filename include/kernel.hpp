@@ -18,11 +18,11 @@ using QUANTITY_TYPE = int64_t;
 using RETURNFLAG_TYPE = char;
 using LINESTATUS_TYPE = char;
 
-using SHIPDATE_TYPE_SMALL = int;
-using DISCOUNT_TYPE_SMALL = int64_t;
-using EXTENDEDPRICE_TYPE_SMALL = int64_t;
-using TAX_TYPE_SMALL = int64_t;
-using QUANTITY_TYPE_SMALL = int64_t;
+using SHIPDATE_TYPE_SMALL = uint16_t;
+using DISCOUNT_TYPE_SMALL = uint8_t;
+using EXTENDEDPRICE_TYPE_SMALL = uint32_t;
+using TAX_TYPE_SMALL = uint8_t;
+using QUANTITY_TYPE_SMALL = uint8_t;
 using RETURNFLAG_TYPE_SMALL = uint8_t;
 using LINESTATUS_TYPE_SMALL = uint8_t;
 

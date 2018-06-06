@@ -167,6 +167,15 @@ public:
         fclose(pFile); \
     }
 
+void print_help() {
+    fprintf(stderr, "Unrecognized command line option.\n");
+    fprintf(stderr, "Usage: tpch_01 [args]\n");
+    fprintf(stderr, "   --sf=[sf] (number, e.g. 0.01 - 100)\n");
+    fprintf(stderr, "   --use-global-ht\n");
+    fprintf(stderr, "   --no-pinned-memory\n");
+    fprintf(stderr, "   --use-small-datatypes\n");
+}
+
 int main(int argc, char** argv) {
     std::cout << "TPC-H Query 1" << '\n';
     get_device_properties();
@@ -187,7 +196,7 @@ int main(int argc, char** argv) {
 
     double sf = 1;
     std::string sf_argument = "--sf=";
-    for(int i = 0; i < argc; i++) {
+    for(int i = 1; i < argc; i++) {
         auto arg = std::string(argv[i]);
         if (arg == "--no-pinned-memory") {
             USE_PINNED_MEMORY = false;
@@ -197,6 +206,9 @@ int main(int argc, char** argv) {
             USE_SMALL_DATATYPES = true;
         } else if (arg.substr(0, sf_argument.size()) == sf_argument) {
             sf = std::stod(arg.substr(sf_argument.size()));
+        } else {
+            print_help();
+            exit(1);
         }
     }
     lineitem li((size_t)(7000000 * sf));
@@ -336,16 +348,10 @@ int main(int argc, char** argv) {
         StreamManager streams(MAX_TUPLES_PER_STREAM, 8);
         cuda_check_error();
         size_t offset = 0;
-        size_t id = 0;
 
         while (offset < data_length) {
             size_t size = std::min((size_t) MAX_TUPLES_PER_STREAM, (size_t) (data_length - offset));
 
-#if 0
-            if (id < 3 && size > MIN_TUPLES_PER_STREAM) {
-                size = std::min((size_t) MIN_TUPLES_PER_STREAM, (size_t) (data_length - offset));
-            }
-#endif
             auto& stream = streams.GetNewStream();
             auto& s = stream;
 
@@ -356,7 +362,7 @@ int main(int argc, char** argv) {
                 cuda::memory::async::copy(stream.tax, tax_small                + offset, size * sizeof(TAX_TYPE_SMALL), stream.stream);
                 cuda::memory::async::copy(stream.quantity, quantity_small      + offset, size * sizeof(QUANTITY_TYPE_SMALL), stream.stream);
                 cuda::memory::async::copy(stream.rf, returnflag_small          + offset / 4, size * sizeof(RETURNFLAG_TYPE_SMALL),    stream.stream);
-                cuda::memory::async::copy(stream.ls, linestatus_small          + offset / 8, size * sizeof(LINESTATUS_TYPE_SMALL),    stream.stream);    
+                cuda::memory::async::copy(stream.ls, linestatus_small          + offset / 8, size * sizeof(LINESTATUS_TYPE_SMALL),    stream.stream);
             } else {
                 cuda::memory::async::copy(stream.shipdate, shipdate      + offset, size * sizeof(SHIPDATE_TYPE),     stream.stream);
                 cuda::memory::async::copy(stream.discount, discount      + offset, size * sizeof(DISCOUNT_TYPE), stream.stream);
@@ -364,7 +370,7 @@ int main(int argc, char** argv) {
                 cuda::memory::async::copy(stream.tax, tax                + offset, size * sizeof(TAX_TYPE), stream.stream);
                 cuda::memory::async::copy(stream.quantity, quantity      + offset, size * sizeof(QUANTITY_TYPE), stream.stream);
                 cuda::memory::async::copy(stream.rf, returnflag          + offset, size * sizeof(RETURNFLAG_TYPE),    stream.stream);
-                cuda::memory::async::copy(stream.ls, linestatus          + offset, size * sizeof(LINESTATUS_TYPE),    stream.stream);    
+                cuda::memory::async::copy(stream.ls, linestatus          + offset, size * sizeof(LINESTATUS_TYPE),    stream.stream);
             }
             
 
@@ -374,13 +380,13 @@ int main(int argc, char** argv) {
             if (!USE_GLOBAL_HT) {
                 if (USE_SMALL_DATATYPES) {
                     cuda::thread_local_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                        s.shipdate,
-                        s.discount,
-                        s.eprice,
-                        s.tax,
+                        (SHIPDATE_TYPE_SMALL*) s.shipdate,
+                        (DISCOUNT_TYPE_SMALL*) s.discount,
+                        (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
+                        (TAX_TYPE_SMALL*) s.tax,
                         (RETURNFLAG_TYPE_SMALL*)s.rf,
                         (LINESTATUS_TYPE_SMALL*)s.ls,
-                        s.quantity,
+                        (QUANTITY_TYPE_SMALL*) s.quantity,
                         d_aggregations.get(),
                         (u64_t) size);
                 } else {
@@ -398,13 +404,13 @@ int main(int argc, char** argv) {
             } else {
                 if (USE_SMALL_DATATYPES) {
                     cuda::global_ht_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                        s.shipdate,
-                        s.discount,
-                        s.eprice,
-                        s.tax,
+                        (SHIPDATE_TYPE_SMALL*) s.shipdate,
+                        (DISCOUNT_TYPE_SMALL*) s.discount,
+                        (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
+                        (TAX_TYPE_SMALL*) s.tax,
                         (RETURNFLAG_TYPE_SMALL*)s.rf,
                         (LINESTATUS_TYPE_SMALL*)s.ls,
-                        s.quantity,
+                        (QUANTITY_TYPE_SMALL*) s.quantity,
                         d_aggregations.get(),
                         (u64_t) size);
                 } else {

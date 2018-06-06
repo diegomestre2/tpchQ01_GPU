@@ -5,6 +5,7 @@
 #define PRINT_RESULTS
 //#define PRINT_MINMAX
 using u64_t = unsigned long long int;
+using u32_t = unsigned long int;
 
 #include <sstream>
 #include <vector>

@@ -45,6 +45,73 @@ inline bool file_exists (const std::string& name) {
     _linestatus.release(); \
 }
 
+
+struct Stream {
+    cudaStream_t stream;
+    size_t id;
+#define EXPAND(A) \
+    A(shipdate, SHIPDATE_TYPE) \
+    A(discount, DISCOUNT_TYPE) \
+    A(eprice, EXTENDEDPRICE_TYPE) \
+    A(tax, TAX_TYPE) \
+    A(quantity, QUANTITY_TYPE) \
+    A(rf, RETURNFLAG_TYPE) \
+    A(ls, LINESTATUS_TYPE)
+
+#define DECLARE(name, type) type* name;
+    EXPAND(DECLARE)
+#undef DECLARE
+
+    Stream(size_t size, size_t id) : id(id) {
+        cudaStreamCreate(&stream);
+#define ALLOC(name, type) cudaMalloc((void**)&name, size * sizeof(type));
+    EXPAND(ALLOC)
+#undef ALLOC
+
+    }
+
+    void Sync() {
+        cudaStreamSynchronize(stream);
+    }
+
+    void Run(AggrHashTable* aggrs, size_t size) {
+        size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
+        size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
+         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, stream>>>(
+            shipdate, discount, eprice, tax, rf, ls, quantity, aggrs, (u64_t) size);
+    }
+
+    ~Stream() {
+        Sync();
+        cudaStreamDestroy(stream);
+#define DEALLOC(name, type) cudaFree((void**)name);
+    EXPAND(DEALLOC)
+#undef DEALLOC
+
+    }
+};
+
+struct StreamManager {
+private:
+    std::vector<Stream> streams;
+    size_t pos;
+
+public:
+    StreamManager(size_t size, size_t max_streams) {
+        streams.reserve(max_streams);
+        for (size_t i=0; i<max_streams; i++) {
+            streams.emplace_back(size, i);    
+        }
+        pos = 0;
+    }
+
+    Stream& GetNewStream() {
+        return streams[pos++ % streams.size()];
+    }
+};
+
+
+
 int main(int argc, char** argv) {
     if (!file_exists("lineitem.tbl")) {
         fprintf(stderr, "lineitem.tbl not found!\n");
@@ -107,89 +174,52 @@ int main(int argc, char** argv) {
 
     assert(cardinality > 0 && "Prevent BS exception");
     const size_t data_length = cardinality;
-    const int nStreams = static_cast<int>((data_length + TUPLES_PER_STREAM - 1) / TUPLES_PER_STREAM);
     clear_tables();
 
     /* Allocate memory on device */
     auto current_device = cuda::device::current::get();
-
-    auto d_shipdate      = cuda::memory::device::make_unique< SHIPDATE_TYPE[]      >(current_device, data_length);
-    auto d_discount      = cuda::memory::device::make_unique< DISCOUNT_TYPE[]      >(current_device, data_length);
-    auto d_extendedprice = cuda::memory::device::make_unique< EXTENDEDPRICE_TYPE[] >(current_device, data_length);
-    auto d_tax           = cuda::memory::device::make_unique< TAX_TYPE[]           >(current_device, data_length);
-    auto d_quantity      = cuda::memory::device::make_unique< QUANTITY_TYPE[]      >(current_device, data_length);
-    auto d_returnflag    = cuda::memory::device::make_unique< RETURNFLAG_TYPE[]    >(current_device, data_length);
-    auto d_linestatus    = cuda::memory::device::make_unique< LINESTATUS_TYPE[]    >(current_device, data_length);
     auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]      >(current_device, MAX_GROUPS);
 
     cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
 
-    /* Transfer data to device */
-    cudaStream_t streams[nStreams];
-    for (int i = 0; i < nStreams; ++i) {
-        cudaStreamCreate(&streams[i]);
-    }
-
     double copy_time = 0;
     double computation_time = 0;
 
-    cuda_check_error();
     auto start = timer::now();
-    for (int i = 0; i < nStreams; ++i) {
 
-        size_t offset = i * TUPLES_PER_STREAM;
-        size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
+    {
+        StreamManager streams(MAX_TUPLES_PER_STREAM, 8);
+        cuda_check_error();
+        size_t offset = 0;
+        size_t id = 0;
 
-        //std::cout << "Stream " << i << ": " << "[" << offset << " - " << offset + size << "]" << std::endl;
+        while (offset < data_length) {
+            size_t size = std::min((size_t) MAX_TUPLES_PER_STREAM, (size_t) (data_length - offset));
+            if (id < 3 && size > MIN_TUPLES_PER_STREAM) {
+                size = std::min((size_t) MIN_TUPLES_PER_STREAM, (size_t) (data_length - offset));
+            }
 
-        auto start_copy = timer::now();
-        cuda::memory::async::copy(d_shipdate.get()      + offset, shipdate      + offset, size * sizeof(SHIPDATE_TYPE),     streams[i]);
-        cuda::memory::async::copy(d_discount.get()      + offset, discount      + offset, size * sizeof(DISCOUNT_TYPE), streams[i]);
-        cuda::memory::async::copy(d_extendedprice.get() + offset, extendedprice + offset, size * sizeof(EXTENDEDPRICE_TYPE), streams[i]);
-        cuda::memory::async::copy(d_tax.get()           + offset, tax           + offset, size * sizeof(TAX_TYPE), streams[i]);
-        cuda::memory::async::copy(d_quantity.get()      + offset, quantity      + offset, size * sizeof(QUANTITY_TYPE), streams[i]);
-        cuda::memory::async::copy(d_returnflag.get()    + offset, returnflag    + offset, size * sizeof(RETURNFLAG_TYPE),    streams[i]);
-        cuda::memory::async::copy(d_linestatus.get()    + offset, linestatus    + offset, size * sizeof(LINESTATUS_TYPE),    streams[i]);
-        auto end_copy = timer::now();
-        copy_time += std::chrono::duration<double>(end_copy - start_copy).count();
-#if 0
-    }
+            auto& stream = streams.GetNewStream();
 
-    for (int i = 0; i < nStreams; ++i) {
-        size_t offset = i * TUPLES_PER_STREAM;
-        assert(offset <= data_length);
-        size_t size = std::min((size_t) TUPLES_PER_STREAM, (size_t) (data_length - offset));
-#endif
-        size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
-        size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
-        auto start_kernel = timer::now();
-        //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << "," << SHARED_MEMORY << ">>>" << std::endl;
-        cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, streams[i]>>>(
-            d_shipdate.get()      + offset,
-            d_discount.get()      + offset,
-            d_extendedprice.get() + offset,
-            d_tax.get()           + offset,
-            d_returnflag.get()    + offset,
-            d_linestatus.get()    + offset,
-            d_quantity.get()      + offset,
-            d_aggregations.get(),
-            (u64_t) size);
-        auto end_kernel = timer::now();
-        computation_time += std::chrono::duration<double>(end_kernel - start_kernel).count();
+            cuda::memory::async::copy(stream.shipdate, shipdate      + offset, size * sizeof(SHIPDATE_TYPE),     stream.stream);
+            cuda::memory::async::copy(stream.discount, discount      + offset, size * sizeof(DISCOUNT_TYPE), stream.stream);
+            cuda::memory::async::copy(stream.eprice, extendedprice   + offset, size * sizeof(EXTENDEDPRICE_TYPE), stream.stream);
+            cuda::memory::async::copy(stream.tax, tax                + offset, size * sizeof(TAX_TYPE), stream.stream);
+            cuda::memory::async::copy(stream.quantity, quantity      + offset, size * sizeof(QUANTITY_TYPE), stream.stream);
+            cuda::memory::async::copy(stream.rf, returnflag          + offset, size * sizeof(RETURNFLAG_TYPE),    stream.stream);
+            cuda::memory::async::copy(stream.ls, linestatus          + offset, size * sizeof(LINESTATUS_TYPE),    stream.stream);
+
+            stream.Run(d_aggregations.get(), size);
+
+            offset += size;
+        }
     }
 
     cuda_check_error();
-    for (int i = 0; i < nStreams; ++i) {
-        //size_t offset = i * TUPLES_PER_STREAM;
-
-        cudaStreamSynchronize(streams[i]);
-        cudaStreamDestroy(streams[i]);
-    }
     cudaDeviceSynchronize();
-    auto end = timer::now();
-
     cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);
 
+    auto end = timer::now();    
     std::cout << "\n"
                  "+--------------------------------------------------- Results ---------------------------------------------------+\n";
     std::cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";

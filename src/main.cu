@@ -361,8 +361,8 @@ int main(int argc, char** argv) {
                 cuda::memory::async::copy(stream.eprice, extendedprice_small   + offset, size * sizeof(EXTENDEDPRICE_TYPE_SMALL), stream.stream);
                 cuda::memory::async::copy(stream.tax, tax_small                + offset, size * sizeof(TAX_TYPE_SMALL), stream.stream);
                 cuda::memory::async::copy(stream.quantity, quantity_small      + offset, size * sizeof(QUANTITY_TYPE_SMALL), stream.stream);
-                cuda::memory::async::copy(stream.rf, returnflag_small          + offset / 4, size * sizeof(RETURNFLAG_TYPE_SMALL),    stream.stream);
-                cuda::memory::async::copy(stream.ls, linestatus_small          + offset / 8, size * sizeof(LINESTATUS_TYPE_SMALL),    stream.stream);
+                cuda::memory::async::copy(stream.rf, returnflag_small          + offset / 4, (size * sizeof(RETURNFLAG_TYPE_SMALL) + 3) / 4,    stream.stream);
+                cuda::memory::async::copy(stream.ls, linestatus_small          + offset / 8, (size * sizeof(LINESTATUS_TYPE_SMALL) + 7) / 8,    stream.stream);
             } else {
                 cuda::memory::async::copy(stream.shipdate, shipdate      + offset, size * sizeof(SHIPDATE_TYPE),     stream.stream);
                 cuda::memory::async::copy(stream.discount, discount      + offset, size * sizeof(DISCOUNT_TYPE), stream.stream);

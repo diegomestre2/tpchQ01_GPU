@@ -170,18 +170,6 @@ struct AggrHashTableLocal {
 	u64_t sum_charge;
 };
 
-#define kernel_prologue() \
-	auto _shipdate = li.l_shipdate.get(); \
-	auto _returnflag = li.l_returnflag.get(); \
-	auto _linestatus = li.l_linestatus.get(); \
-	auto _discount = li.l_discount.get(); \
-	auto _tax = li.l_tax.get(); \
-	auto _extendedprice = li.l_extendedprice.get(); \
-	auto _quantity = li.l_quantity.get(); \
-	cardinality = li.l_extendedprice.cardinality;
-
-#define kernel_epilogue()
-
 #define kernel_compact_declare \
     int16_t* RESTRICT l_shipdate; \
 	int8_t* RESTRICT l_returnflag; \

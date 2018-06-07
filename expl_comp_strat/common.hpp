@@ -1,11 +1,11 @@
 #ifndef H_COMMON
 #define H_COMMON
 
+#include <cstdint>
+
 #define PROFILE
 #define PRINT_RESULTS
 //#define PRINT_MINMAX
-using u64_t = unsigned long long int;
-using u32_t = unsigned long int;
 
 #include <sstream>
 #include <vector>
@@ -152,23 +152,23 @@ using Decimal64 = Decimal<15, 2>;
 using Decimal128 = Decimal<15, 2, int128_t>;
 
 struct AggrHashTable {
-	u64_t sum_quantity;
-	u64_t count;
-	u64_t sum_base_price;
-	u64_t sum_disc;
-	u64_t sum_disc_price;
-	u64_t sum_charge;
-	u64_t sum_disc_price_hi;
-	u64_t sum_charge_hi;
+	uint64_t sum_quantity;
+	uint64_t count;
+	uint64_t sum_base_price;
+	uint64_t sum_disc;
+	uint64_t sum_disc_price;
+	uint64_t sum_charge;
+	uint64_t sum_disc_price_hi;
+	uint64_t sum_charge_hi;
 };
 
 struct AggrHashTableLocal {
-	u64_t sum_quantity;
-	u64_t count;
-	u64_t sum_base_price;
-	u64_t sum_disc;
-	u64_t sum_disc_price;
-	u64_t sum_charge;
+	uint64_t sum_quantity;
+	uint64_t count;
+	uint64_t sum_base_price;
+	uint64_t sum_disc;
+	uint64_t sum_disc_price;
+	uint64_t sum_charge;
 };
 
 #define kernel_compact_declare \

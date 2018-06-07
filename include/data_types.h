@@ -19,7 +19,7 @@ using sum_discounted_price_t = uint64_t;
 using sum_charge_t           = uint64_t;
 using sum_discount_t         = uint64_t;
 
-using record_count_t         = uint32_t;
+using record_count_t         = uint32_t; // Limiting ourselves to SF 500 here
 
 namespace compressed {
 
@@ -28,10 +28,8 @@ using discount_t             = uint8_t;
 using extended_price_t       = uint32_t;
 using tax_t                  = uint8_t;
 using quantity_t             = uint8_t;
-using return_flag_t          = uint8_t;
-using line_status_t          = uint8_t;
-
-
+using return_flag_t          = uint8_t; // Don't use this!
+using line_status_t          = uint8_t; // Don't use this!
 } // namespace compressed
 
 using bit_container_t             = cuda::native_word_t;

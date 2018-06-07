@@ -8,9 +8,9 @@
 #include "data_types.h"
 #include "constants.hpp"
 #include "kernel.hpp"
-#include "kernels/naive.hpp"
-#include "kernels/local.hpp"
-#include "kernels/global.hpp"
+//#include "kernels/naive.hpp"
+//#include "kernels/local.hpp"
+//#include "kernels/global.hpp"
 #include "kernels/coalesced.hpp"
 #include "../expl_comp_strat/tpch_kit.hpp"
 #include "../expl_comp_strat/common.hpp"
@@ -67,7 +67,7 @@ constexpr inline int div_rounding_up(const int& dividend, const int& divisor)
 
 
 template <typename T>
-void load_column_from_binary_file(T* buffer, size_t cardinality, const std::string& directory, const std::string& file_name) {
+void load_column_from_binary_file(T* buffer, record_count_t cardinality, const std::string& directory, const std::string& file_name) {
 	// TODO: C++'ify the file access (will also guarantee exception safety)
 	auto file_path = join_path(directory, file_name);
     FILE* pFile = fopen(file_path.c_str(), "rb");
@@ -78,7 +78,7 @@ void load_column_from_binary_file(T* buffer, size_t cardinality, const std::stri
 }
 
 template <typename T>
-void write_column_to_binary_file(const T* buffer, size_t cardinality, const std::string& directory, const std::string& file_name) {
+void write_column_to_binary_file(const T* buffer, record_count_t cardinality, const std::string& directory, const std::string& file_name) {
 	auto file_path = join_path(directory, file_name);
     FILE* pFile = fopen(file_path.c_str(), "wb+");
     assert_always(pFile);
@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
     std::cout << "TPC-H Query 1" << '\n';
     /* load data */
 
-    size_t cardinality;
+    record_count_t cardinality;
 
     auto start_csv = timer::now();
 
@@ -211,21 +211,11 @@ int main(int argc, char** argv) {
     auto quantity      = _quantity.get();
 
     for(size_t i = 0; i < cardinality; i++) {
-/*
-        shipdate[i] = _shipdate[i];
-        discount[i] = _discount[i];
-        extendedprice[i] = _extendedprice[i];
-        quantity[i] = _quantity[i];
-        tax[i] = _tax[i];
-        returnflag[i] = _returnflag[i];
-        linestatus[i] = _linestatus[i];
-*/
-
         compressed_ship_date[i]      = shipdate[i] - ship_date_frame_of_reference;
-        compressed_discount[i]       = discount[i];
+        compressed_discount[i]       = discount[i]; // we're keeping the factor 100 scaling
         compressed_extended_price[i] = extendedprice[i];
         compressed_quantity[i]       = quantity[i] / 100;
-        compressed_tax[i]            = tax[i];
+        compressed_tax[i]            = tax[i]; // we're keeping the factor 100 scaling
         // TODO: Don't use magic numbers here
         if (i % 4 == 0) {
             compressed_return_flag[i / 4] = 0;
@@ -244,11 +234,11 @@ int main(int argc, char** argv) {
             }
         }
 
-        assert((int)     compressed_ship_date[i]       == shipdate[i] - ship_date_frame_of_reference);
-        assert((int64_t) compressed_discount[i]       == discount[i]);
-        assert((int64_t) compressed_extended_price[i] == extendedprice[i]);
-        assert((int64_t) compressed_quantity[i]       == quantity[i] / 100);
-        assert((int64_t) compressed_tax[i]            == tax[i]);
+        assert( (ship_date_t)      compressed_ship_date[i]      == shipdate[i] - ship_date_frame_of_reference);
+        assert( (discount_t)       compressed_discount[i]       == discount[i]);
+        assert( (extended_price_t) compressed_extended_price[i] == extendedprice[i]);
+        assert( (quantity_t)       compressed_quantity[i]       == quantity[i] / 100);
+        assert( (tax_t)            compressed_tax[i]            == tax[i]);
     }
 
     constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
@@ -397,7 +387,7 @@ int main(int argc, char** argv) {
 
 
         stream.enqueue.kernel_launch(
-            cuda::thread_local_tpchQ01_snall_datatypes,
+            cuda::thread_local_tpchQ01_small_datatypes_coalesced,
             launch_config,
             aggregates_on_device.sum_quantity.get(),
             aggregates_on_device.sum_base_price.get(),
@@ -409,9 +399,9 @@ int main(int argc, char** argv) {
             stream_input_buffers.discount.get(),
             stream_input_buffers.extendedprice.get(),
             stream_input_buffers.tax.get(),
+            stream_input_buffers.quantity.get(),
             stream_input_buffers.returnflag.get(),
             stream_input_buffers.linestatus.get(),
-            stream_input_buffers.quantity.get(),
             num_records_for_this_launch);
 
     }

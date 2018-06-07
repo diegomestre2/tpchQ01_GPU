@@ -27,6 +27,8 @@ enum {
         // potential groups, and we don't want that
     return_flag_bits                 = 1,
     line_status_bits                 = 2,
+    log_return_flag_bits             = 0,
+    log_line_status_bits             = 1,
     bits_per_bit_container           = sizeof(bit_container_t) * CHAR_BIT,
     return_flag_values_per_container = bits_per_bit_container / return_flag_bits,
     line_status_values_per_container = bits_per_bit_container / line_status_bits,

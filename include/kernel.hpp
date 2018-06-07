@@ -11,7 +11,6 @@
 #include "data_types.h"
 
 using namespace cooperative_groups;
-using u64_t = unsigned long long int;
 
 using SHIPDATE_TYPE = int;
 using DISCOUNT_TYPE = int64_t;

@@ -18,7 +18,7 @@ namespace cuda {
         return_flag_t *returnflag,
         line_status_t *linestatus,
         quantity_t *quantity,
-        u64_t cardinality){
+        record_count_t cardinality){
 
         int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i < cardinality && shipdate[i] <= threshold_ship_date){//todate_(2, 9, 1998)) {
@@ -30,12 +30,12 @@ namespace cuda {
             const auto charge = Decimal64::Mul(disc_price, tax_1);
             const idx_t idx = returnflag[i] << 8 | linestatus[i];
 
-            atomicAdd((u64_t*)&sum_quantity[idx], (u64_t) quantity[i]);
-            atomicAdd((u64_t*)&sum_base_price[idx], (u64_t) price);
-            atomicAdd((u64_t*)&sum_charge[idx], (u64_t) charge);
-            atomicAdd((u64_t*)&sum_discounted_price[idx], (u64_t)disc_price);
-            atomicAdd((u64_t*)&sum_discount[idx], (u64_t) disc);
-            atomicAdd((u64_t*)&record_count[idx], (u64_t) 1);
+            atomicAdd((uint64_t*)&sum_quantity[idx], (uint64_t) quantity[i]);
+            atomicAdd((uint64_t*)&sum_base_price[idx], (uint64_t) price);
+            atomicAdd((uint64_t*)&sum_charge[idx], (uint64_t) charge);
+            atomicAdd((uint64_t*)&sum_discounted_price[idx], (uint64_t)disc_price);
+            atomicAdd((uint64_t*)&sum_discount[idx], (uint64_t) disc);
+            atomicAdd((uint64_t*)&record_count[idx], (uint64_t) 1);
             
         }
     }

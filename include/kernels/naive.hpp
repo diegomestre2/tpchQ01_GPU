@@ -10,7 +10,7 @@ namespace cuda {
         sum_discounted_price_t *sum_discounted_price,
         sum_charge_t *sum_charge,
         sum_discount_t *sum_discount,
-        record_count_t *record_count,
+        cardinality_t *record_count,
         ship_date_t *shipdate,
         DISCOUNT_TYPE *discount,
         EXTENDEDPRICE_TYPE *extendedprice,
@@ -18,7 +18,7 @@ namespace cuda {
         return_flag_t *returnflag,
         line_status_t *linestatus,
         quantity_t *quantity,
-        record_count_t cardinality){
+        cardinality_t cardinality){
 
         int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i < cardinality && shipdate[i] <= threshold_ship_date){//todate_(2, 9, 1998)) {

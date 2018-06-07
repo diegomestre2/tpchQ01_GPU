@@ -10,7 +10,7 @@
 
 #define THREADS_PER_BLOCK 32
 
-enum : record_count_t {
+enum : cardinality_t {
     records_per_scheduled_kernel = 1 << 20 // used for scheduling the kernel
 };
 
@@ -20,15 +20,15 @@ enum {
     ship_date_frame_of_reference     = 727563, // which date value is this?
     threshold_ship_date              = 729999, // todate_(2, 9, 1998)
     compressed_threshold_ship_date   = threshold_ship_date - ship_date_frame_of_reference,
-    return_flag_support_size         = 2,
-    line_status_support_size         = 3,
+    return_flag_support_size         = 3,
+    line_status_support_size         = 2,
     num_potential_groups             = return_flag_support_size * line_status_support_size,
         // Note we will _not_ concatenate bits here - that would make for 8
         // potential groups, and we don't want that
-    return_flag_bits                 = 1,
-    line_status_bits                 = 2,
-    log_return_flag_bits             = 0,
-    log_line_status_bits             = 1,
+    return_flag_bits                 = 2,
+    line_status_bits                 = 1,
+    log_return_flag_bits             = 1,
+    log_line_status_bits             = 0,
     bits_per_bit_container           = sizeof(bit_container_t) * CHAR_BIT,
     return_flag_values_per_container = bits_per_bit_container / return_flag_bits,
     line_status_values_per_container = bits_per_bit_container / line_status_bits,

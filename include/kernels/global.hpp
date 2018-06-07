@@ -10,7 +10,7 @@ namespace cuda {
         sum_discounted_price_t *sum_discounted_price,
         sum_charge_t *sum_charge,
         sum_discount_t *sum_discount,
-        record_count_t *record_count,
+        cardinality_t *record_count,
         ship_date_t *shipdate,
         DISCOUNT_TYPE *discount,
         EXTENDEDPRICE_TYPE *extendedprice,
@@ -18,7 +18,7 @@ namespace cuda {
         return_flag_t *returnflag,
         line_status_t *linestatus,
         quantity_t *quantity,
-        record_count_t cardinality) {
+        cardinality_t cardinality) {
 
         uint64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
         uint64_t end = min((uint64_t)cardinality, i + VALUES_PER_THREAD);
@@ -49,7 +49,7 @@ namespace cuda {
         sum_discounted_price_t *sum_discounted_price,
         sum_charge_t *sum_charge,
         sum_discount_t *sum_discount,
-        record_count_t *record_count,
+        cardinality_t *record_count,
         compressed::ship_date_t *shipdate,
         compressed::discount_t *discount,
         compressed::extended_price_t *extendedprice,
@@ -57,7 +57,7 @@ namespace cuda {
         compressed::return_flag_t *returnflag,
         compressed::line_status_t *linestatus,
         compressed::quantity_t *quantity,
-        record_count_t cardinality) {
+        cardinality_t cardinality) {
 
         constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
         constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };

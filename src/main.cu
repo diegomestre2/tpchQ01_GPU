@@ -395,7 +395,7 @@ int main(int argc, char** argv) {
         auto launch_config = cuda::make_launch_config(num_blocks, THREADS_PER_BLOCK);
         (void) launch_config;
 
-/*
+
         stream.enqueue.kernel_launch(
             cuda::thread_local_tpchQ01,
             launch_config,
@@ -413,7 +413,7 @@ int main(int argc, char** argv) {
             stream_input_buffers.linestatus.get(),
             stream_input_buffers.quantity.get(),
             num_records_for_this_launch);
-*/
+
     }
     std::vector<cuda::event_t> completion_events;
     for(int i = 1; i < num_gpu_streams; i++) {

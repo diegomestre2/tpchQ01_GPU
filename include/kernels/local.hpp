@@ -13,14 +13,16 @@ namespace cuda {
         LINESTATUS_TYPE *linestatus,
         QUANTITY_TYPE *quantity,
         AggrHashTable *aggregations,
-        u64_t cardinality) {
+        u64_t cardinality,
+        int values_per_thread) {
 
         constexpr size_t N = 18;
         AggrHashTable agg[N];
         memset(agg, 0, sizeof(AggrHashTable) * N);
 
-        u64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
-        u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
+        u64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
+        u64_t end = min((u64_t)cardinality, i + values_per_thread);
+        
         for(; i < end; ++i) {
             if (shipdate[i] <= 729999) {
                 const int disc = discount[i];
@@ -64,7 +66,8 @@ namespace cuda {
         LINESTATUS_TYPE_SMALL *linestatus,
         QUANTITY_TYPE_SMALL *quantity,
         AggrHashTable *aggregations,
-        u64_t cardinality) {
+        u64_t cardinality,
+        int values_per_thread) {
 
         constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
         constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
@@ -73,8 +76,8 @@ namespace cuda {
         AggrHashTable agg[N];
         memset(agg, 0, sizeof(AggrHashTable) * N);
 
-        u64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
-        u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
+        u64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
+        u64_t end = min((u64_t)cardinality, i + values_per_thread);
         for(; i < end; ++i) {
             if (shipdate[i] <= (729999 - SHIPDATE_MIN)) {
                 const int disc = discount[i];
@@ -87,7 +90,7 @@ namespace cuda {
                 const uint8_t lstatus = (linestatus[i / 8] & LINESTATUS_MASK[i % 8]) >> (i % 8);
                 const uint8_t idx = rflag + 4 * lstatus;
                 
-                agg[idx].sum_quantity   += quantity[i] * 100;
+                agg[idx].sum_quantity   += quantity[i];
                 agg[idx].sum_base_price += price;
                 agg[idx].sum_charge     += charge;
                 agg[idx].sum_disc_price += disc_price;
@@ -100,7 +103,7 @@ namespace cuda {
             if (!agg[i].count) {
                 continue;
             }
-            atomicAdd(&aggregations[i].sum_quantity, (u64_t) agg[i].sum_quantity);
+            atomicAdd(&aggregations[i].sum_quantity, (u64_t) agg[i].sum_quantity * 100);
             atomicAdd(&aggregations[i].sum_base_price, (u64_t) agg[i].sum_base_price);
             atomicAdd(&aggregations[i].sum_charge, (u64_t) agg[i].sum_charge);
             atomicAdd(&aggregations[i].sum_disc_price, (u64_t) agg[i].sum_disc_price);

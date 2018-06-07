@@ -13,10 +13,11 @@ namespace cuda {
         LINESTATUS_TYPE *linestatus,
         QUANTITY_TYPE *quantity,
         AggrHashTable *aggregations,
-        u64_t cardinality) {
+        u64_t cardinality,
+        int values_per_thread) {
 
-        u64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
-        u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
+        u64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
+        u64_t end = min((u64_t)cardinality, i + values_per_thread);
         for(; i < end; ++i) {
             if (shipdate[i] <= 729999) {
                 const int disc = discount[i];
@@ -47,13 +48,14 @@ namespace cuda {
         LINESTATUS_TYPE_SMALL *linestatus,
         QUANTITY_TYPE_SMALL *quantity,
         AggrHashTable *aggregations,
-        u64_t cardinality) {
+        u64_t cardinality,
+        int values_per_thread) {
 
         constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
         constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
 
-        u64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
-        u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
+        u64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
+        u64_t end = min((u64_t)cardinality, i + values_per_thread);
         for(; i < end; ++i) {
             if (shipdate[i] <= (729999 - SHIPDATE_MIN)) {
                 const int disc = discount[i];
@@ -65,7 +67,7 @@ namespace cuda {
                 const uint8_t rflag = (returnflag[i / 4] & RETURNFLAG_MASK[i % 4]) >> (2 * (i % 4));
                 const uint8_t lstatus = (linestatus[i / 8] & LINESTATUS_MASK[i % 8]) >> (i % 8);
                 const uint8_t idx = rflag + 4 * lstatus;
-                                
+
                 atomicAdd(&aggregations[idx].sum_quantity, (u64_t) (quantity[i] * 100));
                 atomicAdd(&aggregations[idx].sum_base_price, (u64_t) price);
                 atomicAdd(&aggregations[idx].sum_charge, (u64_t) charge);

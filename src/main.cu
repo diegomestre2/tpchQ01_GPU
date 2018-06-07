@@ -26,13 +26,18 @@ void syscall(std::string command) {
     system(command.c_str());
 }
 
+
+int MAX_TUPLES_PER_STREAM = 32 * 1024;
+int VALUES_PER_THREAD = 64;
+int THREADS_PER_BLOCK = 32;
+
 #define GIGA (1024 * 1024 * 1024)
 #define MEGA (1024 * 1024)
 #define KILO (1024)
 
 using timer = std::chrono::high_resolution_clock;
 
-inline bool file_exists (const std::string& name) {
+inline bool file_exists(const std::string& name) {
   struct stat buffer;
   return (stat (name.c_str(), &buffer) == 0);
 }
@@ -170,10 +175,15 @@ public:
 void print_help() {
     fprintf(stderr, "Unrecognized command line option.\n");
     fprintf(stderr, "Usage: tpch_01 [args]\n");
-    fprintf(stderr, "   --sf=[sf] (number, e.g. 0.01 - 100)\n");
+    fprintf(stderr, "   --sf=[sf:1] (number, e.g. 0.01 - 100)\n");
+    fprintf(stderr, "   --streams=[streams:8] (number, e.g. 1 - 64)\n");
+    fprintf(stderr, "   --tuples-per-stream=[tuples:32768] (number, e.g. 16384 - 131072)\n");
+    fprintf(stderr, "   --values-per-thread=[values:64] (number, e.g. 16 - 128)\n");
+    fprintf(stderr, "   --threads-per-block=[threads:32] (number, e.g. 32 - 1024)\n");
     fprintf(stderr, "   --use-global-ht\n");
     fprintf(stderr, "   --no-pinned-memory\n");
     fprintf(stderr, "   --use-small-datatypes\n");
+    fprintf(stderr, "   --use-coalescing\n");
 }
 
 int main(int argc, char** argv) {
@@ -193,11 +203,15 @@ int main(int argc, char** argv) {
     bool USE_PINNED_MEMORY = true;
     bool USE_GLOBAL_HT = false;
     bool USE_SMALL_DATATYPES = false;
+    bool USE_COALESCING = false;
 
     double sf = 1;
     int nr_streams = 8;
     std::string sf_argument = "--sf=";
     std::string streams_argument = "--streams=";
+    std::string tuples_per_stream_argument = "--tuples-per-stream=";
+    std::string values_per_thread_argument = "--values-per-thread=";
+    std::string threads_per_block_argument = "--threads-per-block=";
     for(int i = 1; i < argc; i++) {
         auto arg = std::string(argv[i]);
         if (arg == "--no-pinned-memory") {
@@ -206,10 +220,18 @@ int main(int argc, char** argv) {
             USE_GLOBAL_HT = true;
         } else if (arg == "--use-small-datatypes") {
             USE_SMALL_DATATYPES = true;
+        } else if (arg == "--use-coalescing") {
+            USE_COALESCING = true;
         } else if (arg.substr(0, sf_argument.size()) == sf_argument) {
             sf = std::stod(arg.substr(sf_argument.size()));
         } else if (arg.substr(0, streams_argument.size()) == streams_argument) {
             nr_streams = std::stoi(arg.substr(streams_argument.size()));
+        } else if (arg.substr(0, tuples_per_stream_argument.size()) == tuples_per_stream_argument) {
+            MAX_TUPLES_PER_STREAM = std::stoi(arg.substr(tuples_per_stream_argument.size()));
+        } else if (arg.substr(0, values_per_thread_argument.size()) == values_per_thread_argument) {
+            VALUES_PER_THREAD = std::stoi(arg.substr(values_per_thread_argument.size()));
+        }  else if (arg.substr(0, threads_per_block_argument.size()) == threads_per_block_argument) {
+            THREADS_PER_BLOCK = std::stoi(arg.substr(threads_per_block_argument.size()));
         } else {
             print_help();
             exit(1);
@@ -382,27 +404,57 @@ int main(int argc, char** argv) {
             size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
             if (!USE_GLOBAL_HT) {
                 if (USE_SMALL_DATATYPES) {
-                    cuda::thread_local_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                        (SHIPDATE_TYPE_SMALL*) s.shipdate,
-                        (DISCOUNT_TYPE_SMALL*) s.discount,
-                        (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
-                        (TAX_TYPE_SMALL*) s.tax,
-                        (RETURNFLAG_TYPE_SMALL*)s.rf,
-                        (LINESTATUS_TYPE_SMALL*)s.ls,
-                        (QUANTITY_TYPE_SMALL*) s.quantity,
-                        d_aggregations.get(),
-                        (u64_t) size);
+                    if(USE_COALESCING){
+                        cuda::thread_local_tpchQ01_small_datatypes_coalesced<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                            (SHIPDATE_TYPE_SMALL*) s.shipdate,
+                            (DISCOUNT_TYPE_SMALL*) s.discount,
+                            (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
+                            (TAX_TYPE_SMALL*) s.tax,
+                            (RETURNFLAG_TYPE_SMALL*)s.rf,
+                            (LINESTATUS_TYPE_SMALL*)s.ls,
+                            (QUANTITY_TYPE_SMALL*) s.quantity,
+                            d_aggregations.get(),
+                            (u64_t) size,
+                            VALUES_PER_THREAD);
+                    } else {
+                        cuda::thread_local_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                            (SHIPDATE_TYPE_SMALL*) s.shipdate,
+                            (DISCOUNT_TYPE_SMALL*) s.discount,
+                            (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
+                            (TAX_TYPE_SMALL*) s.tax,
+                            (RETURNFLAG_TYPE_SMALL*)s.rf,
+                            (LINESTATUS_TYPE_SMALL*)s.ls,
+                            (QUANTITY_TYPE_SMALL*) s.quantity,
+                            d_aggregations.get(),
+                            (u64_t) size,
+                            VALUES_PER_THREAD);
+                    }
                 } else {
-                    cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                        s.shipdate,
-                        s.discount,
-                        s.eprice,
-                        s.tax,
-                        s.rf,
-                        s.ls,
-                        s.quantity,
-                        d_aggregations.get(),
-                        (u64_t) size);
+                    if(USE_COALESCING){
+                        cuda::thread_local_tpchQ01_coalesced<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                            s.shipdate,
+                            s.discount,
+                            s.eprice,
+                            s.tax,
+                            s.rf,
+                            s.ls,
+                            s.quantity,
+                            d_aggregations.get(),
+                            (u64_t) size,
+                            VALUES_PER_THREAD);
+                    } else {
+                        cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                            s.shipdate,
+                            s.discount,
+                            s.eprice,
+                            s.tax,
+                            s.rf,
+                            s.ls,
+                            s.quantity,
+                            d_aggregations.get(),
+                            (u64_t) size,
+                            VALUES_PER_THREAD);
+                    }
                 }
             } else {
                 if (USE_SMALL_DATATYPES) {
@@ -415,7 +467,8 @@ int main(int argc, char** argv) {
                         (LINESTATUS_TYPE_SMALL*)s.ls,
                         (QUANTITY_TYPE_SMALL*) s.quantity,
                         d_aggregations.get(),
-                        (u64_t) size);
+                        (u64_t) size,
+                        VALUES_PER_THREAD);
                 } else {
                     cuda::global_ht_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
                         s.shipdate,
@@ -426,7 +479,8 @@ int main(int argc, char** argv) {
                         s.ls,
                         s.quantity,
                         d_aggregations.get(),
-                        (u64_t) size);
+                        (u64_t) size,
+                        VALUES_PER_THREAD);
                 }
             }
 

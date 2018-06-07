@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdio.h>
+#include <iostream>
 #include <cooperative_groups.h>
 #include "helper.hpp"
 #include "dates.hpp"

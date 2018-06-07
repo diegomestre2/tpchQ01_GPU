@@ -69,12 +69,8 @@ namespace cuda {
         for (i = 0; i < N; ++i) {
             atomicAdd(&aggregations[i].sum_quantity, (u64_t) agg[i].sum_quantity);
             atomicAdd(&aggregations[i].sum_base_price, (u64_t) agg[i].sum_base_price);
-            if (atomicAdd(&aggregations[i].sum_charge, (u64_t) agg[i].sum_charge) < agg[i].sum_charge) {
-                atomicAdd(&aggregations[i].sum_charge_hi, 1);
-            }
-            if (atomicAdd(&aggregations[i].sum_disc_price, (u64_t) agg[i].sum_disc_price) < agg[i].sum_disc_price) {
-                atomicAdd(&aggregations[i].sum_disc_price_hi, 1);
-            }
+            atomicAdd(&aggregations[i].sum_charge, (u64_t) agg[i].sum_charge);
+            atomicAdd(&aggregations[i].sum_disc_price, (u64_t) agg[i].sum_disc_price);
             atomicAdd(&aggregations[i].sum_disc, (u64_t) agg[i].sum_disc);
             atomicAdd(&aggregations[i].count, (u64_t) agg[i].count);
         }

@@ -195,7 +195,9 @@ int main(int argc, char** argv) {
     bool USE_SMALL_DATATYPES = false;
 
     double sf = 1;
+    int nr_streams = 8;
     std::string sf_argument = "--sf=";
+    std::string streams_argument = "--streams=";
     for(int i = 1; i < argc; i++) {
         auto arg = std::string(argv[i]);
         if (arg == "--no-pinned-memory") {
@@ -206,6 +208,8 @@ int main(int argc, char** argv) {
             USE_SMALL_DATATYPES = true;
         } else if (arg.substr(0, sf_argument.size()) == sf_argument) {
             sf = std::stod(arg.substr(sf_argument.size()));
+        } else if (arg.substr(0, streams_argument.size()) == streams_argument) {
+            nr_streams = std::stoi(arg.substr(streams_argument.size()));
         } else {
             print_help();
             exit(1);
@@ -345,7 +349,7 @@ int main(int argc, char** argv) {
     auto start = timer::now();
 
     {
-        StreamManager streams(MAX_TUPLES_PER_STREAM, 8);
+        StreamManager streams(MAX_TUPLES_PER_STREAM, nr_streams);
         cuda_check_error();
         size_t offset = 0;
 
@@ -376,7 +380,6 @@ int main(int argc, char** argv) {
 
             size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
             size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
-            auto start_kernel = timer::now();
             if (!USE_GLOBAL_HT) {
                 if (USE_SMALL_DATATYPES) {
                     cuda::thread_local_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(

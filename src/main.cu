@@ -7,11 +7,11 @@
 
 #include "data_types.h"
 #include "constants.hpp"
-//#include "kernel.hpp"
-//#include "kernels/naive.hpp"
-//#include "kernels/local.hpp"
-//#include "kernels/global.hpp"
-//#include "kernels/coalesced.hpp"
+#include "kernel.hpp"
+#include "kernels/naive.hpp"
+#include "kernels/local.hpp"
+#include "kernels/global.hpp"
+#include "kernels/coalesced.hpp"
 #include "../expl_comp_strat/tpch_kit.hpp"
 #include "../expl_comp_strat/common.hpp"
 
@@ -397,7 +397,7 @@ int main(int argc, char** argv) {
 
 
         stream.enqueue.kernel_launch(
-            cuda::thread_local_tpchQ01,
+            cuda::thread_local_tpchQ01_snall_datatypes,
             launch_config,
             aggregates_on_device.sum_quantity.get(),
             aggregates_on_device.sum_base_price.get(),

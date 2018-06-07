@@ -3,11 +3,11 @@
 #include "data_types.h"
 #include <climits>
 
-#if 0
+
 #define MAX_TUPLES_PER_STREAM MIN_TUPLES_PER_STREAM
 #define MIN_TUPLES_PER_STREAM (32*1024)
 #define VALUES_PER_THREAD 64
-#endif
+
 #define THREADS_PER_BLOCK 32
 
 enum : record_count_t {

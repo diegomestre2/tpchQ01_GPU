@@ -30,12 +30,12 @@ namespace cuda {
             const auto charge = Decimal64::Mul(disc_price, tax_1);
             const idx_t idx = returnflag[i] << 8 | linestatus[i];
 
-            atomicAdd(&sum_quantity[idx], (u64_t) agg[i].sum_quantity);
-            atomicAdd(sum_base_price[idx], (u64_t) agg[i].sum_base_price);
-            atomicAdd(&sum_charge[idx], (u64_t) agg[i].sum_charge);
-            atomicAdd(&sum_discounted_price[idx], (u64_t) agg[i].sum_disc_price);
-            atomicAdd(&sum_discount[idx], (u64_t) agg[i].sum_disc);
-            atomicAdd(&record_count[idx], (u64_t) agg[i].count);
+            atomicAdd((u64_t*)&sum_quantity[idx], (u64_t) quantity[i]);
+            atomicAdd((u64_t*)&sum_base_price[idx], (u64_t) price);
+            atomicAdd((u64_t*)&sum_charge[idx], (u64_t) charge);
+            atomicAdd((u64_t*)&sum_discounted_price[idx], (u64_t)disc_price);
+            atomicAdd((u64_t*)&sum_discount[idx], (u64_t) disc);
+            atomicAdd((u64_t*)&record_count[idx], (u64_t) 1);
             
         }
     }

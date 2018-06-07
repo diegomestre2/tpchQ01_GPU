@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kernel.hpp"
+#include "data_types.h"
 
 namespace cuda {
     __global__
@@ -50,18 +51,18 @@ namespace cuda {
             if (!agg[i].count) {
                 continue;
             }
-            atomicAdd(&sum_quantity[i], (u64_t) agg[i].sum_quantity);
-            atomicAdd(sum_base_price[i], (u64_t) agg[i].sum_base_price);
-            atomicAdd(&sum_charge[i], (u64_t) agg[i].sum_charge);
-            atomicAdd(&sum_discounted_price[i], (u64_t) agg[i].sum_disc_price);
-            atomicAdd(&sum_discount[i], (u64_t) agg[i].sum_disc);
-            atomicAdd(&record_count[i], (u64_t) agg[i].count);
+            atomicAdd((u64_t*)&sum_quantity[i], (u64_t) agg[i].sum_quantity);
+            atomicAdd((u64_t*)&sum_base_price[i], (u64_t) agg[i].sum_base_price);
+            atomicAdd((u64_t*)&sum_charge[i], (u64_t) agg[i].sum_charge);
+            atomicAdd((u64_t*)&sum_discounted_price[i], (u64_t) agg[i].sum_disc_price);
+            atomicAdd((u64_t*)&sum_discount[i], (u64_t) agg[i].sum_disc);
+            atomicAdd((u64_t*)&record_count[i], (u64_t) agg[i].count);
         }
 	}
 
 
     __global__
-    void compressed::thread_local_tpchQ01_datatypes(
+    void thread_local_tpchQ01_snall_datatypes(
         sum_quantity_t *sum_quantity,
         sum_base_price_t *sum_base_price,
         sum_discounted_price_t *sum_discounted_price,
@@ -69,8 +70,8 @@ namespace cuda {
         sum_discount_t *sum_discount,
         record_count_t *record_count,
         compressed::ship_date_t *shipdate,
-        compressed_discount_t *discount,
-        compressed_extended_price_t *extendedprice,
+        compressed::discount_t *discount,
+        compressed::extended_price_t *extendedprice,
         compressed::tax_t *tax,
         compressed::return_flag_t *returnflag,
         compressed::line_status_t *linestatus,
@@ -111,12 +112,12 @@ namespace cuda {
             if (!agg[i].count) {
                 continue;
             }
-            atomicAdd(&sum_quantity[i], (u64_t) agg[i].sum_quantity);
-            atomicAdd(sum_base_price[i], (u64_t) agg[i].sum_base_price);
-            atomicAdd(&sum_charge[i], (u64_t) agg[i].sum_charge);
-            atomicAdd(&sum_discounted_price[i], (u64_t) agg[i].sum_disc_price);
-            atomicAdd(&sum_discount[i], (u64_t) agg[i].sum_disc);
-            atomicAdd(&record_count[i], (u64_t) agg[i].count);
+            atomicAdd((u64_t*)&sum_quantity[i], (u64_t) agg[i].sum_quantity);
+            atomicAdd((u64_t*)&sum_base_price[i], (u64_t) agg[i].sum_base_price);
+            atomicAdd((u64_t*)&sum_charge[i], (u64_t) agg[i].sum_charge);
+            atomicAdd((u64_t*)&sum_discounted_price[i], (u64_t) agg[i].sum_disc_price);
+            atomicAdd((u64_t*)&sum_discount[i], (u64_t) agg[i].sum_disc);
+            atomicAdd((u64_t*)&record_count[i], (u64_t) agg[i].count);
         }
     }
 }

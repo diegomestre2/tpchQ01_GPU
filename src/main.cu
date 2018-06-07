@@ -207,8 +207,8 @@ int main(int argc, char** argv) {
 
     std::vector<stream_input_buffer_set> stream_input_buffer_sets;
     std::vector<cuda::stream_t<>> streams;
-	stream_input_buffer_sets.reserve(num_gpu_streams);
-	streams.reserve(num_gpu_streams);
+    stream_input_buffer_sets.reserve(num_gpu_streams);
+    streams.reserve(num_gpu_streams);
         // We'll be scheduling (most of) our work in a round-robin fashion on all of
         // the streams, to prevent the GPU from idling.
 
@@ -242,9 +242,9 @@ int main(int argc, char** argv) {
 
     cuda::event_t aggregates_initialized_event = cuda_device.create_event(
             cuda::event::sync_by_blocking, cuda::event::dont_record_timings, cuda::event::not_interprocess);
-    aggregates_initialized_event.record(streams[0].id());
+    streams[0].enqueue.event(aggregates_initialized_event);
     for (int i = 1; i < num_gpu_streams; ++i) {
-        streams[i].enqueue.event(aggregates_initialized_event);
+        streams[i].enqueue.wait(aggregates_initialized_event);
         // The other streams also require the aggregates to be initialized before doing any work
     }
 
@@ -261,13 +261,14 @@ int main(int argc, char** argv) {
         stream.enqueue.copy(stream_input_buffers.extendedprice.get(), extendedprice + offset_in_table, num_records_for_this_launch * sizeof(extended_price_t));
         stream.enqueue.copy(stream_input_buffers.tax.get()          , tax           + offset_in_table, num_records_for_this_launch * sizeof(tax_t));
         stream.enqueue.copy(stream_input_buffers.quantity.get()     , quantity      + offset_in_table, num_records_for_this_launch * sizeof(quantity_t));
-        stream.enqueue.copy(stream_input_buffers.returnflag.get()   , returnflag    + offset_in_table, num_records_for_this_launch * sizeof(return_flag_t));
-        stream.enqueue.copy(stream_input_buffers.linestatus.get()   , linestatus    + offset_in_table, num_records_for_this_launch * sizeof(line_status_t));
+        stream.enqueue.copy(stream_input_buffers.returnflag.get()   , returnflag    + offset_in_table / return_flag_values_per_container, num_records_for_this_launch / return_flag_values_per_container * sizeof(bit_container_t));
+        stream.enqueue.copy(stream_input_buffers.linestatus.get()   , linestatus    + offset_in_table / line_status_values_per_container, num_records_for_this_launch / line_status_values_per_container * sizeof(bit_container_t));
         // auto end_copy = timer::now();
         // copy_time += std::chrono::duration<double>(end_copy - start_copy).count();
 
         auto num_blocks = div_rounding_up(num_records_for_this_launch, THREADS_PER_BLOCK);
         auto launch_config = cuda::make_launch_config(num_blocks, THREADS_PER_BLOCK);
+        (void) launch_config;
 
         // auto start_kernel = timer::now(); // This won't work either, kernels are asynchronous
         //std::cout << "Execution <<<" << amount_of_blocks << "," << THREADS_PER_BLOCK << "," << SHARED_MEMORY << ">>>" << std::endl;
@@ -304,6 +305,7 @@ int main(int argc, char** argv) {
     streams[0].enqueue.copy(aggregates_on_host.sum_charge.get(),           aggregates_on_device.sum_charge.get(),           num_potential_groups * sizeof(sum_charge_t));
     streams[0].enqueue.copy(aggregates_on_host.sum_discount.get(),         aggregates_on_device.sum_discount.get(),         num_potential_groups * sizeof(sum_discount_t));
     streams[0].enqueue.copy(aggregates_on_host.record_count.get(),         aggregates_on_device.record_count.get(),         num_potential_groups * sizeof(record_count_t));
+
 
     // What about the remainder of the computation? :
     //

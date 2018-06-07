@@ -12,9 +12,11 @@
 #include "kernel_x100.hpp"
 #include "kernel_x100_old.hpp"
 #include "kernel_avx512.hpp"
-#include "kernel_weld.hpp"
+//#include "kernel_weld.hpp"
 
 #include <tuple>
+
+#define PRINT_RESULTS
 
 static const size_t REP_COUNT = 25;
 
@@ -30,7 +32,7 @@ void run(const lineitem& li, const std::string& name, Args&&... args)
 	const size_t n = li.l_extendedprice.cardinality;
 
 	for (size_t rep=0; rep<REP_COUNT; rep++) {
-		clear_tables();
+		fun.Clear();
 
 		timespec ts_start, ts_end;
 		clock_gettime(CLOCK_MONOTONIC, &ts_start);
@@ -60,7 +62,7 @@ void run(const lineitem& li, const std::string& name, Args&&... args)
 		(double)(total_time - 0 - fun.sum_aggr_time - fun.sum_magic_time) / total_tuples);
 
 	runIdCounter++;
-	fun.Profile(total_tuples);
+	// fun.Profile(total_tuples);
 #ifdef PRINT_RESULTS
 
 	auto print_dec = [] (auto s, auto x) { printf("%s%ld.%ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
@@ -85,18 +87,18 @@ void run(const lineitem& li, const std::string& name, Args&&... args)
 	};
 
 	for (size_t group=0; group<MAX_GROUPS; group++) {
-		if (aggrs0[group].count > 0) {
+		if (fun.aggrs0[group].count > 0) {
 			char rf = group >> 8;
 			char ls = group & std::numeric_limits<unsigned char>::max();
 
 			size_t i = group;
 
 			printf("# %c|%c", rf, ls);
-			print_dec("|", aggrs0[i].sum_quantity);
-			print_dec("|", aggrs0[i].sum_base_price);
-			print_dec("|", aggrs0[i].sum_disc_price);
-			print_dec("|", aggrs0[i].sum_charge);
-			printf("|%ld\n", aggrs0[i].count);
+			print_dec("|", fun.aggrs0[i].sum_quantity);
+			print_dec("|", fun.aggrs0[i].sum_base_price);
+			print_dec("|", fun.aggrs0[i].sum_disc_price);
+			print_dec("|", fun.aggrs0[i].sum_charge);
+			printf("|%ld\n", fun.aggrs0[i].count);
 		}
 	}
 	size_t i=0;
@@ -104,17 +106,17 @@ void run(const lineitem& li, const std::string& name, Args&&... args)
 		char rf = group >> 8;
 		char ls = group & std::numeric_limits<unsigned char>::max();
 
-		int64_t count = sum_64(aggr_avx0_count, i, 8);
+		int64_t count = sum_64(fun.aggr_avx0_count, i, 8);
 		
 		if (count > 0) {
 			char rf = group >> 8;
 			char ls = group & std::numeric_limits<unsigned char>::max();
 
 			printf("# %c|%c", rf, ls);
-			print_dec("|", sum_64(aggr_avx0_sum_quantity, i, 8));
-			print_dec("|", sum_64(aggr_avx0_sum_base_price, i, 8));
-			print_dec("|", sum_128(aggr_avx0_sum_disc_price_hi, aggr_avx0_sum_disc_price_lo, i, 8));
-			print_dec("|", sum_128(aggr_avx0_sum_charge_hi, aggr_avx0_sum_charge_lo, i, 8));
+			print_dec("|", sum_64(fun.aggr_avx0_sum_quantity, i, 8));
+			print_dec("|", sum_64(fun.aggr_avx0_sum_base_price, i, 8));
+			print_dec("|", sum_128(fun.aggr_avx0_sum_disc_price_hi, fun.aggr_avx0_sum_disc_price_lo, i, 8));
+			print_dec("|", sum_128(fun.aggr_avx0_sum_charge_hi, fun.aggr_avx0_sum_charge_lo, i, 8));
 			printf("|%ld\n", count);
 		}
 
@@ -135,8 +137,9 @@ int main() {
 	printf("ID \t %-40s \t timetuple \t millisec \t aggrtuple \t pshuffletuple \t remainingtuple\n",
 		"Configuration");
 
-	run<KernelWeld>(li, "$\\text{Weld}$");
+//	run<KernelWeld>(li, "$\\text{Weld}$");
 
+#if 0
 	run<KernelOldX100<kMultiplePrims, true, kSinglePrims, false>>(li, "$\\text{X100 Full NSM Standard}$");
 	run<KernelOldX100<kMultiplePrims, false, kSinglePrims, false>>(li, "$\\text{X100 Full DSM Standard}$");
 	run<KernelOldX100<k1Step, true, kSinglePrims, false>>(li, "$\\text{X100 Full NSM Standard Fused}$");
@@ -145,8 +148,15 @@ int main() {
 	run<KernelX100<kMultiplePrims, true>>(li, "$\\text{X100 Compact NSM Standard}$");
 	run<KernelX100<kMultiplePrims, false>>(li, "$\\text{X100 Compact DSM Standard}$");
 	run<KernelX100<k1Step, true>>(li, "$\\text{X100 Compact NSM Standard Fused}$");
+#endif
+	run<Morsel<KernelX100<kMagic, true>>>(li, "$\\text{Morsel X100 Compact NSM In-Reg}$");
 	run<KernelX100<kMagic, true>>(li, "$\\text{X100 Compact NSM In-Reg}$");
+
+	run<Morsel<KernelNaiveCompact>>(li, "$\\text{HyPer Compact NoOverflow}$");
+	run<KernelNaiveCompact>(li, "$\\text{HyPer Compact NoOverflow}$");
 	
+
+#if 0	
 #ifdef __AVX512F__
 	run<KernelX100<kMagic, true, kPopulationCount>>(li, "$\\text{X100 Compact NSM In-Reg AVX-512}$");
 	run<KernelX100<kMagic, true, kCompare>>(li, "$\\text{X100 Compact NSM In-Reg AVX-512 Cmp}$");
@@ -164,6 +174,7 @@ int main() {
 #ifdef __AVX512F__
 	run<AVX512<false, false, true>>(li, "$\\text{Handwritten AVX-512}$");
 	run<AVX512<false, false, false>>(li, "$\\text{Handwritten AVX-512 Only64BitAggr}$");
+#endif
 #endif
 	return 0;
 }

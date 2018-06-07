@@ -31,6 +31,7 @@ Primitives::partial_shuffle_scalar(idx_t* RESTRICT gids, sel_t* RESTRICT aggr_se
 	#define new_group(n, dstpos) \
 		do { \
 			if (UNLIKELY(buf_ins##n >= buf_end##n)) { \
+				printf("gid %d -> %d, %d\n", gid, gid & 0xFF, gid >> 8); \
 				assert(false && "bail out"); /* Never happens in Q1 */ \
 			} \
 			*dstpos = buf_ins##n; \
@@ -578,7 +579,7 @@ int Primitives::ordaggr_quantity(AggrHashTable* RESTRICT aggr0, idx_t* RESTRICT 
         },
         [&] (auto group_idx) { /* Finalize aggregate*/
             auto g = grp[group_idx];
-            aggrs0[g].sum_quantity += ag_sum_quantity;
+            aggr0[g].sum_quantity += ag_sum_quantity;
         });
 };
 
@@ -595,7 +596,7 @@ int Primitives::ordaggr_extended_price(AggrHashTable* RESTRICT aggr0, idx_t* RES
 		},
 		[&] (auto group_idx) { /* Finalize aggregate*/
 			auto g = grp[group_idx];
-			aggrs0[g].sum_base_price += ag_sum_base_price;
+			aggr0[g].sum_base_price += ag_sum_base_price;
 		});	
 }
 
@@ -612,7 +613,7 @@ int Primitives::ordaggr_disc_price(AggrHashTable* RESTRICT aggr0, idx_t* RESTRIC
 		},
 		[&] (auto group_idx) { /* Finalize aggregate*/
 			auto g = grp[group_idx];
-			aggrs0[g].sum_disc_price = int128_add64(aggrs0[g].sum_disc_price, ag_sum_disc_price);
+			aggr0[g].sum_disc_price = int128_add64(aggr0[g].sum_disc_price, ag_sum_disc_price);
 		});	
 }
 
@@ -629,7 +630,7 @@ int Primitives::ordaggr_charge(AggrHashTable* RESTRICT aggr0, idx_t* RESTRICT po
 		},
 		[&] (auto group_idx) { /* Finalize aggregate*/
 			auto g = grp[group_idx];
-			aggrs0[g].sum_charge = int128_add64(aggrs0[g].sum_charge, ag_sum_charge);
+			aggr0[g].sum_charge = int128_add64(aggr0[g].sum_charge, ag_sum_charge);
 		});	
 }
 
@@ -646,7 +647,7 @@ int Primitives::ordaggr_disc(AggrHashTable* RESTRICT aggr0, idx_t* RESTRICT pos,
 		},
 		[&] (auto group_idx) { /* Finalize aggregate*/
 			auto g = grp[group_idx];
-			aggrs0[g].sum_disc += ag_sum_disc;
+			aggr0[g].sum_disc += ag_sum_disc;
 		});	
 }
 
@@ -654,7 +655,7 @@ int Primitives::ordaggr_count(AggrHashTable* RESTRICT aggr0, idx_t* RESTRICT pos
 {
 	size_t i = 0;
 	for (int g=0; g<num_groups; g++) {
-		aggrs0[grp[g]].count += lim[g] - i;
+		aggr0[grp[g]].count += lim[g] - i;
 		i = lim[g];
 	}
 }
@@ -916,12 +917,12 @@ int Primitives::ordaggr_all_in_one(AggrHashTable* RESTRICT aggr0, idx_t* RESTRIC
 		[&] (auto group_idx, auto first) { /* Finalize aggregate*/
 			auto g = grp[group_idx]; /* Figure out the real group */
 
-			aggrs0[g].sum_quantity += ag_sum_quantity;
-			aggrs0[g].sum_base_price += ag_sum_base_price;
-			aggrs0[g].sum_disc_price = int128_add64(aggrs0[g].sum_disc_price, ag_sum_disc_price);
-			aggrs0[g].sum_charge = int128_add64(aggrs0[g].sum_charge, ag_sum_charge);
-			aggrs0[g].sum_disc += ag_sum_disc;
-			aggrs0[g].count += lim[group_idx] - first;
+			aggr0[g].sum_quantity += ag_sum_quantity;
+			aggr0[g].sum_base_price += ag_sum_base_price;
+			aggr0[g].sum_disc_price = int128_add64(aggr0[g].sum_disc_price, ag_sum_disc_price);
+			aggr0[g].sum_charge = int128_add64(aggr0[g].sum_charge, ag_sum_charge);
+			aggr0[g].sum_disc += ag_sum_disc;
+			aggr0[g].count += lim[group_idx] - first;
 		});	
 }
 
@@ -952,12 +953,12 @@ int Primitives::old_ordaggr_all_in_one(AggrHashTable* RESTRICT aggr0, idx_t* RES
 		[&] (auto group_idx, auto first) { /* Finalize aggregate*/
 			auto g = grp[group_idx]; /* Figure out the real group */
 
-			aggrs0[g].sum_quantity += ag_sum_quantity;
-			aggrs0[g].sum_base_price += ag_sum_base_price;
-			aggrs0[g].sum_disc_price = int128_add64(aggrs0[g].sum_disc_price, ag_sum_disc_price);
-			aggrs0[g].sum_charge = int128_add64(aggrs0[g].sum_charge, ag_sum_charge);
-			aggrs0[g].sum_disc += ag_sum_disc;
-			aggrs0[g].count += lim[group_idx] - first;
+			aggr0[g].sum_quantity += ag_sum_quantity;
+			aggr0[g].sum_base_price += ag_sum_base_price;
+			aggr0[g].sum_disc_price = int128_add64(aggr0[g].sum_disc_price, ag_sum_disc_price);
+			aggr0[g].sum_charge = int128_add64(aggr0[g].sum_charge, ag_sum_charge);
+			aggr0[g].sum_disc += ag_sum_disc;
+			aggr0[g].count += lim[group_idx] - first;
 		});	
 }
 

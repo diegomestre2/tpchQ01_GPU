@@ -1,49 +1,8 @@
 #include "common.hpp"
 #include <cassert>
 
-AggrHashTable aggrs0[MAX_GROUPS] ALIGN;
-
-int64_t aggr_dsm0_sum_quantity[MAX_GROUPS] ALIGN;
-int64_t aggr_dsm0_count[MAX_GROUPS] ALIGN;
-int64_t aggr_dsm0_sum_base_price[MAX_GROUPS] ALIGN;
-int128_t aggr_dsm0_sum_disc_price[MAX_GROUPS] ALIGN;
-int128_t aggr_dsm0_sum_charge[MAX_GROUPS] ALIGN;
-int64_t aggr_dsm0_sum_disc[MAX_GROUPS] ALIGN;
-
-int64_t aggr_avx0_count[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_quantity[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_base_price[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_disc_price_lo[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_disc_price_hi[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_charge_lo[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_charge_hi[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_disc[AVX_GROUPS] ALIGN;
-
-#define init_table(ag) memset(&aggrs##ag, 0, sizeof(aggrs##ag))
-#define clear(x) memset(x, 0, sizeof(x))
-
-extern "C" void
-clear_tables()
-{
-	init_table(0);
-
-	clear(aggr_dsm0_sum_quantity);
-	clear(aggr_dsm0_count);
-	clear(aggr_dsm0_sum_base_price);
-	clear(aggr_dsm0_sum_disc_price);
-	clear(aggr_dsm0_sum_charge);
-	clear(aggr_dsm0_sum_disc);
-
-	clear(aggr_avx0_count);
-	clear(aggr_avx0_sum_quantity);
-	clear(aggr_avx0_sum_base_price);
-	clear(aggr_avx0_sum_disc_price_lo);
-	clear(aggr_avx0_sum_charge_lo);
-	clear(aggr_avx0_sum_disc_price_hi);
-	clear(aggr_avx0_sum_charge_hi);
-	clear(aggr_avx0_sum_disc);
-
-}
+#define clear(x) memset(x, 0, sizeof(x[0]) * MAX_GROUPS)
+#define clear_avx(x) memset(x, 0, sizeof(x[0]) * AVX_GROUPS)
 
 extern "C" __attribute__((noinline)) void
 handle_overflow()
@@ -97,9 +56,54 @@ BaseKernel::Profile(size_t total_tuples)
 
 }
 
+BaseKernel::BaseKernel(const lineitem& li)
+ : cmp(Date("1998-12-01", -1, -90) /* 1998-12-01 minus 90 days is */),
+	li(li), sum_aggr_time(0), sum_magic_time(0)
+{
+	aggrs0 = new_array<AggrHashTable>(MAX_GROUPS);
+
+	aggr_dsm0_sum_quantity = new_array<int64_t>(MAX_GROUPS);
+	aggr_dsm0_count = new_array<int64_t>(MAX_GROUPS);
+	aggr_dsm0_sum_base_price = new_array<int64_t>(MAX_GROUPS);
+	aggr_dsm0_sum_disc_price = new_array<int128_t>(MAX_GROUPS);
+	aggr_dsm0_sum_charge = new_array<int128_t>(MAX_GROUPS);
+	aggr_dsm0_sum_disc = new_array<int64_t>(MAX_GROUPS);
+
+	aggr_avx0_count = new_array<int64_t>(AVX_GROUPS);
+	aggr_avx0_sum_quantity = new_array<int64_t>(AVX_GROUPS);
+	aggr_avx0_sum_base_price = new_array<int64_t>(AVX_GROUPS);
+	aggr_avx0_sum_disc_price_lo = new_array<int64_t>(AVX_GROUPS);
+	aggr_avx0_sum_disc_price_hi = new_array<int64_t>(AVX_GROUPS);
+	aggr_avx0_sum_charge_lo = new_array<int64_t>(AVX_GROUPS);
+	aggr_avx0_sum_charge_hi = new_array<int64_t>(AVX_GROUPS);
+	aggr_avx0_sum_disc = new_array<int64_t>(AVX_GROUPS);
+}
+
+void
+BaseKernel::Clear()
+{
+	clear(aggrs0);
+
+	clear(aggr_dsm0_sum_quantity);
+	clear(aggr_dsm0_count);
+	clear(aggr_dsm0_sum_base_price);
+	clear(aggr_dsm0_sum_disc_price);
+	clear(aggr_dsm0_sum_charge);
+	clear(aggr_dsm0_sum_disc);
+
+	clear_avx(aggr_avx0_count);
+	clear_avx(aggr_avx0_sum_quantity);
+	clear_avx(aggr_avx0_sum_base_price);
+	clear_avx(aggr_avx0_sum_disc_price_lo);
+	clear_avx(aggr_avx0_sum_charge_lo);
+	clear_avx(aggr_avx0_sum_disc_price_hi);
+	clear_avx(aggr_avx0_sum_charge_hi);
+	clear_avx(aggr_avx0_sum_disc);
+}
+
 IKernel::~IKernel()
 {
-	if (m_clean) {
+	if (m_clean && false) {
 		for (auto p : m_alloced) {
 			free(p);
 		}	

@@ -133,6 +133,10 @@ struct KernelX100 : BaseKernel {
 	}
 
 	NOINL void operator()() {
+		task(0, li.l_extendedprice.cardinality);
+	}
+
+	NOINL void task(size_t offset, size_t morsel_num) {
 		kernel_prologue();
 
 		/* Ommitted vector allocation on stack, 
@@ -144,18 +148,31 @@ struct KernelX100 : BaseKernel {
 		const int8_t int8_t_one_tax = (int8_t)Decimal64::ToValue(1, 0);
 
 		scan(shipdate);
+		v_shipdate += offset;
+
 		scan(returnflag);
+		v_returnflag += offset;
+
 		scan(linestatus);
+		v_linestatus += offset;
+
 		scan(discount);
+		v_discount += offset;
+
 		scan(tax);
+		v_tax += offset;
+
 		scan(extendedprice);
+		v_extendedprice += offset;
+
 		scan(quantity);
+		v_quantity += offset;
 
 
 		size_t done=0;
-		while (done < cardinality) {
+		while (done < morsel_num) {
 			sel_t* sel = v_sel;
-			const size_t chunk_size = min(kVectorsize, cardinality - done);
+			const size_t chunk_size = min(kVectorsize, morsel_num - done);
 
 			size_t n = chunk_size;
 
@@ -383,5 +400,204 @@ struct KernelX100 : BaseKernel {
 	#undef scan_epilogue
 
 };
+
+#include <thread>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+
+template<typename KERNEL>
+struct Morsel : BaseKernel {
+
+	std::vector<std::thread> workers;
+	std::vector<KERNEL*> states;
+
+	size_t num_morsels;
+	std::atomic<size_t> morsel_start;
+	std::atomic<size_t> morsel_completed;
+
+	std::mutex lock_query;
+	std::condition_variable cond_finished;
+	std::condition_variable cond_start;
+
+	enum Stage {
+		UNCLEAR = 0,
+		DONE,
+		QUERY,
+		DTOR,
+	};
+
+	Stage stage;
+
+	const size_t morsel_size = 10*1024;
+
+	NOINL void Query(size_t id) {
+		auto& s = *states[id];
+		const size_t cardinality = li.l_extendedprice.cardinality;
+
+		// process all morsels
+		while (morsel_start < cardinality) {
+			size_t offset = morsel_start.fetch_add(morsel_size);
+			if (offset >= cardinality) {
+				break;
+			}
+
+			size_t num = min(morsel_size, cardinality - offset);
+
+			s.task(offset, num);
+
+			if (morsel_completed++ >= num_morsels) {
+				std::unique_lock<std::mutex> lock(lock_query);
+				cond_finished.notify_all();
+				break;
+			}
+		}
+
+		// propagate partial results to global table
+		for (size_t group=0; group<MAX_GROUPS; group++) {
+			if (s.aggrs0[group].count > 0) {
+				#define FADD(NAME) __sync_fetch_and_add(&aggrs0[group].NAME, s.aggrs0[group].NAME)
+				FADD(sum_quantity);
+				FADD(sum_base_price);
+				FADD(sum_disc);
+				FADD(sum_disc_price);
+				FADD(sum_charge);
+				FADD(count);
+			}
+		}
+
+		// well ... this worker's job is done
+		stage = DONE;
+	}
+
+	void Work(size_t id) {
+		bool query = false;
+
+		{
+			std::unique_lock<std::mutex> lock(lock_query);
+			assert(!states[id]);
+			states[id] = new KERNEL(li);
+			cond_finished.notify_all();
+		}
+
+		while (true) {
+			{
+				std::unique_lock<std::mutex> lock(lock_query);
+
+				while (stage != DTOR && stage != QUERY) {
+					cond_start.wait(lock);
+				}
+
+				query = stage == QUERY;
+				if (stage == DTOR) {
+					return;
+				}
+			}
+
+			if (query) {
+				Query(id);
+			}
+		}
+		
+		delete states[id];
+		states[id] = nullptr;
+	}
+	
+	Morsel(const lineitem& li) : BaseKernel(li) {
+		size_t threadinhos = std::thread::hardware_concurrency();
+		threadinhos/=2;
+		if (threadinhos < 1) {
+			threadinhos = 1;
+		}
+
+		{
+			std::unique_lock<std::mutex> lock(lock_query);
+			stage = DONE;
+
+			states.resize(threadinhos);
+			for (size_t i=0; i<threadinhos; i++) {
+				states[i] = nullptr;
+			}
+		}
+
+		for (size_t i=0; i<threadinhos; i++) {
+			workers.push_back(std::thread(&Morsel::Work, this, i));
+
+			// set affinity
+			cpu_set_t cpuset;
+			CPU_ZERO(&cpuset);
+			CPU_SET(i, &cpuset);
+			int rc = pthread_setaffinity_np(workers[i].native_handle(), sizeof(cpu_set_t), &cpuset);
+			assert(rc == 0 && "Setting affinity failed");
+		}
+
+		{ // wait until all are up and running
+			std::unique_lock<std::mutex> lock(lock_query);
+
+			while (true) {
+				bool all_up = true;
+				for (auto& s : states) {
+					all_up &= !!s;
+				}	
+				if (!all_up) {
+					cond_finished.wait(lock);
+				} else {
+					break;
+				}
+			}
+		}
+	}
+
+	void Profile(size_t total_tuples) override {
+	}
+
+	NOINL void operator()() {
+		const size_t cardinality = li.l_extendedprice.cardinality;
+		// start threads
+		{
+			std::unique_lock<std::mutex> lock(lock_query);
+			num_morsels = cardinality / morsel_size;
+			morsel_start = 0;
+			morsel_completed = 0;
+			stage = QUERY;
+			cond_start.notify_all();
+		}
+
+		// wait for completion
+		{
+			std::unique_lock<std::mutex> lock(lock_query);
+			while (morsel_completed < num_morsels) {
+				cond_finished.wait(lock);
+			}
+
+			stage = DONE;
+		}
+	}
+
+	virtual void Clear() override
+	{
+		for (auto& s : states) {
+			s->Clear();
+		}
+
+		BaseKernel::Clear();
+	}
+
+	~Morsel() {
+		{
+			std::unique_lock<std::mutex> lock(lock_query);
+			cond_start.notify_all();
+			stage = DTOR;
+		}
+
+		for (auto& w : workers) {
+			if (!w.joinable()) {
+				continue;
+			}
+			w.join();
+		}
+	}
+};
+
 
 #endif

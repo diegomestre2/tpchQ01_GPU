@@ -231,7 +231,7 @@ public:
 		return r;
 	}
 
-	~IKernel();
+	virtual ~IKernel();
 };
 
 struct BaseKernel : IKernel {
@@ -241,9 +241,28 @@ struct BaseKernel : IKernel {
 	int64_t sum_aggr_time;
 	int64_t sum_magic_time;
 
-	BaseKernel(const lineitem& li)
-	 : cmp(Date("1998-12-01", -1, -90) /* 1998-12-01 minus 90 days is */), li(li), sum_aggr_time(0), sum_magic_time(0) {
-	}
+
+	AggrHashTable* aggrs0;
+
+	int64_t* aggr_dsm0_sum_quantity;
+	int64_t* aggr_dsm0_count;
+	int64_t* aggr_dsm0_sum_base_price;
+	int128_t* aggr_dsm0_sum_disc_price;
+	int128_t* aggr_dsm0_sum_charge;
+	int64_t* aggr_dsm0_sum_disc;
+
+	int64_t* aggr_avx0_count;
+	int64_t* aggr_avx0_sum_quantity;
+	int64_t* aggr_avx0_sum_base_price;
+	int64_t* aggr_avx0_sum_disc_price_lo;
+	int64_t* aggr_avx0_sum_disc_price_hi;
+	int64_t* aggr_avx0_sum_charge_lo;
+	int64_t* aggr_avx0_sum_charge_hi;
+	int64_t* aggr_avx0_sum_disc;
+
+
+	BaseKernel(const lineitem& li);
+	virtual void Clear();
 
 
 public:
@@ -254,25 +273,6 @@ public:
 extern "C" __attribute__((noinline)) void handle_overflow();
 
 extern "C" void clear_tables();
-
-extern AggrHashTable aggrs0[];
-
-extern int64_t aggr_dsm0_sum_quantity[];
-extern int64_t aggr_dsm0_count[];
-extern int64_t aggr_dsm0_sum_base_price[];
-extern int128_t aggr_dsm0_sum_disc_price[];
-extern int128_t aggr_dsm0_sum_charge[];
-extern int64_t aggr_dsm0_sum_disc[];
-
-extern int64_t aggr_avx0_count[];
-extern int64_t aggr_avx0_sum_quantity[];
-extern int64_t aggr_avx0_sum_base_price[];
-extern int64_t aggr_avx0_sum_disc_price_lo[];
-extern int64_t aggr_avx0_sum_disc_price_hi[];
-extern int64_t aggr_avx0_sum_charge_lo[];
-extern int64_t aggr_avx0_sum_charge_hi[];
-extern int64_t aggr_avx0_sum_disc[];
-
 
 inline static int64_t
 m128_hsum_epi64(__m128i a)

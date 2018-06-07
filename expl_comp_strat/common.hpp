@@ -5,6 +5,7 @@
 #define PRINT_RESULTS
 //#define PRINT_MINMAX
 using u64_t = unsigned long long int;
+using u32_t = unsigned long int;
 
 #include <sstream>
 #include <vector>
@@ -150,15 +151,6 @@ using Decimal32 = Decimal<9, 2>;
 using Decimal64 = Decimal<15, 2>;
 using Decimal128 = Decimal<15, 2, int128_t>;
 
-struct AggrHashTableLocal {
-	u64_t sum_quantity;
-	u64_t count;
-	u64_t sum_base_price;
-	u64_t sum_disc;
-	u64_t sum_disc_price;
-	u64_t sum_charge;
-};
-
 struct AggrHashTable {
 	u64_t sum_quantity;
 	u64_t count;
@@ -170,27 +162,14 @@ struct AggrHashTable {
 	u64_t sum_charge_hi;
 };
 
-struct AggrHashTableKey {
-	int32_t key;
-	int64_t sum_quantity;
-	int64_t count;
-	int64_t sum_base_price;
-	int64_t sum_disc;
-	int64_t sum_disc_price;
-	int64_t sum_charge;
+struct AggrHashTableLocal {
+	u64_t sum_quantity;
+	u64_t count;
+	u64_t sum_base_price;
+	u64_t sum_disc;
+	u64_t sum_disc_price;
+	u64_t sum_charge;
 };
-
-#define kernel_prologue() \
-	auto _shipdate = li.l_shipdate.get(); \
-	auto _returnflag = li.l_returnflag.get(); \
-	auto _linestatus = li.l_linestatus.get(); \
-	auto _discount = li.l_discount.get(); \
-	auto _tax = li.l_tax.get(); \
-	auto _extendedprice = li.l_extendedprice.get(); \
-	auto _quantity = li.l_quantity.get(); \
-	cardinality = li.l_extendedprice.cardinality;
-
-#define kernel_epilogue()
 
 #define kernel_compact_declare \
     int16_t* RESTRICT l_shipdate; \

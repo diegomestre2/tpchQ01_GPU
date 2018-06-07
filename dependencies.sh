@@ -1,13 +1,5 @@
 #!/bin/bash
 
-if grep -q "# -- CONFIGURATION -- #"  ~/.bashrc
-then
-	echo "Found Configuration";
-else
-	source configuration.sh
-	cat configuration.sh >> ~/.bashrc;
-fi
-
 if [ ! -d cub ]
 then
 	git clone https://github.com/NVlabs/cub

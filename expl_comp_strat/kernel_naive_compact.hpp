@@ -29,8 +29,8 @@ struct KernelNaiveCompact : BaseKernel {
 		}
 	}
 
-	__attribute__((noinline)) void operator()() noexcept {
-		//kernel_small_dt_prologue();
+	__attribute__((noinline)) void operator()() noexcept compressed::{
+		//kernel_dt_prologue();
 		kernel_prologue();
 
 		const int8_t one = Decimal64::ToValue(1, 0);

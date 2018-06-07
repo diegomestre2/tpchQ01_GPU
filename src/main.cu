@@ -174,6 +174,7 @@ void print_help() {
     fprintf(stderr, "   --use-global-ht\n");
     fprintf(stderr, "   --no-pinned-memory\n");
     fprintf(stderr, "   --use-small-datatypes\n");
+    fprintf(stderr, "   --use-coalescing\n");
 }
 
 int main(int argc, char** argv) {
@@ -193,6 +194,7 @@ int main(int argc, char** argv) {
     bool USE_PINNED_MEMORY = true;
     bool USE_GLOBAL_HT = false;
     bool USE_SMALL_DATATYPES = false;
+    bool USE_COALESCING = false;
 
     double sf = 1;
     std::string sf_argument = "--sf=";
@@ -204,6 +206,8 @@ int main(int argc, char** argv) {
             USE_GLOBAL_HT = true;
         } else if (arg == "--use-small-datatypes") {
             USE_SMALL_DATATYPES = true;
+        } else if (arg == "--use-coalescing") {
+            USE_COALESCING = true;
         } else if (arg.substr(0, sf_argument.size()) == sf_argument) {
             sf = std::stod(arg.substr(sf_argument.size()));
         } else {
@@ -379,27 +383,53 @@ int main(int argc, char** argv) {
             auto start_kernel = timer::now();
             if (!USE_GLOBAL_HT) {
                 if (USE_SMALL_DATATYPES) {
-                    cuda::thread_local_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                        (SHIPDATE_TYPE_SMALL*) s.shipdate,
-                        (DISCOUNT_TYPE_SMALL*) s.discount,
-                        (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
-                        (TAX_TYPE_SMALL*) s.tax,
-                        (RETURNFLAG_TYPE_SMALL*)s.rf,
-                        (LINESTATUS_TYPE_SMALL*)s.ls,
-                        (QUANTITY_TYPE_SMALL*) s.quantity,
-                        d_aggregations.get(),
-                        (u64_t) size);
+                    if(USE_COALESCING){
+                        cuda::thread_local_tpchQ01_small_datatypes_coalesced<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                            (SHIPDATE_TYPE_SMALL*) s.shipdate,
+                            (DISCOUNT_TYPE_SMALL*) s.discount,
+                            (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
+                            (TAX_TYPE_SMALL*) s.tax,
+                            (RETURNFLAG_TYPE_SMALL*)s.rf,
+                            (LINESTATUS_TYPE_SMALL*)s.ls,
+                            (QUANTITY_TYPE_SMALL*) s.quantity,
+                            d_aggregations.get(),
+                            (u64_t) size);
+                    } else {
+                        cuda::thread_local_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                            (SHIPDATE_TYPE_SMALL*) s.shipdate,
+                            (DISCOUNT_TYPE_SMALL*) s.discount,
+                            (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
+                            (TAX_TYPE_SMALL*) s.tax,
+                            (RETURNFLAG_TYPE_SMALL*)s.rf,
+                            (LINESTATUS_TYPE_SMALL*)s.ls,
+                            (QUANTITY_TYPE_SMALL*) s.quantity,
+                            d_aggregations.get(),
+                            (u64_t) size);
+                    }
                 } else {
-                    cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                        s.shipdate,
-                        s.discount,
-                        s.eprice,
-                        s.tax,
-                        s.rf,
-                        s.ls,
-                        s.quantity,
-                        d_aggregations.get(),
-                        (u64_t) size);
+                    if(USE_COALESCING){
+                        cuda::thread_local_tpchQ01_coalesced<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                            s.shipdate,
+                            s.discount,
+                            s.eprice,
+                            s.tax,
+                            s.rf,
+                            s.ls,
+                            s.quantity,
+                            d_aggregations.get(),
+                            (u64_t) size);
+                    } else {
+                        cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
+                            s.shipdate,
+                            s.discount,
+                            s.eprice,
+                            s.tax,
+                            s.rf,
+                            s.ls,
+                            s.quantity,
+                            d_aggregations.get(),
+                            (u64_t) size);
+                    }
                 }
             } else {
                 if (USE_SMALL_DATATYPES) {

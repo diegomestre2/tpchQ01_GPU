@@ -21,6 +21,7 @@ namespace cuda {
 
         u64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
         u64_t end = min((u64_t)cardinality, i + VALUES_PER_THREAD);
+        
         for(; i < end; ++i) {
             if (shipdate[i] <= 729999) {
                 const int disc = discount[i];

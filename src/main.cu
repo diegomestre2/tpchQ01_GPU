@@ -207,6 +207,8 @@ int main(int argc, char** argv) {
 
     std::vector<stream_input_buffer_set> stream_input_buffer_sets;
     std::vector<cuda::stream_t<>> streams;
+	stream_input_buffer_sets.reserve(num_gpu_streams);
+	streams.reserve(num_gpu_streams);
         // We'll be scheduling (most of) our work in a round-robin fashion on all of
         // the streams, to prevent the GPU from idling.
 
@@ -223,7 +225,7 @@ int main(int argc, char** argv) {
         };
         stream_input_buffer_sets.emplace_back(std::move(input_buffers));
         auto stream = cuda_device.create_stream(cuda::stream::async);
-        streams.emplace_back(stream);
+        streams.emplace_back(std::move(stream));
     }
 
     double copy_time = 0;

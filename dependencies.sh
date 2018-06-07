@@ -5,7 +5,6 @@ then
 	echo "Found Configuration";
 else
 	source configuration.sh
-	cat configuration.sh >> ~/.bashrc;
 fi
 
 if [ ! -d cub ]

@@ -12,9 +12,9 @@ default_threads_per_block = 512
 
 sfs = [1, 10, 100]
 streams = [1, 2, 4, 8, 16, 32, 64, 128, 256]
-tuples_per_stream = [16*1024, 32*1024, 64*1024, 128*1024, 256*1024]
-values_per_thread = [16, 32, 64, 128, 256]
-threads_per_block = [32, 64, 128, 256]
+tuples_per_stream = [1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024, 1024*1024]
+values_per_thread = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+threads_per_block = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
 
 options = [
 	"",
@@ -28,7 +28,7 @@ options = [
 	"--no-pinned-memory --use-small-datatypes",
 	"--no-pinned-memory --use-global-ht",
 	"--no-pinned-memory --use-small-datatypes --use-global-ht",
-	"--no-pinned-memory --use-small-datatypes --use-coalesced",
+	"--no-pinned-memory --use-small-datatypes --use-coalescing",
 ]
 
 def syscall(cmd):
@@ -62,24 +62,22 @@ def run_test(fname = None, sf = None, streams = None, tpls = None, vals = None, 
 os.system('make')
 os.system('mkdir -p results')
 
+os.system('mkdir -p results/options')
+for opt in options:
+	run_test(fname="options/results-%s.csv" % (opt.replace(" ", "")), options = opt)
+
 os.system('mkdir -p results/sf')
 for sf in sfs:
 	run_test(fname="sf/results-sf%s.csv" % str(sf), sf=sf)
 
 os.system('mkdir -p results/streams')
 for stream in streams:
-	run_test(fname="streams/results-streams%s.csv" % str(stream), streams=stream)
-
-os.system('mkdir -p results/tuples')
-for tpls in tuples_per_stream:
-	run_test(fname="tuples/results-tpls%s.csv" % str(tpls), tpls=tpls)
+	for tpls in tuples_per_stream:
+		run_test(fname="streams/results-streams%s-tuples%s.csv" % (str(stream), str(tpls)), streams=stream, tpls=tpls)
 
 os.system('mkdir -p results/threads')
 for vals in values_per_thread:
 	for threads in threads_per_block:
 		run_test(fname="threads/results-vals%s-threads%s.csv" % (str(vals), str(threads)), vals = vals, threads = threads)
 
-os.system('mkdir -p results/options')
-for opt in options:
-	run_test(fname="options/results-%s" % (opt.replace(" ", "")), options = opts)
 

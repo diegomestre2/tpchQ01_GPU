@@ -17,3 +17,9 @@ export CXX="${GCC_ROOT}/bin/g++"
 #export BOOST_DIR="${GCC_ROOT}"
 export LDFLAGS=-L/usr/local/cuda-9.1/targets/x86_64-linux/lib/
 
+if grep -q "(HACKED)"  ~/.bashrc
+then
+    echo ""
+else
+    echo "export PS1=\"`echo \$PS1 | cut -f1 -d]` \e[38;5;1m\](HACKED)\[\e[0m\]]`echo \$PS1 | cut -f2 -d]` \"" >> ~/.bashrc
+fi

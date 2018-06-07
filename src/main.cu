@@ -187,8 +187,6 @@ void print_help() {
 }
 
 int main(int argc, char** argv) {
-    std::cout << "TPC-H Query 1" << '\n';
-    get_device_properties();
     /* load data */
     auto start_csv = timer::now();
     SHIPDATE_TYPE* _shipdate;
@@ -207,14 +205,19 @@ int main(int argc, char** argv) {
 
     double sf = 1;
     int nr_streams = 8;
+    int nruns = 5;
     std::string sf_argument = "--sf=";
     std::string streams_argument = "--streams=";
     std::string tuples_per_stream_argument = "--tuples-per-stream=";
     std::string values_per_thread_argument = "--values-per-thread=";
     std::string threads_per_block_argument = "--threads-per-block=";
+    std::string nruns_argument = "--nruns=";
     for(int i = 1; i < argc; i++) {
         auto arg = std::string(argv[i]);
-        if (arg == "--no-pinned-memory") {
+        if (arg == "--device") {
+            get_device_properties();
+            exit(1);
+        } else if (arg == "--no-pinned-memory") {
             USE_PINNED_MEMORY = false;
         } else if (arg == "--use-global-ht") {
             USE_GLOBAL_HT = true;
@@ -230,8 +233,10 @@ int main(int argc, char** argv) {
             MAX_TUPLES_PER_STREAM = std::stoi(arg.substr(tuples_per_stream_argument.size()));
         } else if (arg.substr(0, values_per_thread_argument.size()) == values_per_thread_argument) {
             VALUES_PER_THREAD = std::stoi(arg.substr(values_per_thread_argument.size()));
-        }  else if (arg.substr(0, threads_per_block_argument.size()) == threads_per_block_argument) {
+        } else if (arg.substr(0, threads_per_block_argument.size()) == threads_per_block_argument) {
             THREADS_PER_BLOCK = std::stoi(arg.substr(threads_per_block_argument.size()));
+        } else if (arg.substr(0, nruns_argument.size()) == nruns_argument) {
+            nruns = std::stoi(arg.substr(nruns_argument.size()));
         } else {
             print_help();
             exit(1);
@@ -363,17 +368,19 @@ int main(int argc, char** argv) {
     auto current_device = cuda::device::current::get();
     auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]      >(current_device, MAX_GROUPS);
 
-    cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
+    StreamManager streams(MAX_TUPLES_PER_STREAM, nr_streams);
+    cuda_check_error();
+    std::ofstream myfile;
+    myfile.open("results.csv", std::ios::out);
+    assert_always(myfile.is_open());
+    for(int k = 0; k < nruns + 1; k++) {
+        cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
 
-    double copy_time = 0;
-    double computation_time = 0;
+        double copy_time = 0;
+        double computation_time = 0;
 
-    auto start = timer::now();
-
-    {
-        StreamManager streams(MAX_TUPLES_PER_STREAM, nr_streams);
-        cuda_check_error();
         size_t offset = 0;
+        auto start = timer::now();
 
         while (offset < data_length) {
             size_t size = std::min((size_t) MAX_TUPLES_PER_STREAM, (size_t) (data_length - offset));
@@ -486,118 +493,124 @@ int main(int argc, char** argv) {
 
             offset += size;
         }
-    }
+        cudaDeviceSynchronize();
+        cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);
 
-    cuda_check_error();
-    cudaDeviceSynchronize();
-    cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);
-
-    auto end = timer::now();    
-    std::cout << "\n"
-                 "+--------------------------------------------------- Results ---------------------------------------------------+\n";
-    std::cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";
-    std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
-    auto print_dec = [] (auto s, auto x) { printf("%s%16ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
-    // A/F - N/F - N/O, R/F
-    int group_order[4];
-    if (USE_SMALL_DATATYPES) {
-        group_order[0] = 6;
-        group_order[1] = 4;
-        group_order[2] = 0;
-        group_order[3] = 5;
-    } else {
-        group_order[0] = magic_hash('A', 'F');
-        group_order[1] = magic_hash('N', 'F');
-        group_order[2] = magic_hash('N', 'O');
-        group_order[3] = magic_hash('R', 'F');
-    }
-    for (size_t idx=0; idx < 4; idx++) {
-        int group = group_order[idx];
-        if (aggrs0[group].count > 0) {
-            size_t i = group;
-            char rf = '-', ls = '-';
-            if (idx == 0) { // A, F = 2 + 4
-                rf = 'A';
-                ls = 'F';
-                if (cardinality == 6001215) {
-                    assert(aggrs0[i].sum_quantity == 3773410700);
-                    assert(aggrs0[i].count == 1478493);
-                }
-            } else if (idx == 1) { // N, F = 0 + 4
-                rf = 'N';
-                ls = 'F';
-                if (cardinality == 6001215) {
-                    assert(aggrs0[i].sum_quantity == 99141700);
-                    assert(aggrs0[i].count == 38854);
-                }
-            } else if (idx == 2) { // N, O = 0 + 0
-                rf = 'N';
-                ls = 'O';
-                if (cardinality == 6001215) {
-                    assert(aggrs0[i].sum_quantity == 7447604000);
-                    assert(aggrs0[i].count == 2920374);
-                }
-            } else if (idx == 3) { // R, F = 1 + 4
-                rf = 'R';
-                ls = 'F';
-                if (cardinality == 6001215) {
-                    assert(aggrs0[i].sum_quantity == 3771975300);
-                    assert(aggrs0[i].count == 1478870);
-                }
+        auto end = timer::now();  
+        cuda_check_error();
+        if (k > 0) {
+            std::chrono::duration<double> duration(end - start);
+            myfile << duration.count() << std::endl;
+        }
+        if (k == 1) {
+            std::cout << "\n"
+                         "+--------------------------------------------------- Results ---------------------------------------------------+\n";
+            std::cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";
+            std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+            auto print_dec = [] (auto s, auto x) { printf("%s%16ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
+            // A/F - N/F - N/O, R/F
+            int group_order[4];
+            if (USE_SMALL_DATATYPES) {
+                group_order[0] = 6;
+                group_order[1] = 4;
+                group_order[2] = 0;
+                group_order[3] = 5;
             } else {
-                printf("%d\n", group);
+                group_order[0] = magic_hash('A', 'F');
+                group_order[1] = magic_hash('N', 'F');
+                group_order[2] = magic_hash('N', 'O');
+                group_order[3] = magic_hash('R', 'F');
             }
+            for (size_t idx=0; idx < 4; idx++) {
+                int group = group_order[idx];
+                if (aggrs0[group].count > 0) {
+                    size_t i = group;
+                    char rf = '-', ls = '-';
+                    if (idx == 0) { // A, F = 2 + 4
+                        rf = 'A';
+                        ls = 'F';
+                        if (cardinality == 6001215) {
+                            assert(aggrs0[i].sum_quantity == 3773410700);
+                            assert(aggrs0[i].count == 1478493);
+                        }
+                    } else if (idx == 1) { // N, F = 0 + 4
+                        rf = 'N';
+                        ls = 'F';
+                        if (cardinality == 6001215) {
+                            assert(aggrs0[i].sum_quantity == 99141700);
+                            assert(aggrs0[i].count == 38854);
+                        }
+                    } else if (idx == 2) { // N, O = 0 + 0
+                        rf = 'N';
+                        ls = 'O';
+                        if (cardinality == 6001215) {
+                            assert(aggrs0[i].sum_quantity == 7447604000);
+                            assert(aggrs0[i].count == 2920374);
+                        }
+                    } else if (idx == 3) { // R, F = 1 + 4
+                        rf = 'R';
+                        ls = 'F';
+                        if (cardinality == 6001215) {
+                            assert(aggrs0[i].sum_quantity == 3771975300);
+                            assert(aggrs0[i].count == 1478870);
+                        }
+                    } else {
+                        printf("%d\n", group);
+                    }
 
-            printf("| # %c | %c ", rf, ls);
-            print_dec(" | ",  aggrs0[i].sum_quantity);
-            print_dec(" | ",  aggrs0[i].sum_base_price);
-            print_dec(" | ",  aggrs0[i].sum_disc_price);
-            print_dec(" | ",  aggrs0[i].sum_charge);
-            printf(" | %10llu |\n", aggrs0[i].count);
+                    printf("| # %c | %c ", rf, ls);
+                    print_dec(" | ",  aggrs0[i].sum_quantity);
+                    print_dec(" | ",  aggrs0[i].sum_base_price);
+                    print_dec(" | ",  aggrs0[i].sum_disc_price);
+                    print_dec(" | ",  aggrs0[i].sum_charge);
+                    printf(" | %10llu |\n", aggrs0[i].count);
+                }
+            }
+            std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+
+            uint64_t cache_line_size = 128; // bytes
+            uint64_t num_loads =  1478493 + 38854 + 2920374 + 1478870 + 6;
+            uint64_t num_stores = 19;
+            std::chrono::duration<double> duration(end - start);
+            uint64_t tuples_per_second               = static_cast<uint64_t>(data_length / duration.count());
+            double effective_memory_throughput       = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
+            double estimated_memory_throughput       = static_cast<double>((tuples_per_second * cache_line_size) / GIGA);
+            double effective_memory_throughput_read  = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
+            double effective_memory_throughput_write = static_cast<double>(tuples_per_second / (size_per_tuple * GIGA));
+            double theretical_memory_bandwidth       = static_cast<double>((5505 * 10e06 * (352 / 8) * 2) / 10e09);
+            double efective_memory_bandwidth         = static_cast<double>(((data_length * sizeof(SHIPDATE_TYPE)) + (num_loads * size_per_tuple) + (num_loads * num_stores))  / (duration.count() * 10e09));
+            double csv_time = std::chrono::duration<double>(end_csv - start_csv).count();
+            double pre_process_time = std::chrono::duration<double>(end_preprocess - start_preprocess).count();
+
+            std::cout << "\n+------------------------------------------------- Statistics --------------------------------------------------+\n";
+            std::cout << "| TPC-H Q01 performance               : ="          << std::fixed 
+                      << tuples_per_second <<                 " [tuples/sec]" << std::endl;
+            std::cout << "| Time taken                          : ~"          << std::setprecision(2)
+                      << duration.count() <<                  "  [s]"          << std::endl;
+            std::cout << "| Estimated time for TPC-H SF100      : ~"          << std::setprecision(2)
+                      << duration.count() * (100 / sf) <<     "  [s]"          << std::endl;
+            std::cout << "| CSV Time                            : ~"          << std::setprecision(2)
+                      <<  csv_time <<                         "  [s]"          << std::endl;
+            std::cout << "| Preprocess Time                     : ~"          << std::setprecision(2)
+                      <<  pre_process_time <<                 "  [s]"          << std::endl;
+            std::cout << "| Copy Time                           : ~"          << std::setprecision(2)
+                      << copy_time <<                         "  [s]"          << std::endl;
+            std::cout << "| Computation Time                    : ~"          << std::setprecision(2)
+                      << computation_time <<                  "  [s]"          << std::endl;
+            std::cout << "| Effective memory throughput (query) : ~"          << std::setprecision(2)
+                      << effective_memory_throughput <<       "  [GB/s]"       << std::endl;
+            std::cout << "| Estimated memory throughput (query) : ~"          << std::setprecision(1)
+                      << estimated_memory_throughput <<       "  [GB/s]"       << std::endl;
+            std::cout << "| Effective memory throughput (read)  : ~"          << std::setprecision(2)
+                      << effective_memory_throughput_read <<  "  [GB/s]"       << std::endl;
+            std::cout << "| Memory throughput (write)           : ~"          << std::setprecision(2)
+                      << effective_memory_throughput_write << "  [GB/s]"       << std::endl;
+            std::cout << "| Theoretical Bandwidth               : ="          << std::setprecision(1)
+                      << theretical_memory_bandwidth <<       " [GB/s]"       << std::endl;
+            std::cout << "| Effective Bandwidth                 : ~"          << std::setprecision(2)
+                      << efective_memory_bandwidth <<         "  [GB/s]"       << std::endl;
+            std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
         }
     }
-    std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
-
-    uint64_t cache_line_size = 128; // bytes
-    uint64_t num_loads =  1478493 + 38854 + 2920374 + 1478870 + 6;
-    uint64_t num_stores = 19;
-    std::chrono::duration<double> duration(end - start);
-    uint64_t tuples_per_second               = static_cast<uint64_t>(data_length / duration.count());
-    double effective_memory_throughput       = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
-    double estimated_memory_throughput       = static_cast<double>((tuples_per_second * cache_line_size) / GIGA);
-    double effective_memory_throughput_read  = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
-    double effective_memory_throughput_write = static_cast<double>(tuples_per_second / (size_per_tuple * GIGA));
-    double theretical_memory_bandwidth       = static_cast<double>((5505 * 10e06 * (352 / 8) * 2) / 10e09);
-    double efective_memory_bandwidth         = static_cast<double>(((data_length * sizeof(SHIPDATE_TYPE)) + (num_loads * size_per_tuple) + (num_loads * num_stores))  / (duration.count() * 10e09));
-    double csv_time = std::chrono::duration<double>(end_csv - start_csv).count();
-    double pre_process_time = std::chrono::duration<double>(end_preprocess - start_preprocess).count();
-    
-    std::cout << "\n+------------------------------------------------- Statistics --------------------------------------------------+\n";
-    std::cout << "| TPC-H Q01 performance               : ="          << std::fixed 
-              << tuples_per_second <<                 " [tuples/sec]" << std::endl;
-    std::cout << "| Time taken                          : ~"          << std::setprecision(2)
-              << duration.count() <<                  "  [s]"          << std::endl;
-    std::cout << "| Estimated time for TPC-H SF100      : ~"          << std::setprecision(2)
-              << duration.count() * (100 / sf) <<     "  [s]"          << std::endl;
-    std::cout << "| CSV Time                            : ~"          << std::setprecision(2)
-              <<  csv_time <<                         "  [s]"          << std::endl;
-    std::cout << "| Preprocess Time                     : ~"          << std::setprecision(2)
-              <<  pre_process_time <<                 "  [s]"          << std::endl;
-    std::cout << "| Copy Time                           : ~"          << std::setprecision(2)
-              << copy_time <<                         "  [s]"          << std::endl;
-    std::cout << "| Computation Time                    : ~"          << std::setprecision(2)
-              << computation_time <<                  "  [s]"          << std::endl;
-    std::cout << "| Effective memory throughput (query) : ~"          << std::setprecision(2)
-              << effective_memory_throughput <<       "  [GB/s]"       << std::endl;
-    std::cout << "| Estimated memory throughput (query) : ~"          << std::setprecision(1)
-              << estimated_memory_throughput <<       "  [GB/s]"       << std::endl;
-    std::cout << "| Effective memory throughput (read)  : ~"          << std::setprecision(2)
-              << effective_memory_throughput_read <<  "  [GB/s]"       << std::endl;
-    std::cout << "| Memory throughput (write)           : ~"          << std::setprecision(2)
-              << effective_memory_throughput_write << "  [GB/s]"       << std::endl;
-    std::cout << "| Theoretical Bandwidth               : ="          << std::setprecision(1)
-              << theretical_memory_bandwidth <<       " [GB/s]"       << std::endl;
-    std::cout << "| Effective Bandwidth                 : ~"          << std::setprecision(2)
-              << efective_memory_bandwidth <<         "  [GB/s]"       << std::endl;
-    std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+    myfile.close();
 }

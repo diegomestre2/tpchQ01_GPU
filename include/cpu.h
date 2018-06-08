@@ -13,7 +13,7 @@ struct CoProc {
 
 	AggrHashTable* table;
 
-	CoProc(const lineitem& li);
+	CoProc(const lineitem& li, bool wo_core0);
 	~CoProc();
 
 	void operator()(size_t offset, size_t num);

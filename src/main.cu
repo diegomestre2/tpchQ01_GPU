@@ -207,6 +207,13 @@ clear_tables()
 #include "cpu/common.hpp"
 
 int main(int argc, char** argv) {
+    // we are on core 0
+    cpu_set_t cpuset; 
+
+    CPU_ZERO(&cpuset);
+    CPU_SET(0, &cpuset);
+    sched_setaffinity(0, sizeof(cpuset), &cpuset);
+
     /* load data */
     auto start_csv = timer::now();
     SHIPDATE_TYPE* _shipdate;
@@ -320,7 +327,7 @@ int main(int argc, char** argv) {
 
     CoProc* cpu = nullptr;
     if (USE_COPROCESSING) {
-        cpu = new CoProc(li);
+        cpu = new CoProc(li, true);
     }
 
     auto end_csv = timer::now();

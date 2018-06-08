@@ -512,7 +512,7 @@ struct Morsel : BaseKernel {
 		states[id] = nullptr;
 	}
 	
-	Morsel(const lineitem& li) : BaseKernel(li) {
+	Morsel(const lineitem& li, bool wo_core0 = false) : BaseKernel(li) {
 		size_t threadinhos = std::thread::hardware_concurrency();
 		threadinhos/=2;
 		if (threadinhos < 1) {
@@ -532,7 +532,7 @@ struct Morsel : BaseKernel {
 		{
 			std::unique_lock<std::mutex> lock(lock_query);
 
-			for (size_t i=0; i<threadinhos; i++) {
+			for (size_t i=wo_core0 ? 1 : 0; i<threadinhos; i++) {
 				workers.push_back(std::thread(&Morsel::Work, this, i));
 
 				// set affinity
@@ -581,7 +581,10 @@ struct Morsel : BaseKernel {
 		}
 	}
 
-	NOINL void wait() {
+	NOINL void wait(bool active = false) {
+		if (active) {
+			Work(0);
+		}
 		// wait for completion
 		{
 			std::unique_lock<std::mutex> lock(lock_query);

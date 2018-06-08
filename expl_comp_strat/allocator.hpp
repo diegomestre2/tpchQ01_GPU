@@ -60,7 +60,7 @@ public:
  */
 template<typename ItemT>
 class Buffer {
-private:
+public:
 	ItemT* m_ptr;
 	size_t m_capacity;
 	size_t m_alloc_size;

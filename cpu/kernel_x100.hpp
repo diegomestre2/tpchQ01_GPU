@@ -559,7 +559,7 @@ struct Morsel : BaseKernel {
 	void Profile(size_t total_tuples) override {
 	}
 
-	NOINL void task(size_t offset, size_t num) {
+	NOINL void spawn(size_t offset, size_t num) {
 		size = offset + num;
 		assert(size <= li.l_extendedprice.cardinality);
 		// start threads
@@ -574,7 +574,9 @@ struct Morsel : BaseKernel {
 			stage = QUERY;
 			cond_start.notify_all();
 		}
+	}
 
+	NOINL void wait() {
 		// wait for completion
 		{
 			std::unique_lock<std::mutex> lock(lock_query);
@@ -584,6 +586,12 @@ struct Morsel : BaseKernel {
 
 			stage = DONE;
 		}
+	}
+
+	NOINL void task(size_t offset, size_t num) {
+		spawn(offset, num);
+
+		wait();
 	}
 
 	NOINL void operator()() {

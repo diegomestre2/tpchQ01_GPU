@@ -1,50 +1,6 @@
 #include "common.hpp"
 #include <cassert>
 
-AggrHashTable aggrs0[MAX_GROUPS] ALIGN;
-
-int64_t aggr_dsm0_sum_quantity[MAX_GROUPS] ALIGN;
-int64_t aggr_dsm0_count[MAX_GROUPS] ALIGN;
-int64_t aggr_dsm0_sum_base_price[MAX_GROUPS] ALIGN;
-int128_t aggr_dsm0_sum_disc_price[MAX_GROUPS] ALIGN;
-int128_t aggr_dsm0_sum_charge[MAX_GROUPS] ALIGN;
-int64_t aggr_dsm0_sum_disc[MAX_GROUPS] ALIGN;
-
-int64_t aggr_avx0_count[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_quantity[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_base_price[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_disc_price_lo[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_disc_price_hi[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_charge_lo[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_charge_hi[AVX_GROUPS] ALIGN;
-int64_t aggr_avx0_sum_disc[AVX_GROUPS] ALIGN;
-
-#define init_table(ag) memset(&aggrs##ag, 0, sizeof(aggrs##ag))
-#define clear(x) memset(x, 0, sizeof(x))
-
-extern "C" void
-clear_tables()
-{
-	init_table(0);
-
-	clear(aggr_dsm0_sum_quantity);
-	clear(aggr_dsm0_count);
-	clear(aggr_dsm0_sum_base_price);
-	clear(aggr_dsm0_sum_disc_price);
-	clear(aggr_dsm0_sum_charge);
-	clear(aggr_dsm0_sum_disc);
-
-	clear(aggr_avx0_count);
-	clear(aggr_avx0_sum_quantity);
-	clear(aggr_avx0_sum_base_price);
-	clear(aggr_avx0_sum_disc_price_lo);
-	clear(aggr_avx0_sum_charge_lo);
-	clear(aggr_avx0_sum_disc_price_hi);
-	clear(aggr_avx0_sum_charge_hi);
-	clear(aggr_avx0_sum_disc);
-
-}
-
 extern "C" __attribute__((noinline)) void
 handle_overflow()
 {

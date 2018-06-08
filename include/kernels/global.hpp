@@ -12,7 +12,7 @@ namespace cuda {
         RETURNFLAG_TYPE *returnflag,
         LINESTATUS_TYPE *linestatus,
         QUANTITY_TYPE *quantity,
-        AggrHashTable *aggregations,
+        GPUAggrHashTable *aggregations,
         u64_t cardinality,
         int values_per_thread) {
 
@@ -47,7 +47,7 @@ namespace cuda {
         RETURNFLAG_TYPE_SMALL *returnflag,
         LINESTATUS_TYPE_SMALL *linestatus,
         QUANTITY_TYPE_SMALL *quantity,
-        AggrHashTable *aggregations,
+        GPUAggrHashTable *aggregations,
         u64_t cardinality,
         int values_per_thread) {
 

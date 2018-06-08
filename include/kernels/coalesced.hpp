@@ -12,13 +12,13 @@ namespace cuda {
         RETURNFLAG_TYPE *returnflag,
         LINESTATUS_TYPE *linestatus,
         QUANTITY_TYPE *quantity,
-        AggrHashTable *aggregations,
+        GPUAggrHashTable *aggregations,
         u64_t cardinality,
         int values_per_thread) {
 
         constexpr size_t N = 18;
-        AggrHashTableLocal agg[N];
-        memset(agg, 0, sizeof(AggrHashTableLocal) * N);
+        GPUAggrHashTable agg[N];
+        memset(agg, 0, sizeof(GPUAggrHashTable) * N);
 
         u64_t i =  (blockIdx.x * blockDim.x + threadIdx.x);
         u64_t end = (u64_t)cardinality;
@@ -71,7 +71,7 @@ namespace cuda {
         RETURNFLAG_TYPE_SMALL *returnflag,
         LINESTATUS_TYPE_SMALL *linestatus,
         QUANTITY_TYPE_SMALL *quantity,
-        AggrHashTable *aggregations,
+        GPUAggrHashTable *aggregations,
         u64_t cardinality,
         int values_per_thread) {
 
@@ -79,8 +79,8 @@ namespace cuda {
         constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
 
         constexpr size_t N = 8;
-        AggrHashTable agg[N];
-        memset(agg, 0, sizeof(AggrHashTable) * N);
+        GPUAggrHashTable agg[N];
+        memset(agg, 0, sizeof(GPUAggrHashTable) * N);
 
         u64_t i = (blockIdx.x * blockDim.x + threadIdx.x);
         u64_t end = (u64_t)cardinality;

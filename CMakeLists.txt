@@ -28,6 +28,10 @@ set(LIBS
 
 find_package(Threads)
 
+find_package(Numa REQUIRED)
+include_directories(${NUMA_INCLUDE_DIR})
+
+
 # NVidia CUB
 # git clone git@github.com:NVlabs/cub.git
 find_package(CUB 1.5.0 REQUIRED)
@@ -49,6 +53,7 @@ link_libraries(${CUDA_API_WRAPPERS_LIBS} "-lcudadevrt")
 
 include_directories(SYSTEM ../)
 include_directories("include")
+include_directories(".")
 
 ### CUDA
 
@@ -89,11 +94,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++14 -march=corei7")
 
 SET(SOURCE_FILES
         src/main.cu
-        expl_comp_strat/common.cpp
+        src/cpu.cpp
+        # expl_comp_strat/common.cpp
         expl_comp_strat/tpch_kit.cpp
         expl_comp_strat/monetdb.cpp
+        cpu/vectorized.cpp
+        cpu/common.cpp
         )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 cuda_add_executable(tpch_01 ${SOURCE_FILES})
-target_link_libraries(tpch_01 ${LIBS})
+target_link_libraries(tpch_01 ${LIBS} ${NUMA_LIBRARY})

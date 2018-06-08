@@ -5,7 +5,7 @@
 namespace cuda {
     __global__
     void naive_tpchQ01(SHIPDATE_TYPE *shipdate, DISCOUNT_TYPE *discount, EXTENDEDPRICE_TYPE *extendedprice, TAX_TYPE *tax, 
-        RETURNFLAG_TYPE *returnflag, LINESTATUS_TYPE *linestatus, QUANTITY_TYPE *quantity, AggrHashTable *aggregations, size_t cardinality){
+        RETURNFLAG_TYPE *returnflag, LINESTATUS_TYPE *linestatus, QUANTITY_TYPE *quantity, GPUAggrHashTable *aggregations, size_t cardinality){
 
         int i = blockIdx.x * blockDim.x + threadIdx.x;
         if (i < cardinality && shipdate[i] <= 729999){//todate_(2, 9, 1998)) {

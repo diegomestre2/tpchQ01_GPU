@@ -186,6 +186,22 @@ void print_help() {
     fprintf(stderr, "   --use-coalescing\n");
 }
 
+#include "cpu.h"
+
+
+GPUAggrHashTable aggrs0[MAX_GROUPS] ALIGN;
+
+#define init_table(ag) memset(&aggrs##ag, 0, sizeof(aggrs##ag))
+#define clear(x) memset(x, 0, sizeof(x))
+
+extern "C" void
+clear_tables()
+{
+    init_table(0);
+}
+
+#include "cpu/common.hpp"
+
 int main(int argc, char** argv) {
     /* load data */
     auto start_csv = timer::now();
@@ -202,6 +218,7 @@ int main(int argc, char** argv) {
     bool USE_GLOBAL_HT = false;
     bool USE_SMALL_DATATYPES = false;
     bool USE_COALESCING = false;
+    bool USE_COPROCESSING = false;
 
     double sf = 1;
     int nr_streams = 8;
@@ -225,6 +242,8 @@ int main(int argc, char** argv) {
             USE_SMALL_DATATYPES = true;
         } else if (arg == "--use-coalescing") {
             USE_COALESCING = true;
+        } else if (arg == "--use-coprocessing") {
+            USE_COPROCESSING = true;
         } else if (arg.substr(0, sf_argument.size()) == sf_argument) {
             sf = std::stod(arg.substr(sf_argument.size()));
         } else if (arg.substr(0, streams_argument.size()) == streams_argument) {
@@ -257,6 +276,17 @@ int main(int argc, char** argv) {
         LOAD_BINARY(_tax, TAX_TYPE, "tax.bin");
         LOAD_BINARY(_extendedprice, EXTENDEDPRICE_TYPE, "extendedprice.bin");
         LOAD_BINARY(_quantity, QUANTITY_TYPE, "quantity.bin");
+
+        #define A(name) li.l_##name.cardinality = cardinality; li.l_##name.m_ptr = _##name
+
+        A(shipdate);
+        A(returnflag);
+        A(linestatus);
+        A(discount);
+        A(tax);
+        A(extendedprice);
+        A(quantity);
+        
     } else {
         std::cout << "Reading CSV file and writing to binary." << std::endl;
         std::string input_file = join_path(tpch_directory, "lineitem.tbl");
@@ -283,6 +313,10 @@ int main(int argc, char** argv) {
         WRITE_BINARY(_quantity, QUANTITY_TYPE, "quantity.bin");
     }
 
+    CoProc* cpu = nullptr;
+    if (USE_COPROCESSING) {
+        cpu = new CoProc(li);
+    }
 
     auto end_csv = timer::now();
 
@@ -366,7 +400,7 @@ int main(int argc, char** argv) {
 
     /* Allocate memory on device */
     auto current_device = cuda::device::current::get();
-    auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]      >(current_device, MAX_GROUPS);
+    auto d_aggregations  = cuda::memory::device::make_unique< GPUAggrHashTable[]      >(current_device, MAX_GROUPS);
 
     StreamManager streams(MAX_TUPLES_PER_STREAM, nr_streams);
     cuda_check_error();
@@ -374,13 +408,18 @@ int main(int argc, char** argv) {
     myfile.open("results.csv", std::ios::out);
     assert_always(myfile.is_open());
     for(int k = 0; k < nruns + 1; k++) {
-        cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
+        cudaMemset(d_aggregations.get(), 0, sizeof(GPUAggrHashTable)*MAX_GROUPS);
 
         double copy_time = 0;
         double computation_time = 0;
 
         size_t offset = 0;
         auto start = timer::now();
+
+        if (cpu) {
+            offset = cardinality / 2;
+            (*cpu)(0, offset);
+        }        
 
         while (offset < data_length) {
             size_t size = std::min((size_t) MAX_TUPLES_PER_STREAM, (size_t) (data_length - offset));
@@ -494,7 +533,48 @@ int main(int argc, char** argv) {
             offset += size;
         }
         cudaDeviceSynchronize();
-        cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);
+        cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(GPUAggrHashTable)*MAX_GROUPS);
+
+        if (cpu) {
+            cpu->wait();
+
+            // merge
+            int group_order[4];
+            if (USE_SMALL_DATATYPES) {
+                group_order[0] = 6;
+                group_order[1] = 4;
+                group_order[2] = 0;
+                group_order[3] = 5;
+            } else {
+                group_order[0] = magic_hash('A', 'F');
+                group_order[1] = magic_hash('N', 'F');
+                group_order[2] = magic_hash('N', 'O');
+                group_order[3] = magic_hash('R', 'F');
+            }
+
+            size_t idx = 0;
+            for (size_t i=0; i<MAX_GROUPS; i++) {
+                auto& e = cpu->table[i];
+                if (e.count <= 0) {
+                    continue;
+                }
+
+                auto group = group_order[idx];
+
+                #define B(i)  aggrs0[group].i += e.i; printf("set %s group %d  parti %d\n", #i, group, e.i)
+
+                B(sum_quantity);
+                B(count);
+                B(sum_base_price);
+                B(sum_disc);
+                B(sum_disc_price);
+                B(sum_charge);
+
+                idx++;
+            }
+
+            assert_always(idx == 4);
+        }
 
         auto end = timer::now();  
         cuda_check_error();
@@ -530,15 +610,17 @@ int main(int argc, char** argv) {
                         rf = 'A';
                         ls = 'F';
                         if (cardinality == 6001215) {
-                            assert(aggrs0[i].sum_quantity == 3773410700);
                             assert(aggrs0[i].count == 1478493);
+                            assert(aggrs0[i].sum_quantity == 3773410700);
+                            
                         }
                     } else if (idx == 1) { // N, F = 0 + 4
                         rf = 'N';
                         ls = 'F';
                         if (cardinality == 6001215) {
-                            assert(aggrs0[i].sum_quantity == 99141700);
                             assert(aggrs0[i].count == 38854);
+                            assert(aggrs0[i].sum_quantity == 99141700);
+                            
                         }
                     } else if (idx == 2) { // N, O = 0 + 0
                         rf = 'N';

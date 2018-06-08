@@ -20,11 +20,6 @@ Primitives::partial_shuffle_scalar(idx_t* RESTRICT gids, sel_t* RESTRICT aggr_se
 	declare(0);
 	declare(1);
 
-#ifdef DEBUG
-	clear(grpbuf1);
-	clear(grpbuf0);
-#endif
-
 	/* Reduce TLB thrashing by removing positional access on vector 'gids' */
 	gids = Primitives::desel(sel, aggr_sel, gids, num);
 

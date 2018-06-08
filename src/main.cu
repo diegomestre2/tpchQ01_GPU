@@ -15,12 +15,11 @@ size_t magic_hash(char rf, char ls) {
     return (((rf - 'A')) - (ls - 'F'));
 }
 
-void assert_always(bool a) {
-    if (!a) {
-        fprintf(stderr, "Assert always failed!");
-        exit(1);
-    }
-}
+
+#define assert_always(a) do { \
+        if (!(a)) { fprintf(stderr, "Assert always failed! %s", #a); exit(1); } \
+    } while (false)
+
 
 void syscall(std::string command) {
     system(command.c_str());
@@ -287,6 +286,7 @@ int main(int argc, char** argv) {
         A(extendedprice);
         A(quantity);
         
+        #undef A
     } else {
         std::cout << "Reading CSV file and writing to binary." << std::endl;
         std::string input_file = join_path(tpch_directory, "lineitem.tbl");
@@ -341,6 +341,7 @@ int main(int argc, char** argv) {
     QUANTITY_TYPE_SMALL* quantity_small;
     RETURNFLAG_TYPE_SMALL* returnflag_small;
     LINESTATUS_TYPE_SMALL* linestatus_small;
+
     if (USE_PINNED_MEMORY) {
         INITIALIZE_MEMORY(cuda::memory::host::make_unique);
     } else {
@@ -383,7 +384,9 @@ int main(int argc, char** argv) {
         assert_always((int64_t) quantity_small[i]      == quantity[i] / 100);
         assert_always((int64_t) tax_small[i]           == tax[i]);
     }
-
+#ifndef GPU
+    #error ""must be defined
+#endif
     constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
     constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
     for(size_t i = 0; i < cardinality; i++) {
@@ -395,7 +398,7 @@ int main(int argc, char** argv) {
     auto end_preprocess = timer::now();
 
     assert(cardinality > 0 && "Prevent BS exception");
-    const size_t data_length = cardinality / 2;
+    const size_t data_length = cardinality;
     clear_tables();
 
     /* Allocate memory on device */
@@ -408,8 +411,6 @@ int main(int argc, char** argv) {
     myfile.open("results.csv", std::ios::out);
     assert_always(myfile.is_open());
     for(int k = 0; k < nruns + 1; k++) {
-        cudaMemset(d_aggregations.get(), 0, sizeof(GPUAggrHashTable)*MAX_GROUPS);
-
         double copy_time = 0;
         double computation_time = 0;
 
@@ -417,8 +418,13 @@ int main(int argc, char** argv) {
         auto start = timer::now();
 
         if (cpu) {
-            (*cpu)(data_length, cardinality - data_length);
+            cpu->Clear();
+            offset = cardinality / 2;
+            (*cpu)(0, offset);
         }        
+
+        cudaMemset(d_aggregations.get(), 0, sizeof(GPUAggrHashTable)*MAX_GROUPS);
+        
 
         while (offset < data_length) {
             size_t size = std::min((size_t) MAX_TUPLES_PER_STREAM, (size_t) (data_length - offset));
@@ -542,13 +548,13 @@ int main(int argc, char** argv) {
             if (USE_SMALL_DATATYPES) {
                 group_order[0] = 6;
                 group_order[1] = 4;
-                group_order[2] = 0;
-                group_order[3] = 5;
+                group_order[2] = 5;
+                group_order[3] = 0;
             } else {
                 group_order[0] = magic_hash('A', 'F');
                 group_order[1] = magic_hash('N', 'F');
-                group_order[2] = magic_hash('N', 'O');
-                group_order[3] = magic_hash('R', 'F');
+                group_order[2] = magic_hash('R', 'F');
+                group_order[3] = magic_hash('N', 'O');
             }
 
             size_t idx = 0;
@@ -560,14 +566,20 @@ int main(int argc, char** argv) {
 
                 auto group = group_order[idx];
 
-                #define B(i)  aggrs0[group].i += e.i; printf("set %s group %d  old %d parti %d\n", #i, group, aggrs0[group].i, e.i)
+                #define B(i)  aggrs0[group].i += e.i;
+                #define C(i, o)  {auto old = aggrs0[group].i; aggrs0[group].i += e.i; if (old > aggrs0[group].i) {aggrs0[group].o++;}} 
 
                 B(sum_quantity);
+
+                // printf("idx %d old count %d add %d new count %d\n", idx, aggrs0[group].count, e.count, aggrs0[group].count+e.count);
                 B(count);
                 B(sum_base_price);
                 B(sum_disc);
-                B(sum_disc_price);
-                B(sum_charge);
+                C(sum_disc_price, sum_disc_price_hi);
+                C(sum_charge, sum_charge_hi);
+
+                #undef B
+                #undef C
 
                 idx++;
             }
@@ -625,15 +637,17 @@ int main(int argc, char** argv) {
                         rf = 'N';
                         ls = 'O';
                         if (cardinality == 6001215) {
-                            assert(aggrs0[i].sum_quantity == 7447604000);
                             assert(aggrs0[i].count == 2920374);
+                            assert(aggrs0[i].sum_quantity == 7447604000);
+                            
                         }
                     } else if (idx == 3) { // R, F = 1 + 4
                         rf = 'R';
                         ls = 'F';
                         if (cardinality == 6001215) {
-                            assert(aggrs0[i].sum_quantity == 3771975300);
                             assert(aggrs0[i].count == 1478870);
+                            assert(aggrs0[i].sum_quantity == 3771975300);
+                            
                         }
                     } else {
                         printf("%d\n", group);

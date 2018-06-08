@@ -39,3 +39,9 @@ CoProc::wait()
 {
 	kernel->wait();
 }
+
+void
+CoProc::Clear()
+{
+	kernel->m.Clear();
+}

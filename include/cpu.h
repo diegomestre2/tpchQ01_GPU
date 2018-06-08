@@ -19,6 +19,7 @@ struct CoProc {
 	void operator()(size_t offset, size_t num);
 
 	void wait();
+	void Clear();
 };
 
 #endif

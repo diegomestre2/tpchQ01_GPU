@@ -187,6 +187,7 @@ void print_help() {
     fprintf(stderr, "   --no-pinned-memory\n");
     fprintf(stderr, "   --use-small-datatypes\n");
     fprintf(stderr, "   --use-coalescing\n");
+    fprintf(stderr, "   --use-coprocessing\n");
 }
 
 #include "cpu.h"
@@ -221,7 +222,7 @@ int main(int argc, char** argv) {
     bool USE_GLOBAL_HT = false;
     bool USE_SMALL_DATATYPES = false;
     bool USE_COALESCING = false;
-    bool USE_COPROCESSING = true;
+    bool USE_COPROCESSING = false;
 
     double sf = 1;
     int nr_streams = 8;

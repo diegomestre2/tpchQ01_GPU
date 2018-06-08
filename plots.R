@@ -37,26 +37,32 @@ dev.off()
 
 # Streams plots
 streams <- c(1, 2, 4, 8, 16, 32, 64, 128, 256)
+tuples <- c(1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024, 1024*1024)
+
 for(stream in streams) {
-    data <- read.table(paste0("results/streams/results-streams", stream, ".csv"), header=F,  sep=",", stringsAsFactors=F, na.strings="-1")
-    names(data) <- c("time")
-    data$stream <- stream
-    if (stream == streams[1]) {
-        total_data <- data
-    } else {
-        total_data <- rbind(total_data, data)
+    for(tpls in tuples) {
+        data <- read.table(paste0("results/streams/results-streams", stream, "-tuples", tpls, ".csv"), header=F,  sep=",", stringsAsFactors=F, na.strings="-1")
+        names(data) <- c("time")
+        data$tuples <- tpls
+        data$stream <- stream
+        if (stream == streams[1] && tpls == tuples[[1]]) {
+            total_data <- data
+        } else {
+            total_data <- rbind(total_data, data)
+        }
     }
 }
+total_data %>% group_by(tuples, stream) %>% summarise(time=median(time)) %>% as.data.frame() -> total_data
 
-total_data %>% group_by(stream) %>% summarise(time=median(time)) %>% as.data.frame() -> total_data
-
-pdf("plots/streams.pdf", width=8, height=6)
-ggplot(total_data, aes(x = stream, y = time)) + geom_line() + theme + xlab("Streams (#)") + ylab("Wall clock time (s)") + geom_point() + scale_x_continuous(trans='log2', breaks=streams)
+pdf("plots/streams.pdf", width=7, height=7)
+ggplot(data = total_data, aes(x = stream, y = tuples)) +
+  geom_tile(aes(fill = time)) + xlab("Total Streams (#)") + ylab("Tuples Per Streams (#)") +
+   scale_x_continuous(trans='log2', breaks=streams) + scale_y_continuous(trans='log2', breaks=tuples)
 dev.off()
 
 # threads, values
-values_per_thread = c(16, 32, 64, 128, 256)
-threads_per_block = c(32, 64, 128, 256)
+values_per_thread = c(1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024)
+threads_per_block = c(1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024)
 
 for(vals in values_per_thread) {
     for(threads in threads_per_block) {
@@ -76,7 +82,8 @@ total_data %>% group_by(vals, threads) %>% summarise(time=median(time)) %>% as.d
 pdf("plots/threads.pdf", width=7, height=7)
 ggplot(data = total_data, aes(x = threads, y = vals)) +
   geom_tile(aes(fill = time)) + xlab("Threads Per Block (#)") + ylab("Values Per Thread (#)") +
-   scale_x_continuous(trans='log2', breaks=threads_per_block) + scale_y_continuous(trans='log2', breaks=values_per_thread)
+   scale_x_continuous(trans='log2', breaks=threads_per_block) + scale_y_continuous(trans='log2', breaks=values_per_thread) +
+    scale_alpha( trans = "log" )
 dev.off()
 
 # different options
@@ -99,7 +106,6 @@ total_data %>% group_by(pinned, coalesced, htplacement, datatypes) %>% summarise
 
 
 
-xtable::xtable(total_data, include.rownames=FALSE)
+print(xtable::xtable(total_data), include.rownames=FALSE, sanitize.colnames.function = identity, sanitize.text.function = identity)
 
- %>% select(system, adj_time, adj_bytes) %>% mutate(bytes_mean_mb=round(adj_bytes/1024/1024,1), adj_time_t=round(adj_time, 1)) %>% select(system, adj_time_t,bytes_mean_mb), include.rownames=FALSE)
 

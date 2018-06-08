@@ -12,3 +12,6 @@ debug
 *.rej
 *.diff
 .settings/
+tpch/
+ctags
+*.csv

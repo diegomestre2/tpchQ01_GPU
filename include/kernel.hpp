@@ -4,12 +4,13 @@
 #include <iostream>
 #include <cooperative_groups.h>
 #include "helper.hpp"
+// We should probably not need this
 #include "dates.hpp"
 #include "constants.hpp"
 #include "../expl_comp_strat/common.hpp"
+#include "data_types.h"
 
 using namespace cooperative_groups;
-using u64_t = unsigned long long int;
 
 using SHIPDATE_TYPE = int;
 using DISCOUNT_TYPE = int64_t;
@@ -26,8 +27,6 @@ using TAX_TYPE_SMALL = uint8_t;
 using QUANTITY_TYPE_SMALL = uint8_t;
 using RETURNFLAG_TYPE_SMALL = uint8_t;
 using LINESTATUS_TYPE_SMALL = uint8_t;
-
-#define SHIPDATE_MIN 727563
 
 namespace cuda{
 

@@ -2,8 +2,9 @@
 
 if grep -q "# -- CONFIGURATION -- #"  ~/.bashrc
 then
-	echo "Found Configuration";
+	echo "Found Configuration in ~/.bashrc , not changing anything";
 else
+	echo "Applying configuration in configuration.sh (this won't be persistent!)"
 	source configuration.sh
 fi
 

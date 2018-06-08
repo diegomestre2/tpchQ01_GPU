@@ -3,33 +3,30 @@
 #include <vector>
 #include <iomanip>
 #include <fstream>
+#include <chrono>
 
+#include "data_types.h"
+#include "constants.hpp"
+#include "bit_operations.h"
 #include "kernel.hpp"
-#include "kernels/naive.hpp"
-#include "kernels/local.hpp"
-#include "kernels/global.hpp"
+//#include "kernels/naive.hpp"
+//#include "kernels/local.hpp"
+//#include "kernels/global.hpp"
 #include "kernels/coalesced.hpp"
 #include "../expl_comp_strat/tpch_kit.hpp"
+#include "../expl_comp_strat/common.hpp"
 
-size_t magic_hash(char rf, char ls) {
-    return (((rf - 'A')) - (ls - 'F'));
-}
-
-void assert_always(bool a) {
-    if (!a) {
-        fprintf(stderr, "Assert always failed!");
-        exit(1);
-    }
-}
+using std::make_pair;
+using std::make_unique;
+using std::unique_ptr;
+using std::cout;
+using std::endl;
+using std::flush;
 
 void syscall(std::string command) {
-    system(command.c_str());
+    auto x = system(command.c_str());
+    (void) x;
 }
-
-
-int MAX_TUPLES_PER_STREAM = 32 * 1024;
-int VALUES_PER_THREAD = 64;
-int THREADS_PER_BLOCK = 32;
 
 #define GIGA (1024 * 1024 * 1024)
 #define MEGA (1024 * 1024)
@@ -38,8 +35,8 @@ int THREADS_PER_BLOCK = 32;
 using timer = std::chrono::high_resolution_clock;
 
 inline bool file_exists(const std::string& name) {
-  struct stat buffer;
-  return (stat (name.c_str(), &buffer) == 0);
+    struct stat buffer;
+    return (stat (name.c_str(), &buffer) == 0);
 }
 
 inline std::string join_path(std::string a, std::string b) {
@@ -48,569 +45,463 @@ inline std::string join_path(std::string a, std::string b) {
 
 std::ifstream::pos_type filesize(std::string filename) {
     std::ifstream in(filename.c_str(), std::ifstream::ate | std::ifstream::binary);
-    return in.tellg(); 
+    return in.tellg();
 }
 
-#define INITIALIZE_MEMORY(ptrfunc) { \
-    auto _shipdate                       = ptrfunc< SHIPDATE_TYPE[]             >(cardinality);           \
-    auto _discount                       = ptrfunc< DISCOUNT_TYPE[]             >(cardinality);           \
-    auto _extendedprice                  = ptrfunc< EXTENDEDPRICE_TYPE[]        >(cardinality);           \
-    auto _tax                            = ptrfunc< TAX_TYPE[]                  >(cardinality);           \
-    auto _quantity                       = ptrfunc< QUANTITY_TYPE[]             >(cardinality);           \
-    auto _returnflag                     = ptrfunc< RETURNFLAG_TYPE[]           >(cardinality);           \
-    auto _linestatus                     = ptrfunc< LINESTATUS_TYPE[]           >(cardinality);           \
-    shipdate = _shipdate.get(); \
-    discount = _discount.get(); \
-    extendedprice = _extendedprice.get(); \
-    tax = _tax.get(); \
-    quantity = _quantity.get(); \
-    returnflag = _returnflag.get(); \
-    linestatus = _linestatus.get(); \
-    _shipdate.release(); \
-    _discount.release(); \
-    _extendedprice.release(); \
-    _tax.release(); \
-    _quantity.release(); \
-    _returnflag.release(); \
-    _linestatus.release(); \
-    auto _shipdate_small                 = ptrfunc< SHIPDATE_TYPE_SMALL[]       >(cardinality);           \
-    auto _discount_small                 = ptrfunc< DISCOUNT_TYPE_SMALL[]       >(cardinality);           \
-    auto _extendedprice_small            = ptrfunc< EXTENDEDPRICE_TYPE_SMALL[]  >(cardinality);           \
-    auto _tax_small                      = ptrfunc< TAX_TYPE_SMALL[]            >(cardinality);           \
-    auto _quantity_small                 = ptrfunc< QUANTITY_TYPE_SMALL[]       >(cardinality);           \
-    auto _returnflag_small               = ptrfunc< RETURNFLAG_TYPE_SMALL[]     >((cardinality + 3) / 4); \
-    auto _linestatus_small               = ptrfunc< LINESTATUS_TYPE_SMALL[]     >((cardinality + 7) / 8); \
-    shipdate_small = _shipdate_small.get(); \
-    discount_small = _discount_small.get(); \
-    extendedprice_small = _extendedprice_small.get(); \
-    tax_small = _tax_small.get(); \
-    quantity_small = _quantity_small.get(); \
-    returnflag_small = _returnflag_small.get(); \
-    linestatus_small = _linestatus_small.get(); \
-    _shipdate_small.release(); \
-    _discount_small.release(); \
-    _extendedprice_small.release(); \
-    _tax_small.release(); \
-    _quantity_small.release(); \
-    _returnflag_small.release(); \
-    _linestatus_small.release(); \
+// Note: This will force casts to int. It's not a problem
+// the way our code is written, but otherwise it needs to be generalized
+constexpr inline int div_rounding_up(const int& dividend, const int& divisor)
+{
+    // This is not the fastest implementation, but it's safe, in that there's never overflow
+#if __cplusplus >= 201402L
+    std::div_t div_result = std::div(dividend, divisor);
+    return div_result.quot + !(!div_result.rem);
+#else
+    // Hopefully the compiler will optimize the two calls away.
+    return std::div(dividend, divisor).quot + !(!std::div(dividend, divisor).rem);
+#endif
 }
 
-struct Stream {
-    cudaStream_t stream;
-    size_t id;
-#define EXPAND(A) \
-    A(shipdate, SHIPDATE_TYPE) \
-    A(discount, DISCOUNT_TYPE) \
-    A(eprice, EXTENDEDPRICE_TYPE) \
-    A(tax, TAX_TYPE) \
-    A(quantity, QUANTITY_TYPE) \
-    A(rf, RETURNFLAG_TYPE) \
-    A(ls, LINESTATUS_TYPE)
+template <typename UniquePtr>
+void load_column_from_binary_file(
+    UniquePtr&          buffer,
+    cardinality_t       cardinality,
+    const std::string&  directory,
+    const std::string&  file_name)
+{
+    // TODO: C++'ify the file access (will also guarantee exception safety)
+    using raw_ptr_type = typename std::decay<decltype(buffer.get())>::type;
+    using element_type = typename std::remove_pointer<raw_ptr_type>::type;
+    auto file_path = join_path(directory, file_name);
+    buffer = std::make_unique<element_type[]>(cardinality);
+    cout << "Loading a column from " << file_path << " ... " << flush;
+    FILE* pFile = fopen(file_path.c_str(), "rb");
+    if (pFile == nullptr) { throw std::runtime_error("Failed opening file " + file_path); }
+    auto num_elements_read = fread(buffer.get(), sizeof(element_type), cardinality, pFile);
+    if (num_elements_read != cardinality) {
+        throw std::runtime_error("Failed reading sufficient data from " +
+            file_path + " : expected " + std::to_string(cardinality) + " elements but read only " + std::to_string(num_elements_read) + "."); }
+    fclose(pFile);
+    cout << "done." << endl;
+}
 
-#define DECLARE(name, type) type* name;
-    EXPAND(DECLARE)
-#undef DECLARE
-
-    Stream(size_t size, size_t id) : id(id) {
-        cudaStreamCreate(&stream);
-#define ALLOC(name, type) cudaMalloc((void**)&name, size * sizeof(type));
-    EXPAND(ALLOC)
-#undef ALLOC
-
+template <typename T>
+void write_column_to_binary_file(const T* buffer, cardinality_t cardinality, const std::string& directory, const std::string& file_name) {
+    auto file_path = join_path(directory, file_name);
+    cout << "Writing a column to " << file_path << " ... " << flush;
+    FILE* pFile = fopen(file_path.c_str(), "wb+");
+    if (pFile == nullptr) { throw std::runtime_error("Failed opening file " + file_path); }
+    auto num_elements_written = fwrite(buffer, sizeof(T), cardinality, pFile);
+    fclose(pFile);
+    if (num_elements_written != cardinality) {
+        remove(file_path.c_str());
+        throw std::runtime_error("Failed writing all elements to the file - only " +
+            std::to_string(num_elements_written) + " written: " + strerror(errno));
     }
-
-    void Sync() {
-        cudaStreamSynchronize(stream);
-    }
-
-    ~Stream() {
-        Sync();
-        cudaStreamDestroy(stream);
-#define DEALLOC(name, type) cudaFree((void**)name);
-    EXPAND(DEALLOC)
-#undef DEALLOC
-
-    }
-};
-
-struct StreamManager {
-private:
-    std::vector<Stream> streams;
-    size_t pos;
-
-public:
-    StreamManager(size_t size, size_t max_streams) {
-        streams.reserve(max_streams);
-        for (size_t i=0; i<max_streams; i++) {
-            streams.emplace_back(size, i);    
-        }
-        pos = 0;
-    }
-
-    Stream& GetNewStream() {
-        return streams[pos++ % streams.size()];
-    }
-};
-
-
-#define LOAD_BINARY(variable, tpe, fname) { \
-        std::string fpath = join_path(tpch_directory, fname); \
-        FILE* pFile = fopen(fpath.c_str(), "rb"); \
-        variable = (tpe*) malloc(sizeof(tpe) * cardinality); \
-        assert_always(variable && pFile); \
-        fread(variable, sizeof(tpe), cardinality, pFile); \
-        fclose(pFile); \
-    }
-    
-
-#define WRITE_BINARY(variable, tpe, fname) { \
-        std::string fpath = join_path(tpch_directory, fname); \
-        FILE* pFile = fopen(fpath.c_str(), "wb+"); \
-        assert_always(pFile); \
-        fwrite(variable, sizeof(tpe), cardinality, pFile); \
-        fclose(pFile); \
-    }
+    cout << "done." << endl;
+}
 
 void print_help() {
     fprintf(stderr, "Unrecognized command line option.\n");
     fprintf(stderr, "Usage: tpch_01 [args]\n");
-    fprintf(stderr, "   --sf=[sf:1] (number, e.g. 0.01 - 100)\n");
+    fprintf(stderr, "   --scale_factor=[scale_factor:1] (number, e.g. 0.01 - 100)\n");
     fprintf(stderr, "   --streams=[streams:8] (number, e.g. 1 - 64)\n");
     fprintf(stderr, "   --tuples-per-stream=[tuples:32768] (number, e.g. 16384 - 131072)\n");
     fprintf(stderr, "   --values-per-thread=[values:64] (number, e.g. 16 - 128)\n");
     fprintf(stderr, "   --threads-per-block=[threads:32] (number, e.g. 32 - 1024)\n");
     fprintf(stderr, "   --use-global-ht\n");
-    fprintf(stderr, "   --no-pinned-memory\n");
     fprintf(stderr, "   --use-small-datatypes\n");
     fprintf(stderr, "   --use-coalescing\n");
 }
 
+template <typename F, typename... Args>
+void for_each_argument(F f, Args&&... args) {
+    [](...){}((f(std::forward<Args>(args)), 0)...);
+}
+
+
 int main(int argc, char** argv) {
+    cout << "TPC-H Query 1" << '\n';
     /* load data */
-    auto start_csv = timer::now();
-    SHIPDATE_TYPE* _shipdate;
-    RETURNFLAG_TYPE* _returnflag;
-    LINESTATUS_TYPE* _linestatus;
-    DISCOUNT_TYPE* _discount;
-    TAX_TYPE* _tax;
-    EXTENDEDPRICE_TYPE* _extendedprice;
-    QUANTITY_TYPE* _quantity;
-    size_t cardinality;
 
-    bool USE_PINNED_MEMORY = true;
-    bool USE_GLOBAL_HT = false;
-    bool USE_SMALL_DATATYPES = false;
-    bool USE_COALESCING = false;
+    cardinality_t cardinality;
 
-    double sf = 1;
-    int nr_streams = 8;
-    int nruns = 5;
-    std::string sf_argument = "--sf=";
+    double scale_factor = 1;
+    int num_gpu_streams = defaults::num_gpu_streams;
+    int num_threads_per_block = defaults::num_threads_per_block;
+    int num_records_per_scheduled_kernel = defaults::num_records_per_scheduled_kernel;
+        // Make sure it's a multiple of num_threads_per_block, or bad things may happen
+
+    // This is the number of times we run the actual query execution - the part that we time;
+    // it will not include initialization/allocations that are not necessary when the DBMS
+    // is brought up. Note the allocation vs sub-allocation issue (see further comments below)
+    int num_query_execution_runs = 5;
+
+    std::string sf_argument = "--scale_factor=";
     std::string streams_argument = "--streams=";
-    std::string tuples_per_stream_argument = "--tuples-per-stream=";
-    std::string values_per_thread_argument = "--values-per-thread=";
     std::string threads_per_block_argument = "--threads-per-block=";
-    std::string nruns_argument = "--nruns=";
+    std::string nruns_argument = "--runs=";
     for(int i = 1; i < argc; i++) {
         auto arg = std::string(argv[i]);
         if (arg == "--device") {
             get_device_properties();
             exit(1);
-        } else if (arg == "--no-pinned-memory") {
-            USE_PINNED_MEMORY = false;
-        } else if (arg == "--use-global-ht") {
-            USE_GLOBAL_HT = true;
-        } else if (arg == "--use-small-datatypes") {
-            USE_SMALL_DATATYPES = true;
-        } else if (arg == "--use-coalescing") {
-            USE_COALESCING = true;
         } else if (arg.substr(0, sf_argument.size()) == sf_argument) {
-            sf = std::stod(arg.substr(sf_argument.size()));
+            scale_factor = std::stod(arg.substr(sf_argument.size()));
         } else if (arg.substr(0, streams_argument.size()) == streams_argument) {
-            nr_streams = std::stoi(arg.substr(streams_argument.size()));
-        } else if (arg.substr(0, tuples_per_stream_argument.size()) == tuples_per_stream_argument) {
-            MAX_TUPLES_PER_STREAM = std::stoi(arg.substr(tuples_per_stream_argument.size()));
-        } else if (arg.substr(0, values_per_thread_argument.size()) == values_per_thread_argument) {
-            VALUES_PER_THREAD = std::stoi(arg.substr(values_per_thread_argument.size()));
+            num_gpu_streams = std::stoi(arg.substr(streams_argument.size()));
         } else if (arg.substr(0, threads_per_block_argument.size()) == threads_per_block_argument) {
-            THREADS_PER_BLOCK = std::stoi(arg.substr(threads_per_block_argument.size()));
+            num_threads_per_block = std::stoi(arg.substr(threads_per_block_argument.size()));
         } else if (arg.substr(0, nruns_argument.size()) == nruns_argument) {
-            nruns = std::stoi(arg.substr(nruns_argument.size()));
+            num_query_execution_runs = std::stoi(arg.substr(nruns_argument.size()));
         } else {
             print_help();
             exit(1);
         }
     }
-    lineitem li((size_t)(7000000 * sf));
+    lineitem li((size_t)(7000000 * scale_factor));
+        // TODO: Make this magic number go away somehow; it's a maximum of 1,500,000 * 7
+
+    std::unique_ptr< ship_date_t[]      > _shipdate;
+    std::unique_ptr< return_flag_t[]    > _returnflag;
+    std::unique_ptr< line_status_t[]    > _linestatus;
+    std::unique_ptr< discount_t[]       > _discount;
+    std::unique_ptr< tax_t[]            > _tax;
+    std::unique_ptr< extended_price_t[] > _extendedprice;
+    std::unique_ptr< quantity_t[]       > _quantity;
+
+    // TODO: Use std::filesystem for the filesystem stuff
     syscall("mkdir -p tpch");
-    std::string tpch_directory = join_path("tpch", std::to_string(sf));
+    std::string tpch_directory = join_path("tpch", std::to_string(scale_factor));
     syscall(std::string("mkdir -p ") + tpch_directory);
     if (file_exists(join_path(tpch_directory, "shipdate.bin"))) {
-        std::cout << "Loading from binary." << std::endl;
-        // binary files exist, load them
-        cardinality = filesize(join_path(tpch_directory, "shipdate.bin")) / sizeof(SHIPDATE_TYPE);
-        LOAD_BINARY(_shipdate, SHIPDATE_TYPE, "shipdate.bin");
-        LOAD_BINARY(_returnflag, RETURNFLAG_TYPE, "returnflag.bin");
-        LOAD_BINARY(_linestatus, LINESTATUS_TYPE, "linestatus.bin");
-        LOAD_BINARY(_discount, DISCOUNT_TYPE, "discount.bin");
-        LOAD_BINARY(_tax, TAX_TYPE, "tax.bin");
-        LOAD_BINARY(_extendedprice, EXTENDEDPRICE_TYPE, "extendedprice.bin");
-        LOAD_BINARY(_quantity, QUANTITY_TYPE, "quantity.bin");
+        // binary files (seem to) exist, load them
+        cardinality = filesize(join_path(tpch_directory, "shipdate.bin")) / sizeof(ship_date_t);
+        if (cardinality == 0) {
+            throw std::runtime_error("The lineitem table column cardinality should not be 0");
+        }
+        load_column_from_binary_file(_shipdate,      cardinality, tpch_directory, "shipdate.bin");
+        load_column_from_binary_file(_returnflag,    cardinality, tpch_directory, "returnflag.bin");
+        load_column_from_binary_file(_linestatus,    cardinality, tpch_directory, "linestatus.bin");
+        load_column_from_binary_file(_discount,      cardinality, tpch_directory, "discount.bin");
+        load_column_from_binary_file(_tax,           cardinality, tpch_directory, "tax.bin");
+        load_column_from_binary_file(_extendedprice, cardinality, tpch_directory, "extendedprice.bin");
+        load_column_from_binary_file(_quantity,      cardinality, tpch_directory, "quantity.bin");
     } else {
-        std::cout << "Reading CSV file and writing to binary." << std::endl;
         std::string input_file = join_path(tpch_directory, "lineitem.tbl");
-        if (!file_exists(input_file.c_str())) {
-            // have to generate lineitem file
-            syscall("./genlineitem.sh " + std::to_string(sf));
-            syscall("mv lineitem.tbl " + input_file);
+        if (not file_exists(input_file.c_str())) {
+            throw std::runtime_error("Cannot locate table text file " + input_file);
+            // Not generating it ourselves - that's: 1. Not healthy and 2. Not portable;
+            // setup scripts are intended to do that
         }
+        cout << "Parsing the lineitem table in file " << input_file << endl;
         li.FromFile(input_file.c_str());
-        _shipdate = li.l_shipdate.get();
-        _returnflag = li.l_returnflag.get();
-        _linestatus = li.l_linestatus.get();
-        _discount = li.l_discount.get();
-        _tax = li.l_tax.get();
-        _extendedprice = li.l_extendedprice.get();
-        _quantity = li.l_quantity.get();
         cardinality = li.l_extendedprice.cardinality;
-        WRITE_BINARY(_shipdate, SHIPDATE_TYPE, "shipdate.bin");
-        WRITE_BINARY(_returnflag, RETURNFLAG_TYPE, "returnflag.bin");
-        WRITE_BINARY(_linestatus, LINESTATUS_TYPE, "linestatus.bin");
-        WRITE_BINARY(_discount, DISCOUNT_TYPE, "discount.bin");
-        WRITE_BINARY(_tax, TAX_TYPE, "tax.bin");
-        WRITE_BINARY(_extendedprice, EXTENDEDPRICE_TYPE, "extendedprice.bin");
-        WRITE_BINARY(_quantity, QUANTITY_TYPE, "quantity.bin");
+        if (cardinality == 0) {
+            throw std::runtime_error("The lineitem table column cardinality should not be 0");
+        }
+        cout << "CSV read & parsed; table length: " << cardinality << " records." << endl;
+        auto write_to = [&](auto& uptr, const char* filename) {
+            using T = typename std::remove_pointer<typename std::decay<decltype(uptr.get())>::type>::type;
+            load_column_from_binary_file(uptr.get(), cardinality, tpch_directory, "shipdate.bin");
+        };
+        write_column_to_binary_file(li.l_shipdate.get(),      cardinality, tpch_directory, "shipdate.bin");
+        write_column_to_binary_file(li.l_returnflag.get(),    cardinality, tpch_directory, "returnflag.bin");
+        write_column_to_binary_file(li.l_linestatus.get(),    cardinality, tpch_directory, "linestatus.bin");
+        write_column_to_binary_file(li.l_discount.get(),      cardinality, tpch_directory, "discount.bin");
+        write_column_to_binary_file(li.l_tax.get(),           cardinality, tpch_directory, "tax.bin");
+        write_column_to_binary_file(li.l_extendedprice.get(), cardinality, tpch_directory, "extendedprice.bin");
+        write_column_to_binary_file(li.l_quantity.get(),      cardinality, tpch_directory, "quantity.bin");
     }
 
+    auto compressed_ship_date      = cuda::memory::host::make_unique< compressed::ship_date_t[]      >(cardinality);
+    auto compressed_discount       = cuda::memory::host::make_unique< compressed::discount_t[]       >(cardinality);
+    auto compressed_extended_price = cuda::memory::host::make_unique< compressed::extended_price_t[] >(cardinality);
+    auto compressed_tax            = cuda::memory::host::make_unique< compressed::tax_t[]            >(cardinality);
+    auto compressed_quantity       = cuda::memory::host::make_unique< compressed::quantity_t[]       >(cardinality);
+    auto compressed_return_flag    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, return_flag_values_per_container));
+    auto compressed_line_status    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, line_status_values_per_container));
 
-    auto end_csv = timer::now();
+    cout << "Preprocessing/compressing column data... " << flush;
 
-    auto size_per_tuple = sizeof(SHIPDATE_TYPE) + sizeof(DISCOUNT_TYPE) + sizeof(EXTENDEDPRICE_TYPE) + sizeof(TAX_TYPE) + sizeof(QUANTITY_TYPE) + sizeof(RETURNFLAG_TYPE) + sizeof(LINESTATUS_TYPE);
-    if (USE_SMALL_DATATYPES) {
-        size_per_tuple = sizeof(SHIPDATE_TYPE_SMALL) + sizeof(DISCOUNT_TYPE_SMALL) + sizeof(EXTENDEDPRICE_TYPE_SMALL) + sizeof(TAX_TYPE_SMALL) + sizeof(QUANTITY_TYPE_SMALL) + sizeof(RETURNFLAG_TYPE_SMALL) + sizeof(LINESTATUS_TYPE_SMALL);
-    }
-    auto start_preprocess = timer::now();
+    // Eyal says: Drop these copies, we really don't need them AFAICT
+    auto shipdate      = _shipdate.get();
+    auto returnflag    = _returnflag.get();
+    auto linestatus    = _linestatus.get();
+    auto discount      = _discount.get();
+    auto tax           = _tax.get();
+    auto extendedprice = _extendedprice.get();
+    auto quantity      = _quantity.get();
 
-    SHIPDATE_TYPE* shipdate;
-    DISCOUNT_TYPE* discount;
-    EXTENDEDPRICE_TYPE* extendedprice;
-    TAX_TYPE* tax;
-    QUANTITY_TYPE* quantity;
-    RETURNFLAG_TYPE* returnflag;
-    LINESTATUS_TYPE* linestatus;
-
-    SHIPDATE_TYPE_SMALL* shipdate_small;
-    DISCOUNT_TYPE_SMALL* discount_small;
-    EXTENDEDPRICE_TYPE_SMALL* extendedprice_small;
-    TAX_TYPE_SMALL* tax_small;
-    QUANTITY_TYPE_SMALL* quantity_small;
-    RETURNFLAG_TYPE_SMALL* returnflag_small;
-    LINESTATUS_TYPE_SMALL* linestatus_small;
-    if (USE_PINNED_MEMORY) {
-        INITIALIZE_MEMORY(cuda::memory::host::make_unique);
-    } else {
-        INITIALIZE_MEMORY(std::make_unique);
+    // Man, we really need to have a sub-byte-length-value container class
+    std::memset(compressed_return_flag.get(), 0, div_rounding_up(cardinality, return_flag_values_per_container));
+    std::memset(compressed_line_status.get(), 0, div_rounding_up(cardinality, line_status_values_per_container));
+    for(cardinality_t i = 0; i < cardinality; i++) {
+        compressed_ship_date[i]      = shipdate[i] - ship_date_frame_of_reference;
+        compressed_discount[i]       = discount[i]; // we're keeping the factor 100 scaling
+        compressed_extended_price[i] = extendedprice[i];
+        compressed_quantity[i]       = quantity[i] / 100;
+        compressed_tax[i]            = tax[i]; // we're keeping the factor 100 scaling
+        set_bit_resolution_element<log_return_flag_bits, cardinality_t>(
+            compressed_return_flag.get(), i, encode_return_flag(returnflag[i]));
+        set_bit_resolution_element<log_line_status_bits, cardinality_t>(
+            compressed_line_status.get(), i, encode_line_status(linestatus[i]));
+        assert( (ship_date_t)      compressed_ship_date[i]      == shipdate[i] - ship_date_frame_of_reference);
+        assert( (discount_t)       compressed_discount[i]       == discount[i]);
+        assert( (extended_price_t) compressed_extended_price[i] == extendedprice[i]);
+        assert( (quantity_t)       compressed_quantity[i]       == quantity[i] / 100);
+            // not keeping the scaling here since we know the data is all integral; you could call this a form
+            // of compression
+        assert( (tax_t)            compressed_tax[i]            == tax[i]);
     }
 
     for(size_t i = 0; i < cardinality; i++) {
-        shipdate[i] = _shipdate[i];
-        discount[i] = _discount[i];
-        extendedprice[i] = _extendedprice[i];
-        quantity[i] = _quantity[i];
-        tax[i] = _tax[i];
-        returnflag[i] = _returnflag[i];
-        linestatus[i] = _linestatus[i];
-
-        shipdate_small[i]      = shipdate[i] - SHIPDATE_MIN;
-        discount_small[i]      = discount[i];
-        extendedprice_small[i] = extendedprice[i];
-        quantity_small[i]      = quantity[i] / 100;
-        tax_small[i]           = tax[i];
-        if (i % 4 == 0) {
-            returnflag_small[i / 4] = 0;
-            for(size_t j = 0; j < std::min((size_t) 4, cardinality - i); j++) {
-                // 'N' = 0x00, 'R' = 0x01, 'A' = 0x10
-                returnflag_small[i / 4] |= 
-                    (_returnflag[i + j] == 'N' ? 0x00 : (_returnflag[i + j] == 'R' ? 0x01 : 0x02)) << (j * 2);
-            }
-        }
-        if (i % 8 == 0) {
-            linestatus_small[i / 8] = 0;
-            for(size_t j = 0; j < std::min((size_t) 8, cardinality - i); j++) {
-                // 'O' = 0, 'F' = 1
-                linestatus_small[i / 8] |= (_linestatus[i + j] == 'F' ? 1 : 0) << j;
-            }
-        }
-
-        assert_always((int)shipdate_small[i]           == shipdate[i] - SHIPDATE_MIN);
-        assert_always((int64_t) discount_small[i]      == discount[i]);
-        assert_always((int64_t) extendedprice_small[i] == extendedprice[i]);
-        assert_always((int64_t) quantity_small[i]      == quantity[i] / 100);
-        assert_always((int64_t) tax_small[i]           == tax[i]);
+        assert(decode_line_status(get_bit_resolution_element<log_line_status_bits, cardinality_t>(compressed_line_status.get(), i)) == linestatus[i]);
+        assert(decode_return_flag(get_bit_resolution_element<log_return_flag_bits, cardinality_t>(compressed_return_flag.get(), i)) == returnflag[i]);
     }
+    cout << "done." << endl;
 
-    constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
-    constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
-    for(size_t i = 0; i < cardinality; i++) {
-        uint8_t retflag = (returnflag_small[i / 4] & RETURNFLAG_MASK[i % 4]) >> (2 * (i % 4));
-        uint8_t lstatus = (linestatus_small[i / 8] & LINESTATUS_MASK[i % 8]) >> (i % 8);
-        assert_always(retflag == (returnflag[i] == 'N' ? 0x00 : (returnflag[i] == 'R' ? 0x01 : 0x02)));
-        assert_always(lstatus == (linestatus[i] == 'F' ? 1 : 0));
-    }
-    auto end_preprocess = timer::now();
+    // Note:
+    // We are not timing the host-side allocations here. In a real DBMS, these will likely only be
+    // a few sub-allocations, which would take very little time (dozens of clock cycles overall) -
+    // no system calls.
 
-    assert(cardinality > 0 && "Prevent BS exception");
-    const size_t data_length = cardinality;
-    clear_tables();
+    struct {
+        std::unique_ptr<sum_quantity_t[]        > sum_quantity;
+        std::unique_ptr<sum_base_price_t[]      > sum_base_price;
+        std::unique_ptr<sum_discounted_price_t[]> sum_discounted_price;
+        std::unique_ptr<sum_charge_t[]          > sum_charge;
+        std::unique_ptr<sum_discount_t[]        > sum_discount;
+        std::unique_ptr<cardinality_t[]         > record_count;
+        // Why aren't we computing these?
+        // struct {
+        //     std::unique_ptr<avg_quantity_t[]        > avg_quantity;
+        //     std::unique_ptr<avg_extended_price_t[]  > avg_extended_price;
+        //     std::unique_ptr<avg_discount_t[]        > avg_discount;
+        // } derived;
+    } aggregates_on_host = {
+        std::make_unique< sum_quantity_t[]         >(num_potential_groups),
+        std::make_unique< sum_base_price_t[]       >(num_potential_groups),
+        std::make_unique< sum_discounted_price_t[] >(num_potential_groups),
+        std::make_unique< sum_charge_t []          >(num_potential_groups),
+        std::make_unique< sum_discount_t[]         >(num_potential_groups),
+        std::make_unique< cardinality_t[]          >(num_potential_groups)
+        // ,
+        // {
+        //      std::make_unique< avg_quantity_t[]         >(num_potential_groups),
+        //      std::make_unique< avg_extended_price_t[]   >(num_potential_groups),
+        //      std::make_unique< avg_discount_t[]         >(num_potential_groups),
+        // }
+    };
+
+    cuda::profiling::start();
+
 
     /* Allocate memory on device */
-    auto current_device = cuda::device::current::get();
-    auto d_aggregations  = cuda::memory::device::make_unique< AggrHashTable[]      >(current_device, MAX_GROUPS);
 
-    StreamManager streams(MAX_TUPLES_PER_STREAM, nr_streams);
-    cuda_check_error();
-    std::ofstream myfile;
-    myfile.open("results.csv", std::ios::out);
-    assert_always(myfile.is_open());
-    for(int k = 0; k < nruns + 1; k++) {
-        cudaMemset(d_aggregations.get(), 0, sizeof(AggrHashTable)*MAX_GROUPS);
+    // Note:
+    // We are not timing the allocations here. In a real DBMS, actual CUDA allocations would
+    // happen with the DBMS is brought up, and when a query is processed, it will only be
+    // a few sub-allocations, which would take very little time (dozens of clock cycles overall) -
+    // no CUDA API nor system calls. We _will_, however, time the initialization of the buffers.
 
-        double copy_time = 0;
-        double computation_time = 0;
+    auto cuda_device = cuda::device::current::get();
 
-        size_t offset = 0;
+    struct {
+        cuda::memory::device::unique_ptr< sum_quantity_t[]         > sum_quantity;
+        cuda::memory::device::unique_ptr< sum_base_price_t[]       > sum_base_price;
+        cuda::memory::device::unique_ptr< sum_discounted_price_t[] > sum_discounted_price;
+        cuda::memory::device::unique_ptr< sum_charge_t[]           > sum_charge;
+        cuda::memory::device::unique_ptr< sum_discount_t[]         > sum_discount;
+        cuda::memory::device::unique_ptr< cardinality_t[]          > record_count;
+    } aggregates_on_device = {
+        cuda::memory::device::make_unique< sum_quantity_t[]         >(cuda_device, num_potential_groups),
+        cuda::memory::device::make_unique< sum_base_price_t[]       >(cuda_device, num_potential_groups),
+        cuda::memory::device::make_unique< sum_discounted_price_t[] >(cuda_device, num_potential_groups),
+        cuda::memory::device::make_unique< sum_charge_t []          >(cuda_device, num_potential_groups),
+        cuda::memory::device::make_unique< sum_discount_t[]         >(cuda_device, num_potential_groups),
+        cuda::memory::device::make_unique< cardinality_t[]          >(cuda_device, num_potential_groups)
+    };
+
+    struct stream_input_buffer_set {
+        cuda::memory::device::unique_ptr< compressed::ship_date_t[]      > shipdate;
+        cuda::memory::device::unique_ptr< compressed::discount_t[]       > discount;
+        cuda::memory::device::unique_ptr< compressed::extended_price_t[] > extendedprice;
+        cuda::memory::device::unique_ptr< compressed::tax_t[]            > tax;
+        cuda::memory::device::unique_ptr< compressed::quantity_t[]       > quantity;
+        cuda::memory::device::unique_ptr< bit_container_t[]              > returnflag;
+        cuda::memory::device::unique_ptr< bit_container_t[]              > linestatus;
+    };
+
+    std::vector<stream_input_buffer_set> stream_input_buffer_sets;
+    std::vector<cuda::stream_t<>> streams;
+    stream_input_buffer_sets.reserve(num_gpu_streams);
+    streams.reserve(num_gpu_streams);
+        // We'll be scheduling (most of) our work in a round-robin fashion on all of
+        // the streams, to prevent the GPU from idling.
+
+
+    for (int i = 0; i < num_gpu_streams; ++i) {
+        auto input_buffers = stream_input_buffer_set{
+            cuda::memory::device::make_unique< compressed::ship_date_t[]      >(cuda_device, num_records_per_scheduled_kernel),
+            cuda::memory::device::make_unique< compressed::discount_t[]       >(cuda_device, num_records_per_scheduled_kernel),
+            cuda::memory::device::make_unique< compressed::extended_price_t[] >(cuda_device, num_records_per_scheduled_kernel),
+            cuda::memory::device::make_unique< compressed::tax_t[]            >(cuda_device, num_records_per_scheduled_kernel),
+            cuda::memory::device::make_unique< compressed::quantity_t[]       >(cuda_device, num_records_per_scheduled_kernel),
+            cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(num_records_per_scheduled_kernel, return_flag_values_per_container)),
+            cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(num_records_per_scheduled_kernel, line_status_values_per_container))
+        };
+        stream_input_buffer_sets.emplace_back(std::move(input_buffers));
+        auto stream = cuda_device.create_stream(cuda::stream::async);
+        streams.emplace_back(std::move(stream));
+    }
+
+    // You can't measure this from inside the process - without events, which
+//    double copy_time = 0;
+//    double computation_time = 0;
+
+    // This only works for the overall time, not for anything else, so it's not a good idea:
+     std::ofstream results_file;
+     results_file.open("results.csv", std::ios::out);
+
+    for(int run_index = 0; run_index < num_query_execution_runs; run_index++) {
+        cout << "Executing query, run " << run_index + 1 << " of " << num_query_execution_runs << "... " << flush;
         auto start = timer::now();
 
-        while (offset < data_length) {
-            size_t size = std::min((size_t) MAX_TUPLES_PER_STREAM, (size_t) (data_length - offset));
+        // Initialize the aggregates; perhaps we should do this in a single kernel? ... probably not worth it
+        streams[0].enqueue.memset(aggregates_on_device.sum_quantity.get(),         0, num_potential_groups * sizeof(sum_quantity_t));
+        streams[0].enqueue.memset(aggregates_on_device.sum_base_price.get(),       0, num_potential_groups * sizeof(sum_base_price_t));
+        streams[0].enqueue.memset(aggregates_on_device.sum_discounted_price.get(), 0, num_potential_groups * sizeof(sum_discounted_price_t));
+        streams[0].enqueue.memset(aggregates_on_device.sum_charge.get(),           0, num_potential_groups * sizeof(sum_charge_t));
+        streams[0].enqueue.memset(aggregates_on_device.sum_discount.get(),         0, num_potential_groups * sizeof(sum_discount_t));
+        streams[0].enqueue.memset(aggregates_on_device.record_count.get(),         0, num_potential_groups * sizeof(cardinality_t));
 
-            auto& stream = streams.GetNewStream();
-            auto& s = stream;
-
-            if (USE_SMALL_DATATYPES) {
-                cuda::memory::async::copy(stream.shipdate, shipdate_small      + offset, size * sizeof(SHIPDATE_TYPE_SMALL),     stream.stream);
-                cuda::memory::async::copy(stream.discount, discount_small      + offset, size * sizeof(DISCOUNT_TYPE_SMALL), stream.stream);
-                cuda::memory::async::copy(stream.eprice, extendedprice_small   + offset, size * sizeof(EXTENDEDPRICE_TYPE_SMALL), stream.stream);
-                cuda::memory::async::copy(stream.tax, tax_small                + offset, size * sizeof(TAX_TYPE_SMALL), stream.stream);
-                cuda::memory::async::copy(stream.quantity, quantity_small      + offset, size * sizeof(QUANTITY_TYPE_SMALL), stream.stream);
-                cuda::memory::async::copy(stream.rf, returnflag_small          + offset / 4, (size * sizeof(RETURNFLAG_TYPE_SMALL) + 3) / 4,    stream.stream);
-                cuda::memory::async::copy(stream.ls, linestatus_small          + offset / 8, (size * sizeof(LINESTATUS_TYPE_SMALL) + 7) / 8,    stream.stream);
-            } else {
-                cuda::memory::async::copy(stream.shipdate, shipdate      + offset, size * sizeof(SHIPDATE_TYPE),     stream.stream);
-                cuda::memory::async::copy(stream.discount, discount      + offset, size * sizeof(DISCOUNT_TYPE), stream.stream);
-                cuda::memory::async::copy(stream.eprice, extendedprice   + offset, size * sizeof(EXTENDEDPRICE_TYPE), stream.stream);
-                cuda::memory::async::copy(stream.tax, tax                + offset, size * sizeof(TAX_TYPE), stream.stream);
-                cuda::memory::async::copy(stream.quantity, quantity      + offset, size * sizeof(QUANTITY_TYPE), stream.stream);
-                cuda::memory::async::copy(stream.rf, returnflag          + offset, size * sizeof(RETURNFLAG_TYPE),    stream.stream);
-                cuda::memory::async::copy(stream.ls, linestatus          + offset, size * sizeof(LINESTATUS_TYPE),    stream.stream);
-            }
-            
-
-            size_t amount_of_blocks = size / (VALUES_PER_THREAD * THREADS_PER_BLOCK) + 1;
-            size_t SHARED_MEMORY = 0; //sizeof(AggrHashTableLocal) * 18 * THREADS_PER_BLOCK;
-            if (!USE_GLOBAL_HT) {
-                if (USE_SMALL_DATATYPES) {
-                    if(USE_COALESCING){
-                        cuda::thread_local_tpchQ01_small_datatypes_coalesced<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                            (SHIPDATE_TYPE_SMALL*) s.shipdate,
-                            (DISCOUNT_TYPE_SMALL*) s.discount,
-                            (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
-                            (TAX_TYPE_SMALL*) s.tax,
-                            (RETURNFLAG_TYPE_SMALL*)s.rf,
-                            (LINESTATUS_TYPE_SMALL*)s.ls,
-                            (QUANTITY_TYPE_SMALL*) s.quantity,
-                            d_aggregations.get(),
-                            (u64_t) size,
-                            VALUES_PER_THREAD);
-                    } else {
-                        cuda::thread_local_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                            (SHIPDATE_TYPE_SMALL*) s.shipdate,
-                            (DISCOUNT_TYPE_SMALL*) s.discount,
-                            (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
-                            (TAX_TYPE_SMALL*) s.tax,
-                            (RETURNFLAG_TYPE_SMALL*)s.rf,
-                            (LINESTATUS_TYPE_SMALL*)s.ls,
-                            (QUANTITY_TYPE_SMALL*) s.quantity,
-                            d_aggregations.get(),
-                            (u64_t) size,
-                            VALUES_PER_THREAD);
-                    }
-                } else {
-                    if(USE_COALESCING){
-                        cuda::thread_local_tpchQ01_coalesced<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                            s.shipdate,
-                            s.discount,
-                            s.eprice,
-                            s.tax,
-                            s.rf,
-                            s.ls,
-                            s.quantity,
-                            d_aggregations.get(),
-                            (u64_t) size,
-                            VALUES_PER_THREAD);
-                    } else {
-                        cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                            s.shipdate,
-                            s.discount,
-                            s.eprice,
-                            s.tax,
-                            s.rf,
-                            s.ls,
-                            s.quantity,
-                            d_aggregations.get(),
-                            (u64_t) size,
-                            VALUES_PER_THREAD);
-                    }
-                }
-            } else {
-                if (USE_SMALL_DATATYPES) {
-                    cuda::global_ht_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                        (SHIPDATE_TYPE_SMALL*) s.shipdate,
-                        (DISCOUNT_TYPE_SMALL*) s.discount,
-                        (EXTENDEDPRICE_TYPE_SMALL*) s.eprice,
-                        (TAX_TYPE_SMALL*) s.tax,
-                        (RETURNFLAG_TYPE_SMALL*)s.rf,
-                        (LINESTATUS_TYPE_SMALL*)s.ls,
-                        (QUANTITY_TYPE_SMALL*) s.quantity,
-                        d_aggregations.get(),
-                        (u64_t) size,
-                        VALUES_PER_THREAD);
-                } else {
-                    cuda::global_ht_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
-                        s.shipdate,
-                        s.discount,
-                        s.eprice,
-                        s.tax,
-                        s.rf,
-                        s.ls,
-                        s.quantity,
-                        d_aggregations.get(),
-                        (u64_t) size,
-                        VALUES_PER_THREAD);
-                }
-            }
-
-            offset += size;
+        cuda::event_t aggregates_initialized_event = cuda_device.create_event(
+                cuda::event::sync_by_blocking, cuda::event::dont_record_timings, cuda::event::not_interprocess);
+        streams[0].enqueue.event(aggregates_initialized_event);
+        for (int i = 1; i < num_gpu_streams; ++i) {
+            streams[i].enqueue.wait(aggregates_initialized_event);
+            // The other streams also require the aggregates to be initialized before doing any work
         }
-        cudaDeviceSynchronize();
-        cuda::memory::copy(aggrs0, d_aggregations.get(), sizeof(AggrHashTable)*MAX_GROUPS);
+        auto stream_index = 0;
+        for (size_t offset_in_table = 0;
+             offset_in_table < cardinality;
+             offset_in_table += num_records_per_scheduled_kernel,
+             stream_index = (stream_index+1) % num_gpu_streams) {
 
-        auto end = timer::now();  
-        cuda_check_error();
-        if (k > 0) {
-            std::chrono::duration<double> duration(end - start);
-            myfile << duration.count() << std::endl;
+            auto num_records_for_this_launch = std::min<cardinality_t>(num_records_per_scheduled_kernel, cardinality - offset_in_table);
+            auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_records_for_this_launch, return_flag_values_per_container);
+            auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_records_for_this_launch, line_status_values_per_container);
+
+            // auto start_copy = timer::now();  // This can't work, since copying is asynchronous.
+            auto& stream = streams[stream_index];
+            auto& stream_input_buffers = stream_input_buffer_sets[stream_index];
+            stream.enqueue.copy(stream_input_buffers.shipdate.get()     , compressed_ship_date.get()      + offset_in_table, num_records_for_this_launch * sizeof(compressed::ship_date_t));
+            stream.enqueue.copy(stream_input_buffers.discount.get()     , compressed_discount.get()       + offset_in_table, num_records_for_this_launch * sizeof(compressed::discount_t));
+            stream.enqueue.copy(stream_input_buffers.extendedprice.get(), compressed_extended_price.get() + offset_in_table, num_records_for_this_launch * sizeof(compressed::extended_price_t));
+            stream.enqueue.copy(stream_input_buffers.tax.get()          , compressed_tax.get()            + offset_in_table, num_records_for_this_launch * sizeof(compressed::tax_t));
+            stream.enqueue.copy(stream_input_buffers.quantity.get()     , compressed_quantity.get()       + offset_in_table, num_records_for_this_launch * sizeof(compressed::quantity_t));
+            stream.enqueue.copy(stream_input_buffers.returnflag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t) );
+            stream.enqueue.copy(stream_input_buffers.linestatus.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
+
+            auto num_blocks = div_rounding_up(num_records_for_this_launch, num_threads_per_block);
+            auto launch_config = cuda::make_launch_config(num_blocks, num_threads_per_block);
+            (void) launch_config;
+
+            stream.enqueue.kernel_launch(
+                cuda::thread_local_tpchQ01_small_datatypes_coalesced,
+                launch_config,
+                aggregates_on_device.sum_quantity.get(),
+                aggregates_on_device.sum_base_price.get(),
+                aggregates_on_device.sum_discounted_price.get(),
+                aggregates_on_device.sum_charge.get(),
+                aggregates_on_device.sum_discount.get(),
+                aggregates_on_device.record_count.get(),
+                stream_input_buffers.shipdate.get(),
+                stream_input_buffers.discount.get(),
+                stream_input_buffers.extendedprice.get(),
+                stream_input_buffers.tax.get(),
+                stream_input_buffers.quantity.get(),
+                stream_input_buffers.returnflag.get(),
+                stream_input_buffers.linestatus.get(),
+                num_records_for_this_launch);
+
         }
-        if (k == 1) {
-            std::cout << "\n"
-                         "+--------------------------------------------------- Results ---------------------------------------------------+\n";
-            std::cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";
-            std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
-            auto print_dec = [] (auto s, auto x) { printf("%s%16ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
-            // A/F - N/F - N/O, R/F
-            int group_order[4];
-            if (USE_SMALL_DATATYPES) {
-                group_order[0] = 6;
-                group_order[1] = 4;
-                group_order[2] = 0;
-                group_order[3] = 5;
-            } else {
-                group_order[0] = magic_hash('A', 'F');
-                group_order[1] = magic_hash('N', 'F');
-                group_order[2] = magic_hash('N', 'O');
-                group_order[3] = magic_hash('R', 'F');
-            }
-            for (size_t idx=0; idx < 4; idx++) {
-                int group = group_order[idx];
-                if (aggrs0[group].count > 0) {
-                    size_t i = group;
-                    char rf = '-', ls = '-';
-                    if (idx == 0) { // A, F = 2 + 4
-                        rf = 'A';
-                        ls = 'F';
-                        if (cardinality == 6001215) {
-                            assert(aggrs0[i].sum_quantity == 3773410700);
-                            assert(aggrs0[i].count == 1478493);
-                        }
-                    } else if (idx == 1) { // N, F = 0 + 4
-                        rf = 'N';
-                        ls = 'F';
-                        if (cardinality == 6001215) {
-                            assert(aggrs0[i].sum_quantity == 99141700);
-                            assert(aggrs0[i].count == 38854);
-                        }
-                    } else if (idx == 2) { // N, O = 0 + 0
-                        rf = 'N';
-                        ls = 'O';
-                        if (cardinality == 6001215) {
-                            assert(aggrs0[i].sum_quantity == 7447604000);
-                            assert(aggrs0[i].count == 2920374);
-                        }
-                    } else if (idx == 3) { // R, F = 1 + 4
-                        rf = 'R';
-                        ls = 'F';
-                        if (cardinality == 6001215) {
-                            assert(aggrs0[i].sum_quantity == 3771975300);
-                            assert(aggrs0[i].count == 1478870);
-                        }
-                    } else {
-                        printf("%d\n", group);
-                    }
-
-                    printf("| # %c | %c ", rf, ls);
-                    print_dec(" | ",  aggrs0[i].sum_quantity);
-                    print_dec(" | ",  aggrs0[i].sum_base_price);
-                    print_dec(" | ",  aggrs0[i].sum_disc_price);
-                    print_dec(" | ",  aggrs0[i].sum_charge);
-                    printf(" | %10llu |\n", aggrs0[i].count);
-                }
-            }
-            std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
-
-            uint64_t cache_line_size = 128; // bytes
-            uint64_t num_loads =  1478493 + 38854 + 2920374 + 1478870 + 6;
-            uint64_t num_stores = 19;
-            std::chrono::duration<double> duration(end - start);
-            uint64_t tuples_per_second               = static_cast<uint64_t>(data_length / duration.count());
-            double effective_memory_throughput       = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
-            double estimated_memory_throughput       = static_cast<double>((tuples_per_second * cache_line_size) / GIGA);
-            double effective_memory_throughput_read  = static_cast<double>((tuples_per_second * size_per_tuple) / GIGA);
-            double effective_memory_throughput_write = static_cast<double>(tuples_per_second / (size_per_tuple * GIGA));
-            double theretical_memory_bandwidth       = static_cast<double>((5505 * 10e06 * (352 / 8) * 2) / 10e09);
-            double efective_memory_bandwidth         = static_cast<double>(((data_length * sizeof(SHIPDATE_TYPE)) + (num_loads * size_per_tuple) + (num_loads * num_stores))  / (duration.count() * 10e09));
-            double csv_time = std::chrono::duration<double>(end_csv - start_csv).count();
-            double pre_process_time = std::chrono::duration<double>(end_preprocess - start_preprocess).count();
-
-            std::cout << "\n+------------------------------------------------- Statistics --------------------------------------------------+\n";
-            std::cout << "| TPC-H Q01 performance               : ="          << std::fixed 
-                      << tuples_per_second <<                 " [tuples/sec]" << std::endl;
-            std::cout << "| Time taken                          : ~"          << std::setprecision(2)
-                      << duration.count() <<                  "  [s]"          << std::endl;
-            std::cout << "| Estimated time for TPC-H SF100      : ~"          << std::setprecision(2)
-                      << duration.count() * (100 / sf) <<     "  [s]"          << std::endl;
-            std::cout << "| CSV Time                            : ~"          << std::setprecision(2)
-                      <<  csv_time <<                         "  [s]"          << std::endl;
-            std::cout << "| Preprocess Time                     : ~"          << std::setprecision(2)
-                      <<  pre_process_time <<                 "  [s]"          << std::endl;
-            std::cout << "| Copy Time                           : ~"          << std::setprecision(2)
-                      << copy_time <<                         "  [s]"          << std::endl;
-            std::cout << "| Computation Time                    : ~"          << std::setprecision(2)
-                      << computation_time <<                  "  [s]"          << std::endl;
-            std::cout << "| Effective memory throughput (query) : ~"          << std::setprecision(2)
-                      << effective_memory_throughput <<       "  [GB/s]"       << std::endl;
-            std::cout << "| Estimated memory throughput (query) : ~"          << std::setprecision(1)
-                      << estimated_memory_throughput <<       "  [GB/s]"       << std::endl;
-            std::cout << "| Effective memory throughput (read)  : ~"          << std::setprecision(2)
-                      << effective_memory_throughput_read <<  "  [GB/s]"       << std::endl;
-            std::cout << "| Memory throughput (write)           : ~"          << std::setprecision(2)
-                      << effective_memory_throughput_write << "  [GB/s]"       << std::endl;
-            std::cout << "| Theoretical Bandwidth               : ="          << std::setprecision(1)
-                      << theretical_memory_bandwidth <<       " [GB/s]"       << std::endl;
-            std::cout << "| Effective Bandwidth                 : ~"          << std::setprecision(2)
-                      << efective_memory_bandwidth <<         "  [GB/s]"       << std::endl;
-            std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+        std::vector<cuda::event_t> completion_events;
+        for(int i = 1; i < num_gpu_streams; i++) {
+            auto event = streams[i].enqueue.event();
+            completion_events.emplace_back(std::move(event));
         }
+
+        // It's probably a better idea to go round-robin on the streams here
+        streams[0].enqueue.copy(aggregates_on_host.sum_quantity.get(),         aggregates_on_device.sum_quantity.get(),         num_potential_groups * sizeof(sum_quantity_t));
+        streams[0].enqueue.copy(aggregates_on_host.sum_base_price.get(),       aggregates_on_device.sum_base_price.get(),       num_potential_groups * sizeof(sum_base_price_t));
+        streams[0].enqueue.copy(aggregates_on_host.sum_discounted_price.get(), aggregates_on_device.sum_discounted_price.get(), num_potential_groups * sizeof(sum_discounted_price_t));
+        streams[0].enqueue.copy(aggregates_on_host.sum_charge.get(),           aggregates_on_device.sum_charge.get(),           num_potential_groups * sizeof(sum_charge_t));
+        streams[0].enqueue.copy(aggregates_on_host.sum_discount.get(),         aggregates_on_device.sum_discount.get(),         num_potential_groups * sizeof(sum_discount_t));
+        streams[0].enqueue.copy(aggregates_on_host.record_count.get(),         aggregates_on_device.record_count.get(),         num_potential_groups * sizeof(cardinality_t));
+
+        streams[0].synchronize();
+        auto end = timer::now();
+        std::chrono::duration<double> duration(end - start);
+        cout << "done." << endl;
+        results_file << duration.count() << '\n';
     }
-    myfile.close();
+    cuda::profiling::stop();
+
+    if (num_query_execution_runs == 1) {
+        cout << "\n"
+                "+--------------------------------------------------- Results ---------------------------------------------------+\n";
+        cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";
+        cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+        auto print_dec = [] (auto s, auto x) { printf("%s%16ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
+
+        for (size_t group=0; group<num_potential_groups; group++) {
+            if (aggregates_on_host.record_count[group] > 0) {
+                char rf = '-', ls = '-';
+                auto return_flag_group_id = group >> 1;
+                auto line_status_group_id = group & 0x1;
+                switch(return_flag_group_id) {
+                case 0:  rf = 'A'; break;
+                case 1:  rf = 'F'; break;
+                case 2:  rf = 'N'; break;
+                default: rf = '-';
+                }
+                ls = (line_status_group_id == 0 ? 'F' : 'O');
+                if (rf == 'A' and ls == 'F') {
+                    if (cardinality == 6001215) {
+                        assert(aggregates_on_host.sum_quantity[group] == 3773410700);
+                        assert(aggregates_on_host.record_count[group] == 1478493);
+                    }
+                } else if (rf == 'N' and ls == 'F') {
+                    if (cardinality == 6001215) {
+                        assert(aggregates_on_host.sum_quantity[group] == 99141700);
+                        assert(aggregates_on_host.record_count[group] == 38854);
+                    }
+                } else if (rf == 'N' and ls == 'O') {
+                    rf = 'N';
+                    ls = 'O';
+                    if (cardinality == 6001215) {
+                        assert(aggregates_on_host.sum_quantity[group] == 7447604000);
+                        assert(aggregates_on_host.record_count[group] == 2920374);
+                    }
+                } else if (rf == 'R' and ls == 'F') {
+                    if (cardinality == 6001215) {
+                        assert(aggregates_on_host.sum_quantity[group]== 3771975300);
+                        assert(aggregates_on_host.record_count[group]== 1478870);
+                    }
+                }
+
+                printf("| # %c | %c ", rf, ls);
+                print_dec(" | ",  aggregates_on_host.sum_quantity.get()[group]);
+                print_dec(" | ",  aggregates_on_host.sum_base_price.get()[group]);
+                print_dec(" | ",  aggregates_on_host.sum_discounted_price.get()[group]);
+                print_dec(" | ",  aggregates_on_host.sum_charge.get()[group]);
+                printf(" | %10u |\n", aggregates_on_host.record_count.get()[group]);
+            }
+        }
+
+        cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+    }
+    results_file.close();
 }

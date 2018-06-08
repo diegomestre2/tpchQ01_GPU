@@ -1,25 +1,29 @@
 #pragma once
 
 #include "kernel.hpp"
-
+#include "data_types.h"
 namespace cuda {
     __global__
     void global_ht_tpchQ01(
-        SHIPDATE_TYPE *shipdate,
+        sum_quantity_t *sum_quantity,
+        sum_base_price_t *sum_base_price,
+        sum_discounted_price_t *sum_discounted_price,
+        sum_charge_t *sum_charge,
+        sum_discount_t *sum_discount,
+        cardinality_t *record_count,
+        ship_date_t *shipdate,
         DISCOUNT_TYPE *discount,
         EXTENDEDPRICE_TYPE *extendedprice,
-        TAX_TYPE *tax,
-        RETURNFLAG_TYPE *returnflag,
-        LINESTATUS_TYPE *linestatus,
-        QUANTITY_TYPE *quantity,
-        AggrHashTable *aggregations,
-        u64_t cardinality,
-        int values_per_thread) {
+        tax_t *tax,
+        return_flag_t *returnflag,
+        line_status_t *linestatus,
+        quantity_t *quantity,
+        cardinality_t cardinality) {
 
-        u64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
-        u64_t end = min((u64_t)cardinality, i + values_per_thread);
+        uint64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
+        uint64_t end = min((uint64_t)cardinality, i + VALUES_PER_THREAD);
         for(; i < end; ++i) {
-            if (shipdate[i] <= 729999) {
+            if (shipdate[i] <= threshold_ship_date) {
                 const int disc = discount[i];
                 const int price = extendedprice[i];
                 const int disc_1 = Decimal64::ToValue(1, 0) - disc;
@@ -28,36 +32,40 @@ namespace cuda {
                 const int charge = Decimal64::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
                 
-                atomicAdd(&aggregations[idx].sum_quantity, (u64_t) quantity[i]);
-                atomicAdd(&aggregations[idx].sum_base_price, (u64_t) price);
-                atomicAdd(&aggregations[idx].sum_charge, (u64_t) charge);
-                atomicAdd(&aggregations[idx].sum_disc_price, (u64_t) disc_price);
-                atomicAdd(&aggregations[idx].sum_disc, (u64_t) disc);
-                atomicAdd(&aggregations[idx].count, (u64_t) 1);
+                atomicAdd((uint64_t*)&sum_quantity[idx], (uint64_t) quantity[i]);
+                atomicAdd((uint64_t*)&sum_base_price[idx], (uint64_t) price);
+                atomicAdd((uint64_t*)&sum_charge[idx], (uint64_t) charge);
+                atomicAdd((uint64_t*)&sum_discounted_price[idx], (uint64_t)disc_price);
+                atomicAdd((uint64_t*)&sum_discount[idx], (uint64_t) disc);
+                atomicAdd((uint64_t*)&record_count[idx], (uint64_t) 1);
             }
         }
     }
 
     __global__
     void global_ht_tpchQ01_small_datatypes(
-        SHIPDATE_TYPE_SMALL *shipdate,
-        DISCOUNT_TYPE_SMALL *discount,
-        EXTENDEDPRICE_TYPE_SMALL *extendedprice,
-        TAX_TYPE_SMALL *tax,
-        RETURNFLAG_TYPE_SMALL *returnflag,
-        LINESTATUS_TYPE_SMALL *linestatus,
-        QUANTITY_TYPE_SMALL *quantity,
-        AggrHashTable *aggregations,
-        u64_t cardinality,
-        int values_per_thread) {
+        sum_quantity_t *sum_quantity,
+        sum_base_price_t *sum_base_price,
+        sum_discounted_price_t *sum_discounted_price,
+        sum_charge_t *sum_charge,
+        sum_discount_t *sum_discount,
+        cardinality_t *record_count,
+        compressed::ship_date_t *shipdate,
+        compressed::discount_t *discount,
+        compressed::extended_price_t *extendedprice,
+        compressed::tax_t *tax,
+        compressed::return_flag_t *returnflag,
+        compressed::line_status_t *linestatus,
+        compressed::quantity_t *quantity,
+        cardinality_t cardinality) {
 
         constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
         constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
 
-        u64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
-        u64_t end = min((u64_t)cardinality, i + values_per_thread);
+        uint64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
+        uint64_t end = min((uint64_t)cardinality, i + VALUES_PER_THREAD);
         for(; i < end; ++i) {
-            if (shipdate[i] <= (729999 - SHIPDATE_MIN)) {
+            if (shipdate[i] <= compressed_threshold_ship_date) {
                 const int disc = discount[i];
                 const int price = extendedprice[i];
                 const int disc_1 = Decimal64::ToValue(1, 0) - disc;
@@ -67,13 +75,13 @@ namespace cuda {
                 const uint8_t rflag = (returnflag[i / 4] & RETURNFLAG_MASK[i % 4]) >> (2 * (i % 4));
                 const uint8_t lstatus = (linestatus[i / 8] & LINESTATUS_MASK[i % 8]) >> (i % 8);
                 const uint8_t idx = rflag + 4 * lstatus;
-
-                atomicAdd(&aggregations[idx].sum_quantity, (u64_t) (quantity[i] * 100));
-                atomicAdd(&aggregations[idx].sum_base_price, (u64_t) price);
-                atomicAdd(&aggregations[idx].sum_charge, (u64_t) charge);
-                atomicAdd(&aggregations[idx].sum_disc_price, (u64_t) disc_price);
-                atomicAdd(&aggregations[idx].sum_disc, (u64_t) disc);
-                atomicAdd(&aggregations[idx].count, (u64_t) 1);
+                                
+                atomicAdd((uint64_t*)&sum_quantity[idx], (uint64_t) quantity[i] * 100);
+                atomicAdd((uint64_t*)&sum_base_price[idx], (uint64_t) price);
+                atomicAdd((uint64_t*)&sum_charge[idx], (uint64_t) charge);
+                atomicAdd((uint64_t*)&sum_discounted_price[idx], (uint64_t)disc_price);
+                atomicAdd((uint64_t*)&sum_discount[idx], (uint64_t) disc);
+                atomicAdd((uint64_t*)&record_count[idx], (uint64_t) 1);
             }
         }
     }

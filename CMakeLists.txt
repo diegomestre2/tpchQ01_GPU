@@ -54,6 +54,18 @@ include_directories("include")
 
 find_package(CUDA 9.1 REQUIRED)
 include(HandleCUDAComputeCapability)
+
+
+find_library(CUDA_NVTX_LIBRARY
+  NAMES nvToolsExt nvTools nvtoolsext nvtools nvtx NVTX
+  PATHS ${CUDA_TOOLKIT_ROOT_DIR}
+  PATH_SUFFIXES "lib64" "common/lib64" "common/lib" "lib"
+  DOC "Location of the CUDA Toolkit Extension (NVTX) library"
+  )
+mark_as_advanced(CUDA_NVTX_LIBRARY)
+set(CUDA_LIBRARIES ${CUDA_LIBRARIES} ${CUDA_NVTX_LIBRARY} ${CUDA_cudadevrt_LIBRARY})
+
+
 # avoid implicitly synchronization with other streams
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --default-stream per-thread)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --expt-relaxed-constexpr)

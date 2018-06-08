@@ -3,6 +3,8 @@
 #include "kernel.hpp"
 #include "constants.hpp"
 #include "data_types.h"
+#include "atomic_operations.cuh"
+#include "bit_operations.h"
 
 #ifdef __CUDACC__
 #define __fhd__  __forceinline__ __host__ __device__
@@ -11,6 +13,7 @@
 #define __fhd__ inline
 #define __fd__  inline
 #endif
+
 
 namespace cuda {
 
@@ -54,7 +57,6 @@ __fhd__ bit_container_t get_bit_resolution_element(
 	auto bit_container = data[index_of_container];
 	return get_bit_resolution_element<LogBitsPerValue, Index>(bit_container, index_within_container);
 }
-
 
 /*
 		__global__
@@ -127,7 +129,7 @@ void thread_local_tpchQ01_small_datatypes_coalesced(
 	sum_discounted_price_t*              __restrict__ sum_discounted_price,
 	sum_charge_t*                        __restrict__ sum_charge,
 	sum_discount_t*                      __restrict__ sum_discount,
-	cardinality_t*                      __restrict__ record_count,
+	cardinality_t*                       __restrict__ record_count,
 	const compressed::ship_date_t*       __restrict__ shipdate,
 	const compressed::discount_t*        __restrict__ discount,
 	const compressed::extended_price_t*  __restrict__ extended_price,
@@ -135,14 +137,14 @@ void thread_local_tpchQ01_small_datatypes_coalesced(
 	const compressed::quantity_t*        __restrict__ quantity,
 	const bit_container_t*               __restrict__ return_flag,
 	const bit_container_t*               __restrict__ line_status,
-	cardinality_t                                    cardinality)
+	cardinality_t                                     cardinality)
  {
 	sum_quantity_t         thread_sum_quantity         [num_potential_groups] = { 0 };
 	sum_base_price_t       thread_sum_base_price       [num_potential_groups] = { 0 };
 	sum_discounted_price_t thread_sum_discounted_price [num_potential_groups] = { 0 };
 	sum_charge_t           thread_sum_charge           [num_potential_groups] = { 0 };
 	sum_discount_t         thread_sum_discount         [num_potential_groups] = { 0 };
-	cardinality_t         thread_record_count         [num_potential_groups] = { 0 };
+	cardinality_t          thread_record_count         [num_potential_groups] = { 0 };
 
 	cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x);
 	cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
@@ -175,15 +177,17 @@ void thread_local_tpchQ01_small_datatypes_coalesced(
 
 	// final aggregation
 
+	// These manual casts are really unbecoming. We need a wrapper...
 	#pragma unroll
 	for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
-		atomicAdd( (unsigned long long int*) & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
-		atomicAdd( (unsigned long long int*) & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
-		atomicAdd( (unsigned long long int*) & sum_charge          [group_index], thread_sum_charge          [group_index]);
-		atomicAdd( (unsigned long long int*) & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
-		atomicAdd( (unsigned long long int*) & sum_discount        [group_index], thread_sum_discount        [group_index]);
-		atomicAdd( (unsigned long long int*) & record_count        [group_index], thread_record_count        [group_index]);
+		atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
+		atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
+		atomicAdd( (unsigned long long* ) & sum_charge          [group_index], thread_sum_charge          [group_index]);
+		atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
+		atomicAdd( (unsigned long long* ) & sum_discount        [group_index], thread_sum_discount        [group_index]);
+		atomicAdd(                        & record_count        [group_index], thread_record_count        [group_index]);
 	}
+
 }
 
 } // namespace cuda

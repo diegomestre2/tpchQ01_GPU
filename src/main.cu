@@ -460,7 +460,7 @@ int main(int argc, char** argv) {
                             (LINESTATUS_TYPE_SMALL*)s.ls,
                             (QUANTITY_TYPE_SMALL*) s.quantity,
                             d_aggregations.get(),
-                            (u64_t) size,
+                            (uint64_t) size,
                             VALUES_PER_THREAD);
                     } else {
                         cuda::thread_local_tpchQ01_small_datatypes<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
@@ -472,7 +472,7 @@ int main(int argc, char** argv) {
                             (LINESTATUS_TYPE_SMALL*)s.ls,
                             (QUANTITY_TYPE_SMALL*) s.quantity,
                             d_aggregations.get(),
-                            (u64_t) size,
+                            (uint64_t) size,
                             VALUES_PER_THREAD);
                     }
                 } else {
@@ -486,7 +486,7 @@ int main(int argc, char** argv) {
                             s.ls,
                             s.quantity,
                             d_aggregations.get(),
-                            (u64_t) size,
+                            (uint64_t) size,
                             VALUES_PER_THREAD);
                     } else {
                         cuda::thread_local_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
@@ -498,7 +498,7 @@ int main(int argc, char** argv) {
                             s.ls,
                             s.quantity,
                             d_aggregations.get(),
-                            (u64_t) size,
+                            (uint64_t) size,
                             VALUES_PER_THREAD);
                     }
                 }
@@ -513,7 +513,7 @@ int main(int argc, char** argv) {
                         (LINESTATUS_TYPE_SMALL*)s.ls,
                         (QUANTITY_TYPE_SMALL*) s.quantity,
                         d_aggregations.get(),
-                        (u64_t) size,
+                        (uint64_t) size,
                         VALUES_PER_THREAD);
                 } else {
                     cuda::global_ht_tpchQ01<<<amount_of_blocks, THREADS_PER_BLOCK, SHARED_MEMORY, s.stream>>>(
@@ -525,7 +525,7 @@ int main(int argc, char** argv) {
                         s.ls,
                         s.quantity,
                         d_aggregations.get(),
-                        (u64_t) size,
+                        (uint64_t) size,
                         VALUES_PER_THREAD);
                 }
             }

@@ -9,7 +9,6 @@
 #include "../expl_comp_strat/common.hpp"
 
 using namespace cooperative_groups;
-using u64_t = unsigned long long int;
 
 using SHIPDATE_TYPE = int;
 using DISCOUNT_TYPE = int64_t;

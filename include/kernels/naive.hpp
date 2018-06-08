@@ -16,19 +16,19 @@ namespace cuda {
             const auto disc_price = Decimal64::Mul(disc_1, price);
             const auto charge = Decimal64::Mul(disc_price, tax_1);
             const idx_t idx = returnflag[i] << 8 | linestatus[i];
-            atomicAdd((u64_t*)&(aggregations[idx].sum_quantity), (u64_t) quantity[i]);
-            atomicAdd((u64_t*)&(aggregations[idx].sum_base_price), (u64_t)price);
-            auto old = atomicAdd((u64_t*)&(aggregations[idx].sum_charge), charge);
+            atomicAdd((unsigned long long*)&(aggregations[idx].sum_quantity), quantity[i]);
+            atomicAdd((unsigned long long*)&(aggregations[idx].sum_base_price), price);
+            auto old = atomicAdd((unsigned long long*)&(aggregations[idx].sum_charge), charge);
             if (old + charge < charge) {
-                atomicAdd((u64_t*)&(aggregations[idx].sum_charge) + 1, 1);
+                atomicAdd((unsigned long long*)&(aggregations[idx].sum_charge) + 1, 1);
             }
 
-            auto old_2 = atomicAdd((u64_t*)&(aggregations[idx].sum_disc_price), disc_price);
+            auto old_2 = atomicAdd((unsigned long long*)&(aggregations[idx].sum_disc_price), disc_price);
             if (old_2 + disc_price < disc_price) {
-                atomicAdd((u64_t*)&(aggregations[idx].sum_disc_price) + 1, 1);
+                atomicAdd((unsigned long long*)&(aggregations[idx].sum_disc_price) + 1, 1);
             }
-            atomicAdd((u64_t*)&(aggregations[idx].sum_disc), (u64_t)disc);
-            atomicAdd((u64_t*)&(aggregations[idx].count), (u64_t)1);
+            atomicAdd((unsigned long long*)&(aggregations[idx].sum_disc), disc);
+            atomicAdd((unsigned long long*)&(aggregations[idx].count), 1);
             
         }
     }

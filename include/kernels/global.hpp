@@ -13,11 +13,11 @@ namespace cuda {
         LINESTATUS_TYPE *linestatus,
         QUANTITY_TYPE *quantity,
         GPUAggrHashTable *aggregations,
-        u64_t cardinality,
+        uint64_t cardinality,
         int values_per_thread) {
 
-        u64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
-        u64_t end = min((u64_t)cardinality, i + values_per_thread);
+        uint64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
+        uint64_t end = min((uint64_t)cardinality, i + values_per_thread);
         for(; i < end; ++i) {
             if (shipdate[i] <= 729999) {
                 const int disc = discount[i];
@@ -27,13 +27,13 @@ namespace cuda {
                 const int disc_price = Decimal64::Mul(disc_1, price);
                 const int charge = Decimal64::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
-                
-                atomicAdd(&aggregations[idx].sum_quantity, (u64_t) quantity[i]);
-                atomicAdd(&aggregations[idx].sum_base_price, (u64_t) price);
-                atomicAdd(&aggregations[idx].sum_charge, (u64_t) charge);
-                atomicAdd(&aggregations[idx].sum_disc_price, (u64_t) disc_price);
-                atomicAdd(&aggregations[idx].sum_disc, (u64_t) disc);
-                atomicAdd(&aggregations[idx].count, (u64_t) 1);
+
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_quantity, quantity[i]);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_base_price, price);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_charge, charge);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc_price, disc_price);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc, disc);
+                atomicAdd((unsigned long long*) &aggregations[idx].count, 1);
             }
         }
     }
@@ -48,14 +48,14 @@ namespace cuda {
         LINESTATUS_TYPE_SMALL *linestatus,
         QUANTITY_TYPE_SMALL *quantity,
         GPUAggrHashTable *aggregations,
-        u64_t cardinality,
+        uint64_t cardinality,
         int values_per_thread) {
 
         constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
         constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
 
-        u64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
-        u64_t end = min((u64_t)cardinality, i + values_per_thread);
+        uint64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
+        uint64_t end = min((uint64_t)cardinality, i + values_per_thread);
         for(; i < end; ++i) {
             if (shipdate[i] <= (729999 - SHIPDATE_MIN)) {
                 const int disc = discount[i];
@@ -68,12 +68,12 @@ namespace cuda {
                 const uint8_t lstatus = (linestatus[i / 8] & LINESTATUS_MASK[i % 8]) >> (i % 8);
                 const uint8_t idx = rflag + 4 * lstatus;
 
-                atomicAdd(&aggregations[idx].sum_quantity, (u64_t) (quantity[i] * 100));
-                atomicAdd(&aggregations[idx].sum_base_price, (u64_t) price);
-                atomicAdd(&aggregations[idx].sum_charge, (u64_t) charge);
-                atomicAdd(&aggregations[idx].sum_disc_price, (u64_t) disc_price);
-                atomicAdd(&aggregations[idx].sum_disc, (u64_t) disc);
-                atomicAdd(&aggregations[idx].count, (u64_t) 1);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_quantity,  (quantity[i] * 100));
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_base_price,  price);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_charge,  charge);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc_price,  disc_price);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc,  disc);
+                atomicAdd((unsigned long long*) &aggregations[idx].count,  1);
             }
         }
     }

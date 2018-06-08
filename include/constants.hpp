@@ -4,11 +4,11 @@
 #include <climits>
 
 
-#define MAX_TUPLES_PER_STREAM MIN_TUPLES_PER_STREAM
-#define MIN_TUPLES_PER_STREAM (32*1024)
-#define VALUES_PER_THREAD 64
+// #define MAX_TUPLES_PER_STREAM MIN_TUPLES_PER_STREAM
+// #define MIN_TUPLES_PER_STREAM (32*1024)
+//#define VALUES_PER_THREAD 64
 
-#define num_threads_per_block 256
+#define num_threads_per_block 128
 
 enum : cardinality_t {
     records_per_scheduled_kernel = 1 << 20 // used for scheduling the kernel

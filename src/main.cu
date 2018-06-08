@@ -45,7 +45,7 @@ inline std::string join_path(std::string a, std::string b) {
 
 std::ifstream::pos_type filesize(std::string filename) {
     std::ifstream in(filename.c_str(), std::ifstream::ate | std::ifstream::binary);
-    return in.tellg(); 
+    return in.tellg();
 }
 
 // Note: This will force casts to int. It's not a problem
@@ -65,13 +65,13 @@ constexpr inline int div_rounding_up(const int& dividend, const int& divisor)
 
 template <typename UniquePtr>
 void load_column_from_binary_file(
-	UniquePtr&          buffer,
-	cardinality_t       cardinality,
-	const std::string&  directory,
-	const std::string&  file_name)
+    UniquePtr&          buffer,
+    cardinality_t       cardinality,
+    const std::string&  directory,
+    const std::string&  file_name)
 {
     // TODO: C++'ify the file access (will also guarantee exception safety)
-	using raw_ptr_type = typename std::decay<decltype(buffer.get())>::type;
+    using raw_ptr_type = typename std::decay<decltype(buffer.get())>::type;
     using element_type = typename std::remove_pointer<raw_ptr_type>::type;
     auto file_path = join_path(directory, file_name);
     buffer = std::make_unique<element_type[]>(cardinality);
@@ -79,9 +79,9 @@ void load_column_from_binary_file(
     FILE* pFile = fopen(file_path.c_str(), "rb");
     if (pFile == nullptr) { throw std::runtime_error("Failed opening file " + file_path); }
     auto num_elements_read = fread(buffer.get(), sizeof(element_type), cardinality, pFile);
-    if (num_elements_read != cardinality) { 
-		throw std::runtime_error("Failed reading sufficient data from " +
-			file_path + " : expected " + std::to_string(cardinality) + " elements but read only " + std::to_string(num_elements_read) + "."); }
+    if (num_elements_read != cardinality) {
+        throw std::runtime_error("Failed reading sufficient data from " +
+            file_path + " : expected " + std::to_string(cardinality) + " elements but read only " + std::to_string(num_elements_read) + "."); }
     fclose(pFile);
     cout << "done." << endl;
 }
@@ -94,11 +94,11 @@ void write_column_to_binary_file(const T* buffer, cardinality_t cardinality, con
     if (pFile == nullptr) { throw std::runtime_error("Failed opening file " + file_path); }
     auto num_elements_written = fwrite(buffer, sizeof(T), cardinality, pFile);
     fclose(pFile);
-    if (num_elements_written != cardinality) { 
-		remove(file_path.c_str());
-		throw std::runtime_error("Failed writing all elements to the file - only " + 
-			std::to_string(num_elements_written) + " written: " + strerror(errno));
-	}
+    if (num_elements_written != cardinality) {
+        remove(file_path.c_str());
+        throw std::runtime_error("Failed writing all elements to the file - only " +
+            std::to_string(num_elements_written) + " written: " + strerror(errno));
+    }
     cout << "done." << endl;
 }
 
@@ -113,7 +113,7 @@ void print_help() {
 
 template <typename F, typename... Args>
 void for_each_argument(F f, Args&&... args) {
-	[](...){}((f(std::forward<Args>(args)), 0)...);
+    [](...){}((f(std::forward<Args>(args)), 0)...);
 }
 
 
@@ -184,9 +184,9 @@ int main(int argc, char** argv) {
     } else {
         std::string input_file = join_path(tpch_directory, "lineitem.tbl");
         if (not file_exists(input_file.c_str())) {
-			throw std::runtime_error("Cannot locate table text file " + input_file);
-			// Not generating it ourselves - that's: 1. Not healthy and 2. Not portable;
-			// setup scripts are intended to do that
+            throw std::runtime_error("Cannot locate table text file " + input_file);
+            // Not generating it ourselves - that's: 1. Not healthy and 2. Not portable;
+            // setup scripts are intended to do that
         }
         cout << "Parsing the lineitem table in file " << input_file << endl;
         li.FromFile(input_file.c_str());
@@ -208,17 +208,17 @@ int main(int argc, char** argv) {
         write_column_to_binary_file(li.l_quantity.get(),      cardinality, tpch_directory, "quantity.bin");
     }
 
-    auto compressed_ship_date      = std::make_unique< compressed::ship_date_t[]      >(cardinality);
-    auto compressed_discount       = std::make_unique< compressed::discount_t[]       >(cardinality);
-    auto compressed_extended_price = std::make_unique< compressed::extended_price_t[] >(cardinality);
-    auto compressed_tax            = std::make_unique< compressed::tax_t[]            >(cardinality);
-    auto compressed_quantity       = std::make_unique< compressed::quantity_t[]       >(cardinality);
-    auto compressed_return_flag    = std::make_unique< bit_container_t[] >(div_rounding_up(cardinality, return_flag_values_per_container));
-    auto compressed_line_status    = std::make_unique< bit_container_t[] >(div_rounding_up(cardinality, line_status_values_per_container));
+    auto compressed_ship_date      = cuda::memory::host::make_unique< compressed::ship_date_t[]          >(cardinality);
+    auto compressed_discount       = cuda::memory::host::make_unique< compressed::discount_t[]       >(cardinality);
+    auto compressed_extended_price = cuda::memory::host::make_unique< compressed::extended_price_t[] >(cardinality);
+    auto compressed_tax            = cuda::memory::host::make_unique< compressed::tax_t[]            >(cardinality);
+    auto compressed_quantity       = cuda::memory::host::make_unique< compressed::quantity_t[]       >(cardinality);
+    auto compressed_return_flag    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, return_flag_values_per_container));
+    auto compressed_line_status    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, line_status_values_per_container));
 
     auto end_csv = timer::now();
 
-	cout << "Preprocessing/compressing column data... " << flush;
+    cout << "Preprocessing/compressing column data... " << flush;
 
     auto start_preprocess = timer::now();
 
@@ -241,15 +241,15 @@ int main(int argc, char** argv) {
         compressed_quantity[i]       = quantity[i] / 100;
         compressed_tax[i]            = tax[i]; // we're keeping the factor 100 scaling
         set_bit_resolution_element<log_return_flag_bits, cardinality_t>(
-        	compressed_return_flag.get(), i, encode_return_flag(returnflag[i]));
+            compressed_return_flag.get(), i, encode_return_flag(returnflag[i]));
         set_bit_resolution_element<log_line_status_bits, cardinality_t>(
-        	compressed_line_status.get(), i, encode_line_status(linestatus[i]));
+            compressed_line_status.get(), i, encode_line_status(linestatus[i]));
         assert( (ship_date_t)      compressed_ship_date[i]      == shipdate[i] - ship_date_frame_of_reference);
         assert( (discount_t)       compressed_discount[i]       == discount[i]);
         assert( (extended_price_t) compressed_extended_price[i] == extendedprice[i]);
-        assert( (quantity_t)       compressed_quantity[i]       == quantity[i] / 100); 
-			// not keeping the scaling here since we know the data is all integral; you could call this a form
-			// of compression
+        assert( (quantity_t)       compressed_quantity[i]       == quantity[i] / 100);
+            // not keeping the scaling here since we know the data is all integral; you could call this a form
+            // of compression
         assert( (tax_t)            compressed_tax[i]            == tax[i]);
     }
 
@@ -258,8 +258,8 @@ int main(int argc, char** argv) {
         assert(decode_return_flag(get_bit_resolution_element(compressed_return_flag, i)) == return_flag[i]);
     }
     auto end_preprocess = timer::now();
-	
-	cout << "done." << endl;
+
+    cout << "done." << endl;
 
     // Note:
     // We are not timing the host-side allocations here. In a real DBMS, these will likely only be
@@ -293,7 +293,8 @@ int main(int argc, char** argv) {
         //      std::make_unique< avg_discount_t[]         >(num_potential_groups),
         // }
     };
-    // Note:
+
+    cuda::profiling::start();
 
 
     /* Allocate memory on device */
@@ -374,14 +375,17 @@ int main(int argc, char** argv) {
         streams[i].enqueue.wait(aggregates_initialized_event);
         // The other streams also require the aggregates to be initialized before doing any work
     }
-    for (size_t offset_in_table = 0; offset_in_table < cardinality; offset_in_table += records_per_scheduled_kernel) {
+    auto stream_index = 0;
+    for (size_t offset_in_table = 0;
+         offset_in_table < cardinality;
+         offset_in_table += records_per_scheduled_kernel,
+         stream_index = (stream_index+1) % num_gpu_streams) {
 
         auto num_records_for_this_launch = std::min<cardinality_t>(records_per_scheduled_kernel, cardinality - offset_in_table);
         auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_records_for_this_launch, return_flag_values_per_container);
         auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_records_for_this_launch, line_status_values_per_container);
 
         // auto start_copy = timer::now();  // This can't work, since copying is asynchronous.
-        auto stream_index = offset_in_table % num_gpu_streams; // so this loop willl act on streams in a round-robin fashion
         auto& stream = streams[stream_index];
         auto& stream_input_buffers = stream_input_buffer_sets[stream_index];
         stream.enqueue.copy(stream_input_buffers.shipdate.get()     , compressed_ship_date.get()      + offset_in_table, num_records_for_this_launch * sizeof(compressed::ship_date_t));
@@ -391,12 +395,11 @@ int main(int argc, char** argv) {
         stream.enqueue.copy(stream_input_buffers.quantity.get()     , compressed_quantity.get()       + offset_in_table, num_records_for_this_launch * sizeof(compressed::quantity_t));
         stream.enqueue.copy(stream_input_buffers.returnflag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t) );
         stream.enqueue.copy(stream_input_buffers.linestatus.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
-    
-        auto num_blocks = div_rounding_up(num_records_for_this_launch, THREADS_PER_BLOCK);
-        auto launch_config = cuda::make_launch_config(num_blocks, THREADS_PER_BLOCK);
+
+        auto num_blocks = div_rounding_up(num_records_for_this_launch, num_threads_per_block);
+        auto launch_config = cuda::make_launch_config(num_blocks, num_threads_per_block);
         (void) launch_config;
 
-/*
         stream.enqueue.kernel_launch(
             cuda::thread_local_tpchQ01_small_datatypes_coalesced,
             launch_config,
@@ -413,7 +416,7 @@ int main(int argc, char** argv) {
             stream_input_buffers.quantity.get(),
             stream_input_buffers.returnflag.get(),
             stream_input_buffers.linestatus.get(),
-            num_records_for_this_launch);*/
+            num_records_for_this_launch);
 
     }
     std::vector<cuda::event_t> completion_events;
@@ -514,9 +517,9 @@ int main(int argc, char** argv) {
     double efective_memory_bandwidth         = static_cast<double>(((cardinality * sizeof(ship_date_t)) + (num_loads * size_per_tuple) + (num_loads * num_stores))  / (duration.count() * 10e09));
     double csv_time = std::chrono::duration<double>(end_csv - start_csv).count();
     double pre_process_time = std::chrono::duration<double>(end_preprocess - start_preprocess).count();
-    
+
     cout << "\n+------------------------------------------------- Statistics --------------------------------------------------+\n";
-    cout << "| TPC-H Q01 performance               : ="          << std::fixed 
+    cout << "| TPC-H Q01 performance               : ="          << std::fixed
               << tuples_per_second <<                 " [tuples/sec]" << endl;
     cout << "| Time taken                          : ~"          << std::setprecision(2)
               << duration.count() <<                  "  [s]"          << endl;
@@ -543,4 +546,5 @@ int main(int argc, char** argv) {
     cout << "| Effective Bandwidth                 : ~"          << std::setprecision(2)
               << efective_memory_bandwidth <<         "  [GB/s]"       << endl;
     cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+    cuda::profiling::stop();
 }

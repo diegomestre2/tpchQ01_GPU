@@ -11,6 +11,10 @@
 #include "kernels/coalesced.hpp"
 #include "../expl_comp_strat/tpch_kit.hpp"
 
+using std::cout;
+using std::endl;
+using std::string;
+
 size_t magic_hash(char rf, char ls) {
     return (((rf - 'A')) - (ls - 'F'));
 }
@@ -22,7 +26,7 @@ void assert_always(bool a) {
     }
 }
 
-void syscall(std::string command) {
+void syscall(string command) {
     system(command.c_str());
 }
 
@@ -37,16 +41,16 @@ int THREADS_PER_BLOCK = 32;
 
 using timer = std::chrono::high_resolution_clock;
 
-inline bool file_exists(const std::string& name) {
+inline bool file_exists(const string& name) {
   struct stat buffer;
   return (stat (name.c_str(), &buffer) == 0);
 }
 
-inline std::string join_path(std::string a, std::string b) {
+inline string join_path(string a, string b) {
     return a + "/" + b;
 }
 
-std::ifstream::pos_type filesize(std::string filename) {
+std::ifstream::pos_type filesize(string filename) {
     std::ifstream in(filename.c_str(), std::ifstream::ate | std::ifstream::binary);
     return in.tellg(); 
 }
@@ -155,7 +159,7 @@ public:
 
 
 #define LOAD_BINARY(variable, tpe, fname) { \
-        std::string fpath = join_path(tpch_directory, fname); \
+        string fpath = join_path(tpch_directory, fname); \
         FILE* pFile = fopen(fpath.c_str(), "rb"); \
         variable = (tpe*) malloc(sizeof(tpe) * cardinality); \
         assert_always(variable && pFile); \
@@ -165,7 +169,7 @@ public:
     
 
 #define WRITE_BINARY(variable, tpe, fname) { \
-        std::string fpath = join_path(tpch_directory, fname); \
+        string fpath = join_path(tpch_directory, fname); \
         FILE* pFile = fopen(fpath.c_str(), "wb+"); \
         assert_always(pFile); \
         fwrite(variable, sizeof(tpe), cardinality, pFile); \
@@ -223,14 +227,14 @@ int main(int argc, char** argv) {
     double sf = 1;
     int nr_streams = 8;
     int nruns = 5;
-    std::string sf_argument = "--sf=";
-    std::string streams_argument = "--streams=";
-    std::string tuples_per_stream_argument = "--tuples-per-stream=";
-    std::string values_per_thread_argument = "--values-per-thread=";
-    std::string threads_per_block_argument = "--threads-per-block=";
-    std::string nruns_argument = "--nruns=";
+    string sf_argument = "--sf=";
+    string streams_argument = "--streams=";
+    string tuples_per_stream_argument = "--tuples-per-stream=";
+    string values_per_thread_argument = "--values-per-thread=";
+    string threads_per_block_argument = "--threads-per-block=";
+    string nruns_argument = "--nruns=";
     for(int i = 1; i < argc; i++) {
-        auto arg = std::string(argv[i]);
+        auto arg = string(argv[i]);
         if (arg == "--device") {
             get_device_properties();
             exit(1);
@@ -263,10 +267,10 @@ int main(int argc, char** argv) {
     }
     lineitem li((size_t)(7000000 * sf));
     syscall("mkdir -p tpch");
-    std::string tpch_directory = join_path("tpch", std::to_string(sf));
-    syscall(std::string("mkdir -p ") + tpch_directory);
+    string tpch_directory = join_path("tpch", std::to_string(sf));
+    syscall(string("mkdir -p ") + tpch_directory);
     if (file_exists(join_path(tpch_directory, "shipdate.bin"))) {
-        std::cout << "Loading from binary." << std::endl;
+        cout << "Loading from binary." << endl;
         // binary files exist, load them
         cardinality = filesize(join_path(tpch_directory, "shipdate.bin")) / sizeof(SHIPDATE_TYPE);
         LOAD_BINARY(_shipdate, SHIPDATE_TYPE, "shipdate.bin");
@@ -288,8 +292,8 @@ int main(int argc, char** argv) {
         A(quantity);
         
     } else {
-        std::cout << "Reading CSV file and writing to binary." << std::endl;
-        std::string input_file = join_path(tpch_directory, "lineitem.tbl");
+        cout << "Reading CSV file and writing to binary." << endl;
+        string input_file = join_path(tpch_directory, "lineitem.tbl");
         if (!file_exists(input_file.c_str())) {
             // have to generate lineitem file
             syscall("./genlineitem.sh " + std::to_string(sf));
@@ -580,13 +584,13 @@ int main(int argc, char** argv) {
         cuda_check_error();
         if (k > 0) {
             std::chrono::duration<double> duration(end - start);
-            myfile << duration.count() << std::endl;
+            myfile << duration.count() << endl;
         }
         if (k == 1) {
-            std::cout << "\n"
+            cout << "\n"
                          "+--------------------------------------------------- Results ---------------------------------------------------+\n";
-            std::cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";
-            std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+            cout << "|  LS | RF | sum_quantity        | sum_base_price      | sum_disc_price      | sum_charge          | count      |\n";
+            cout << "+---------------------------------------------------------------------------------------------------------------+\n";
             auto print_dec = [] (auto s, auto x) { printf("%s%16ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
             // A/F - N/F - N/O, R/F
             int group_order[4];
@@ -648,7 +652,7 @@ int main(int argc, char** argv) {
                     printf(" | %10llu |\n", aggrs0[i].count);
                 }
             }
-            std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+            cout << "+---------------------------------------------------------------------------------------------------------------+\n";
 
             uint64_t cache_line_size = 128; // bytes
             uint64_t num_loads =  1478493 + 38854 + 2920374 + 1478870 + 6;
@@ -664,34 +668,34 @@ int main(int argc, char** argv) {
             double csv_time = std::chrono::duration<double>(end_csv - start_csv).count();
             double pre_process_time = std::chrono::duration<double>(end_preprocess - start_preprocess).count();
 
-            std::cout << "\n+------------------------------------------------- Statistics --------------------------------------------------+\n";
-            std::cout << "| TPC-H Q01 performance               : ="          << std::fixed 
-                      << tuples_per_second <<                 " [tuples/sec]" << std::endl;
-            std::cout << "| Time taken                          : ~"          << std::setprecision(2)
-                      << duration.count() <<                  "  [s]"          << std::endl;
-            std::cout << "| Estimated time for TPC-H SF100      : ~"          << std::setprecision(2)
-                      << duration.count() * (100 / sf) <<     "  [s]"          << std::endl;
-            std::cout << "| CSV Time                            : ~"          << std::setprecision(2)
-                      <<  csv_time <<                         "  [s]"          << std::endl;
-            std::cout << "| Preprocess Time                     : ~"          << std::setprecision(2)
-                      <<  pre_process_time <<                 "  [s]"          << std::endl;
-            std::cout << "| Copy Time                           : ~"          << std::setprecision(2)
-                      << copy_time <<                         "  [s]"          << std::endl;
-            std::cout << "| Computation Time                    : ~"          << std::setprecision(2)
-                      << computation_time <<                  "  [s]"          << std::endl;
-            std::cout << "| Effective memory throughput (query) : ~"          << std::setprecision(2)
-                      << effective_memory_throughput <<       "  [GB/s]"       << std::endl;
-            std::cout << "| Estimated memory throughput (query) : ~"          << std::setprecision(1)
-                      << estimated_memory_throughput <<       "  [GB/s]"       << std::endl;
-            std::cout << "| Effective memory throughput (read)  : ~"          << std::setprecision(2)
-                      << effective_memory_throughput_read <<  "  [GB/s]"       << std::endl;
-            std::cout << "| Memory throughput (write)           : ~"          << std::setprecision(2)
-                      << effective_memory_throughput_write << "  [GB/s]"       << std::endl;
-            std::cout << "| Theoretical Bandwidth               : ="          << std::setprecision(1)
-                      << theretical_memory_bandwidth <<       " [GB/s]"       << std::endl;
-            std::cout << "| Effective Bandwidth                 : ~"          << std::setprecision(2)
-                      << efective_memory_bandwidth <<         "  [GB/s]"       << std::endl;
-            std::cout << "+---------------------------------------------------------------------------------------------------------------+\n";
+            cout << "\n+------------------------------------------------- Statistics --------------------------------------------------+\n";
+            cout << "| TPC-H Q01 performance               : ="          << std::fixed 
+                      << tuples_per_second <<                 " [tuples/sec]" << endl;
+            cout << "| Time taken                          : ~"          << std::setprecision(2)
+                      << duration.count() <<                  "  [s]"          << endl;
+            cout << "| Estimated time for TPC-H SF100      : ~"          << std::setprecision(2)
+                      << duration.count() * (100 / sf) <<     "  [s]"          << endl;
+            cout << "| CSV Time                            : ~"          << std::setprecision(2)
+                      <<  csv_time <<                         "  [s]"          << endl;
+            cout << "| Preprocess Time                     : ~"          << std::setprecision(2)
+                      <<  pre_process_time <<                 "  [s]"          << endl;
+            cout << "| Copy Time                           : ~"          << std::setprecision(2)
+                      << copy_time <<                         "  [s]"          << endl;
+            cout << "| Computation Time                    : ~"          << std::setprecision(2)
+                      << computation_time <<                  "  [s]"          << endl;
+            cout << "| Effective memory throughput (query) : ~"          << std::setprecision(2)
+                      << effective_memory_throughput <<       "  [GB/s]"       << endl;
+            cout << "| Estimated memory throughput (query) : ~"          << std::setprecision(1)
+                      << estimated_memory_throughput <<       "  [GB/s]"       << endl;
+            cout << "| Effective memory throughput (read)  : ~"          << std::setprecision(2)
+                      << effective_memory_throughput_read <<  "  [GB/s]"       << endl;
+            cout << "| Memory throughput (write)           : ~"          << std::setprecision(2)
+                      << effective_memory_throughput_write << "  [GB/s]"       << endl;
+            cout << "| Theoretical Bandwidth               : ="          << std::setprecision(1)
+                      << theretical_memory_bandwidth <<       " [GB/s]"       << endl;
+            cout << "| Effective Bandwidth                 : ~"          << std::setprecision(2)
+                      << efective_memory_bandwidth <<         "  [GB/s]"       << endl;
+            cout << "+---------------------------------------------------------------------------------------------------------------+\n";
         }
     }
     myfile.close();

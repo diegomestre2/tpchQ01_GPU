@@ -149,11 +149,13 @@ int main() {
 	run<KernelX100<kMultiplePrims, false>>(li, "$\\text{X100 Compact DSM Standard}$");
 	run<KernelX100<k1Step, true>>(li, "$\\text{X100 Compact NSM Standard Fused}$");
 #endif
-	run<Morsel<KernelX100<kMagic, true>>>(li, "$\\text{Morsel X100 Compact NSM In-Reg}$");
-	run<KernelX100<kMagic, true>>(li, "$\\text{X100 Compact NSM In-Reg}$");
+	run<KernelX100<kMagic, true>>(li, "$\\text{X100 Compact NSM In-Reg}$", 0);
 
-	run<Morsel<KernelNaiveCompact>>(li, "$\\text{HyPer Compact NoOverflow}$");
-	run<KernelNaiveCompact>(li, "$\\text{HyPer Compact NoOverflow}$");
+	run<Morsel<KernelX100<kMagic, true>>>(li, "$\\text{Morsel X100 Compact NSM In-Reg}$");
+	
+
+	//run<Morsel<KernelNaiveCompact>>(li, "$\\text{HyPer Compact NoOverflow}$");
+	//run<KernelNaiveCompact>(li, "$\\text{HyPer Compact NoOverflow}$", 0);
 	
 
 #if 0	

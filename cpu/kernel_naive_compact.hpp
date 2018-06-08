@@ -6,8 +6,8 @@
 struct KernelNaiveCompact : BaseKernel {
 	kernel_compact_declare
 
-	KernelNaiveCompact(const lineitem& li) : BaseKernel(li) {
-		kernel_compact_init();
+	KernelNaiveCompact(const lineitem& li, size_t core) : BaseKernel(li) {
+		kernel_compact_init(core);
 	}
 
 

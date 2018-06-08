@@ -180,39 +180,6 @@ struct AggrHashTable {
 
 #define kernel_compact_init_magic(col) l_##col[i] = li.l_##col.get()[i];
 
-#define kernel_compact_init() do { \
-		size_t cardinality = li.l_extendedprice.cardinality; \
-	    l_shipdate = new_array<int16_t>(cardinality);  \
-	    l_returnflag = new_array<int8_t>(cardinality);  \
-	    l_linestatus = new_array<int8_t>(cardinality); \
-	    l_discount = new_array<int8_t>(cardinality); \
-	    l_tax = new_array<int8_t>(cardinality); \
-	    l_extendedprice = new_array<int32_t>(cardinality); \
-	    l_quantity = new_array<int16_t>(cardinality); \
-	    for (size_t i=0; i<cardinality; i++) { \
-	        kernel_compact_init_magic(shipdate); \
-	        l_returnflag[i] = li.l_returnflag.get()[i]; /* Too lazy for this column */ \
-	        l_linestatus[i] = li.l_linestatus.get()[i]; /* Too lazy for this column */ \
-	        kernel_compact_init_magic(discount); \
-	        kernel_compact_init_magic(tax); \
-	        kernel_compact_init_magic(extendedprice); \
-	        kernel_compact_init_magic(quantity); \
-	    } \
-    } while (false)
-
-#define kernel_compact_prologue_magic(col) auto col = li.l_##col.get();
-
-#define kernel_compact_prologue() \
-    int8_t* returnflag = (int8_t*)li.l_returnflag.get(); \
-	int8_t* linestatus = (int8_t*)li.l_linestatus.get(); \
-	const size_t cardinality = li.l_extendedprice.cardinality; \
-	kernel_compact_prologue_magic(shipdate); \
-	kernel_compact_prologue_magic(discount); \
-	kernel_compact_prologue_magic(tax); \
-	kernel_compact_prologue_magic(extendedprice); \
-	kernel_compact_prologue_magic(quantity);
-
-
 struct IKernel {
 private:
 	bool m_clean;
@@ -268,6 +235,49 @@ struct BaseKernel : IKernel {
 public:
 	virtual void Profile(size_t total_tuples);
 };
+
+struct ComprData : BaseKernel {
+	kernel_compact_declare
+
+private:
+	ComprData(const lineitem& li);
+
+public:
+	static size_t GetNumaNodes();
+	static ComprData* Get(const lineitem& li, size_t numa_node);
+	static ComprData* GetCore(const lineitem& l, size_t coreid) {
+		return Get(l,
+			// on bricks16
+			coreid % ComprData::GetNumaNodes());
+	}
+};
+
+#define kernel_compact_init(NUMA) do { \
+		auto p = ComprData::GetCore(li, NUMA); \
+		assert(p); \
+		auto& d = *p; \
+		l_shipdate = d.l_shipdate; \
+		l_returnflag = d.l_returnflag; \
+		l_linestatus = d.l_linestatus; \
+		l_discount = d.l_discount; \
+		l_tax = d.l_tax; \
+		l_extendedprice = d.l_extendedprice; \
+		l_quantity = d.l_quantity; \
+    } while (false)
+
+
+#define kernel_compact_prologue_magic(col) auto col = li.l_##col.get();
+
+#define kernel_compact_prologue() \
+    int8_t* returnflag = (int8_t*)li.l_returnflag.get(); \
+	int8_t* linestatus = (int8_t*)li.l_linestatus.get(); \
+	const size_t cardinality = li.l_extendedprice.cardinality; \
+	kernel_compact_prologue_magic(shipdate); \
+	kernel_compact_prologue_magic(discount); \
+	kernel_compact_prologue_magic(tax); \
+	kernel_compact_prologue_magic(extendedprice); \
+	kernel_compact_prologue_magic(quantity);
+
 
 
 extern "C" __attribute__((noinline)) void handle_overflow();

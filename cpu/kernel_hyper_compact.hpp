@@ -5,8 +5,8 @@
 
 template<bool use_flag>
 struct KernelHyPerCompact : BaseKernel {
-	KernelHyPerCompact(const lineitem& li) : BaseKernel(li) {
-		kernel_compact_init();
+	KernelHyPerCompact(const lineitem& li, size_t core) : BaseKernel(li) {
+		kernel_compact_init(core);
 	}
 
 	kernel_compact_declare

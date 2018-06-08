@@ -43,14 +43,14 @@ struct KernelX100 : BaseKernel {
 	#define scan(name) v_##name = (l_##name);
 	#define scan_epilogue(name) v_##name += chunk_size;
 
-	KernelX100(const lineitem& li) : BaseKernel(li) {
+	KernelX100(const lineitem& li, size_t core) : BaseKernel(li) {
 		grppos = new_array<uint16_t*>(kGrpPosSize);
 		selbuf = new_array<uint16_t>(kSelBufSize);
 		pos = new_array<idx_t>(kVectorsize);
 		lim = new_array<idx_t>(kVectorsize);
 		grp = new_array<idx_t>(kVectorsize);
 
-		kernel_compact_init();
+		kernel_compact_init(core);
 
 		v_shipdate = new_array<int16_t>(kVectorsize);
 
@@ -431,19 +431,23 @@ struct Morsel : BaseKernel {
 
 	const size_t morsel_size = 10*1024;
 
+	size_t size;
+
 	NOINL void Query(size_t id) {
+		assert(size > 0);
 		auto& s = *states[id];
-		const size_t cardinality = li.l_extendedprice.cardinality;
 
 		// process all morsels
-		while (morsel_start < cardinality) {
+		while (morsel_start < size) {
 			size_t offset = morsel_start.fetch_add(morsel_size);
-			if (offset >= cardinality) {
+			if (offset >= size) {
 				break;
 			}
 
-			size_t num = min(morsel_size, cardinality - offset);
+			size_t num = min(morsel_size, size - offset);
 
+			assert(offset < li.l_extendedprice.cardinality);
+			assert(offset + num <= li.l_extendedprice.cardinality);
 			s.task(offset, num);
 
 			if (morsel_completed++ >= num_morsels) {
@@ -476,7 +480,7 @@ struct Morsel : BaseKernel {
 		{
 			std::unique_lock<std::mutex> lock(lock_query);
 			assert(!states[id]);
-			states[id] = new KERNEL(li);
+			states[id] = new KERNEL(li, id);
 			cond_finished.notify_all();
 		}
 
@@ -520,15 +524,19 @@ struct Morsel : BaseKernel {
 			}
 		}
 
-		for (size_t i=0; i<threadinhos; i++) {
-			workers.push_back(std::thread(&Morsel::Work, this, i));
+		{
+			std::unique_lock<std::mutex> lock(lock_query);
 
-			// set affinity
-			cpu_set_t cpuset;
-			CPU_ZERO(&cpuset);
-			CPU_SET(i, &cpuset);
-			int rc = pthread_setaffinity_np(workers[i].native_handle(), sizeof(cpu_set_t), &cpuset);
-			assert(rc == 0 && "Setting affinity failed");
+			for (size_t i=0; i<threadinhos; i++) {
+				workers.push_back(std::thread(&Morsel::Work, this, i));
+
+				// set affinity
+				cpu_set_t cpuset;
+				CPU_ZERO(&cpuset);
+				CPU_SET(i, &cpuset);
+				int rc = pthread_setaffinity_np(workers[i].native_handle(), sizeof(cpu_set_t), &cpuset);
+				assert(rc == 0 && "Setting affinity failed");
+			}
 		}
 
 		{ // wait until all are up and running
@@ -551,13 +559,17 @@ struct Morsel : BaseKernel {
 	void Profile(size_t total_tuples) override {
 	}
 
-	NOINL void operator()() {
-		const size_t cardinality = li.l_extendedprice.cardinality;
+	NOINL void task(size_t offset, size_t num) {
+		size = offset + num;
+		assert(size <= li.l_extendedprice.cardinality);
 		// start threads
 		{
 			std::unique_lock<std::mutex> lock(lock_query);
-			num_morsels = cardinality / morsel_size;
-			morsel_start = 0;
+			num_morsels = num / morsel_size;
+			if (num_morsels < 1) {
+				num_morsels = 1;
+			}
+			morsel_start = offset;
 			morsel_completed = 0;
 			stage = QUERY;
 			cond_start.notify_all();
@@ -572,6 +584,10 @@ struct Morsel : BaseKernel {
 
 			stage = DONE;
 		}
+	}
+
+	NOINL void operator()() {
+		task(0, li.l_extendedprice.cardinality);
 	}
 
 	virtual void Clear() override

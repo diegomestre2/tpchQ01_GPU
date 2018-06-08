@@ -110,6 +110,64 @@ IKernel::~IKernel()
 	}
 }
 
+ComprData::ComprData(const lineitem& li) : BaseKernel(li)
+{
+	size_t cardinality = li.l_extendedprice.cardinality;
+    l_shipdate = new_array<int16_t>(cardinality); 
+    l_returnflag = new_array<int8_t>(cardinality);
+    l_linestatus = new_array<int8_t>(cardinality);
+    l_discount = new_array<int8_t>(cardinality);
+    l_tax = new_array<int8_t>(cardinality);
+    l_extendedprice = new_array<int32_t>(cardinality);
+    l_quantity = new_array<int16_t>(cardinality);
+    for (size_t i=0; i<cardinality; i++) {
+        kernel_compact_init_magic(shipdate);
+        l_returnflag[i] = li.l_returnflag.get()[i]; /* Too lazy for this column */
+        l_linestatus[i] = li.l_linestatus.get()[i]; /* Too lazy for this column */
+        kernel_compact_init_magic(discount);
+        kernel_compact_init_magic(tax);
+        kernel_compact_init_magic(extendedprice);
+        kernel_compact_init_magic(quantity);
+    }
+}
+
+#include <numa.h>
+#include <mutex>
+
+std::mutex numa_data_mutex;
+ComprData** numa_data;
+
+size_t
+ComprData::GetNumaNodes()
+{
+	assert(numa_available() != -1);
+
+	return numa_num_configured_nodes();
+}
+
+ComprData*
+ComprData::Get(const lineitem& li, size_t numa_node)
+{
+	size_t numa_nodes = GetNumaNodes();
+
+	assert(numa_node < numa_nodes);
+
+	std::unique_lock<std::mutex> lock(numa_data_mutex);
+
+	if (!numa_data) {
+		numa_data = new ComprData*[numa_nodes];
+		for (size_t i=0; i<numa_nodes; i++) {
+			numa_data[i] = nullptr;
+		}
+	}
+
+	if (!numa_data[numa_node]) {
+		numa_data[numa_node] = new ComprData(li);
+	}
+
+	return numa_data[numa_node];
+}
+
 void
 print_arr(long long int* a, size_t* indices)
 {

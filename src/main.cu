@@ -218,7 +218,7 @@ int main(int argc, char** argv) {
     bool USE_GLOBAL_HT = false;
     bool USE_SMALL_DATATYPES = false;
     bool USE_COALESCING = false;
-    bool USE_COPROCESSING = false;
+    bool USE_COPROCESSING = true;
 
     double sf = 1;
     int nr_streams = 8;
@@ -395,7 +395,7 @@ int main(int argc, char** argv) {
     auto end_preprocess = timer::now();
 
     assert(cardinality > 0 && "Prevent BS exception");
-    const size_t data_length = cardinality;
+    const size_t data_length = cardinality / 2;
     clear_tables();
 
     /* Allocate memory on device */
@@ -417,8 +417,7 @@ int main(int argc, char** argv) {
         auto start = timer::now();
 
         if (cpu) {
-            offset = cardinality / 2;
-            (*cpu)(0, offset);
+            (*cpu)(data_length, cardinality - data_length);
         }        
 
         while (offset < data_length) {
@@ -561,7 +560,7 @@ int main(int argc, char** argv) {
 
                 auto group = group_order[idx];
 
-                #define B(i)  aggrs0[group].i += e.i; printf("set %s group %d  parti %d\n", #i, group, e.i)
+                #define B(i)  aggrs0[group].i += e.i; printf("set %s group %d  old %d parti %d\n", #i, group, aggrs0[group].i, e.i)
 
                 B(sum_quantity);
                 B(count);

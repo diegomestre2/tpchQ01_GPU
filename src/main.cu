@@ -36,6 +36,10 @@ using std::cout;
 using std::endl;
 using std::string;
 
+using std::cout;
+using std::endl;
+using std::string;
+
 size_t magic_hash(char rf, char ls) {
     return (((rf - 'A')) - (ls - 'F'));
 }
@@ -160,6 +164,22 @@ void make_sure_we_are_on_cpu_core_0()
     CPU_SET(0, &cpuset);
     sched_setaffinity(0, sizeof(cpuset), &cpuset);
 }
+
+#include "cpu.h"
+
+
+GPUAggrHashTable aggrs0[MAX_GROUPS] ALIGN;
+
+#define init_table(ag) memset(&aggrs##ag, 0, sizeof(aggrs##ag))
+#define clear(x) memset(x, 0, sizeof(x))
+
+extern "C" void
+clear_tables()
+{
+    init_table(0);
+}
+
+#include "cpu/common.hpp"
 
 int main(int argc, char** argv) {
     cout << "TPC-H Query 1" << '\n';

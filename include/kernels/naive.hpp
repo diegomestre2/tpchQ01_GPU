@@ -12,8 +12,8 @@ namespace cuda {
         sum_discount_t *sum_discount,
         cardinality_t *record_count,
         ship_date_t *shipdate,
-        DISCOUNT_TYPE *discount,
-        EXTENDEDPRICE_TYPE *extendedprice,
+        discount_t *discount,
+        extended_price_t *extendedprice,
         tax_t *tax,
         return_flag_t *returnflag,
         line_status_t *linestatus,
@@ -29,13 +29,19 @@ namespace cuda {
             const auto disc_price = Decimal64::Mul(disc_1, price);
             const auto charge = Decimal64::Mul(disc_price, tax_1);
             const idx_t idx = returnflag[i] << 8 | linestatus[i];
+            atomicAdd((unsigned long long*)&(aggregations[idx].sum_quantity), quantity[i]);
+            atomicAdd((unsigned long long*)&(aggregations[idx].sum_base_price), price);
+            auto old = atomicAdd((unsigned long long*)&(aggregations[idx].sum_charge), charge);
+            if (old + charge < charge) {
+                atomicAdd((unsigned long long*)&(aggregations[idx].sum_charge) + 1, 1);
+            }
 
-            atomicAdd((uint64_t*)&sum_quantity[idx], (uint64_t) quantity[i]);
-            atomicAdd((uint64_t*)&sum_base_price[idx], (uint64_t) price);
-            atomicAdd((uint64_t*)&sum_charge[idx], (uint64_t) charge);
-            atomicAdd((uint64_t*)&sum_discounted_price[idx], (uint64_t)disc_price);
-            atomicAdd((uint64_t*)&sum_discount[idx], (uint64_t) disc);
-            atomicAdd((uint64_t*)&record_count[idx], (uint64_t) 1);
+            auto old_2 = atomicAdd((unsigned long long*)&(aggregations[idx].sum_disc_price), disc_price);
+            if (old_2 + disc_price < disc_price) {
+                atomicAdd((unsigned long long*)&(aggregations[idx].sum_disc_price) + 1, 1);
+            }
+            atomicAdd((unsigned long long*)&(aggregations[idx].sum_disc), disc);
+            atomicAdd((unsigned long long*)&(aggregations[idx].count), 1);
             
         }
     }

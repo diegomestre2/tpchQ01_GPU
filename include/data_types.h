@@ -11,8 +11,8 @@ using discount_t             = int64_t;
 using extended_price_t       = int64_t;
 using tax_t                  = int64_t;
 using quantity_t             = int64_t;
-using return_flag_t          = int8_t;
-using line_status_t          = int8_t;
+using return_flag_t          = char; // Perhaps uint8_t? see tpch_kit.hpp
+using line_status_t          = char; // Perhaps uint8_t? see tpch_kit.hpp
 
 using sum_quantity_t         = uint64_t;
 using sum_base_price_t       = uint64_t;
@@ -20,7 +20,7 @@ using sum_discounted_price_t = uint64_t;
 using sum_charge_t           = uint64_t;
 using sum_discount_t         = uint64_t;
 
-using cardinality_t         = uint32_t; // Limiting ourselves to SF 500 here
+using cardinality_t          = uint32_t; // Limiting ourselves to SF 500 here
 
 namespace compressed {
 

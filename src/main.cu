@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <fstream>
 #include <chrono>
+#include <tuple>
 
 #include "data_types.h"
 #include "constants.hpp"
@@ -15,15 +16,31 @@
 #include "kernels/coalesced.hpp"
 #include "../expl_comp_strat/tpch_kit.hpp"
 #include "../expl_comp_strat/common.hpp"
+#include "cpu/common.hpp"
+#include "cpu.h"
 
+
+using std::tie;
 using std::make_pair;
 using std::make_unique;
 using std::unique_ptr;
 using std::cout;
 using std::endl;
 using std::flush;
+using std::string;
 
-void syscall(std::string command) {
+size_t magic_hash(char rf, char ls) {
+    return (((rf - 'A')) - (ls - 'F'));
+}
+
+void assert_always(bool a) {
+    if (!a) {
+        fprintf(stderr, "Assert always failed!");
+        exit(1);
+    }
+}
+
+void syscall(string command) {
     auto x = system(command.c_str());
     (void) x;
 }
@@ -34,16 +51,16 @@ void syscall(std::string command) {
 
 using timer = std::chrono::high_resolution_clock;
 
-inline bool file_exists(const std::string& name) {
+inline bool file_exists(const string& name) {
     struct stat buffer;
     return (stat (name.c_str(), &buffer) == 0);
 }
 
-inline std::string join_path(std::string a, std::string b) {
+inline string join_path(string a, string b) {
     return a + "/" + b;
 }
 
-std::ifstream::pos_type filesize(std::string filename) {
+std::ifstream::pos_type filesize(string filename) {
     std::ifstream in(filename.c_str(), std::ifstream::ate | std::ifstream::binary);
     return in.tellg();
 }
@@ -66,8 +83,8 @@ template <typename UniquePtr>
 void load_column_from_binary_file(
     UniquePtr&          buffer,
     cardinality_t       cardinality,
-    const std::string&  directory,
-    const std::string&  file_name)
+    const string&  directory,
+    const string&  file_name)
 {
     // TODO: C++'ify the file access (will also guarantee exception safety)
     using raw_ptr_type = typename std::decay<decltype(buffer.get())>::type;
@@ -86,7 +103,7 @@ void load_column_from_binary_file(
 }
 
 template <typename T>
-void write_column_to_binary_file(const T* buffer, cardinality_t cardinality, const std::string& directory, const std::string& file_name) {
+void write_column_to_binary_file(const T* buffer, cardinality_t cardinality, const string& directory, const string& file_name) {
     auto file_path = join_path(directory, file_name);
     cout << "Writing a column to " << file_path << " ... " << flush;
     FILE* pFile = fopen(file_path.c_str(), "wb+");
@@ -104,14 +121,10 @@ void write_column_to_binary_file(const T* buffer, cardinality_t cardinality, con
 void print_help() {
     fprintf(stderr, "Unrecognized command line option.\n");
     fprintf(stderr, "Usage: tpch_01 [args]\n");
-    fprintf(stderr, "   --scale_factor=[scale_factor:1] (number, e.g. 0.01 - 100)\n");
+    fprintf(stderr, "   --sf=[df:1] (number, e.g. 0.01 - 100)\n");
     fprintf(stderr, "   --streams=[streams:8] (number, e.g. 1 - 64)\n");
-    fprintf(stderr, "   --tuples-per-stream=[tuples:32768] (number, e.g. 16384 - 131072)\n");
-    fprintf(stderr, "   --values-per-thread=[values:64] (number, e.g. 16 - 128)\n");
     fprintf(stderr, "   --threads-per-block=[threads:32] (number, e.g. 32 - 1024)\n");
-    fprintf(stderr, "   --use-global-ht\n");
-    fprintf(stderr, "   --use-small-datatypes\n");
-    fprintf(stderr, "   --use-coalescing\n");
+//    fprintf(stderr, "   --compress\n");
 }
 
 template <typename F, typename... Args>
@@ -119,6 +132,16 @@ void for_each_argument(F f, Args&&... args) {
     [](...){}((f(std::forward<Args>(args)), 0)...);
 }
 
+GPUAggrHashTable aggrs0[num_potential_groups] ALIGN;
+
+#define init_table(ag) memset(&aggrs##ag, 0, sizeof(aggrs##ag))
+#define clear(x) memset(x, 0, sizeof(x))
+
+extern "C" void
+clear_tables()
+{
+    init_table(0);
+}
 
 int main(int argc, char** argv) {
     cout << "TPC-H Query 1" << '\n';
@@ -137,23 +160,31 @@ int main(int argc, char** argv) {
     // is brought up. Note the allocation vs sub-allocation issue (see further comments below)
     int num_query_execution_runs = 5;
 
-    std::string sf_argument = "--scale_factor=";
-    std::string streams_argument = "--streams=";
-    std::string threads_per_block_argument = "--threads-per-block=";
-    std::string nruns_argument = "--runs=";
+    string sf_argument = "--sf=";
+    string streams_argument = "--streams=";
+    string threads_per_block_argument = "--threads-per-block=";
+    string num_runs_arguments = "--runs=";
+
+    //bool apply_compression = true;
+    bool use_coprocessing = false;
+
     for(int i = 1; i < argc; i++) {
-        auto arg = std::string(argv[i]);
+        auto arg = string(argv[i]);
         if (arg == "--device") {
             get_device_properties();
             exit(1);
+     //   } else if (arg == "--compress") {
+     //       apply_compression = true;
+        } else if (arg == "--use-coprocessing") {
+            use_coprocessing = true;
         } else if (arg.substr(0, sf_argument.size()) == sf_argument) {
             scale_factor = std::stod(arg.substr(sf_argument.size()));
         } else if (arg.substr(0, streams_argument.size()) == streams_argument) {
             num_gpu_streams = std::stoi(arg.substr(streams_argument.size()));
         } else if (arg.substr(0, threads_per_block_argument.size()) == threads_per_block_argument) {
             num_threads_per_block = std::stoi(arg.substr(threads_per_block_argument.size()));
-        } else if (arg.substr(0, nruns_argument.size()) == nruns_argument) {
-            num_query_execution_runs = std::stoi(arg.substr(nruns_argument.size()));
+        } else if (arg.substr(0, num_runs_arguments.size()) == num_runs_arguments) {
+            num_query_execution_runs = std::stoi(arg.substr(num_runs_arguments.size()));
         } else {
             print_help();
             exit(1);
@@ -172,8 +203,8 @@ int main(int argc, char** argv) {
 
     // TODO: Use std::filesystem for the filesystem stuff
     syscall("mkdir -p tpch");
-    std::string tpch_directory = join_path("tpch", std::to_string(scale_factor));
-    syscall(std::string("mkdir -p ") + tpch_directory);
+    string tpch_directory = join_path("tpch", std::to_string(scale_factor));
+    syscall(string("mkdir -p ") + tpch_directory);
     if (file_exists(join_path(tpch_directory, "shipdate.bin"))) {
         // binary files (seem to) exist, load them
         cardinality = filesize(join_path(tpch_directory, "shipdate.bin")) / sizeof(ship_date_t);
@@ -187,6 +218,27 @@ int main(int argc, char** argv) {
         load_column_from_binary_file(_tax,           cardinality, tpch_directory, "tax.bin");
         load_column_from_binary_file(_extendedprice, cardinality, tpch_directory, "extendedprice.bin");
         load_column_from_binary_file(_quantity,      cardinality, tpch_directory, "quantity.bin");
+
+        #define A(name) li.l_##name.cardinality = cardinality; li.l_##name.m_ptr = _##name.get()
+
+        for_each_argument([&](auto t){ std::get<0>(t).cardinality = cardinality; std::get<0>(t).m_ptr = std::get<1>(t).get(); }, 
+			tie(li.l_shipdate,      _shipdate),
+			tie(li.l_returnflag,    _returnflag),
+            tie(li.l_linestatus,    _linestatus),
+            tie(li.l_discount,      _discount),
+            tie(li.l_tax,           _tax),
+            tie(li.l_extendedprice, _extendedprice), 
+            tie(li.l_quantity,      _quantity)
+        );
+/*
+        A(shipdate);
+        A(returnflag);
+        A(linestatus);
+        A(discount);
+        A(tax);
+        A(extendedprice);
+        A(quantity);
+  */      
     } else {
         std::string input_file = join_path(tpch_directory, "lineitem.tbl");
         if (not file_exists(input_file.c_str())) {
@@ -211,8 +263,10 @@ int main(int argc, char** argv) {
         write_column_to_binary_file(li.l_discount.get(),      cardinality, tpch_directory, "discount.bin");
         write_column_to_binary_file(li.l_tax.get(),           cardinality, tpch_directory, "tax.bin");
         write_column_to_binary_file(li.l_extendedprice.get(), cardinality, tpch_directory, "extendedprice.bin");
-        write_column_to_binary_file(li.l_quantity.get(),      cardinality, tpch_directory, "quantity.bin");
+        write_column_to_binary_file(li.l_quantity.get(),      cardinality, tpch_directory, "quantity.bin");    
     }
+
+    CoProc* cpu = use_coprocessing ?  new CoProc(li) : nullptr;
 
     auto compressed_ship_date      = cuda::memory::host::make_unique< compressed::ship_date_t[]      >(cardinality);
     auto compressed_discount       = cuda::memory::host::make_unique< compressed::discount_t[]       >(cardinality);
@@ -298,7 +352,7 @@ int main(int argc, char** argv) {
 
 
     /* Allocate memory on device */
-
+    
     // Note:
     // We are not timing the allocations here. In a real DBMS, actual CUDA allocations would
     // happen with the DBMS is brought up, and when a query is processed, it will only be
@@ -357,8 +411,8 @@ int main(int argc, char** argv) {
     }
 
     // You can't measure this from inside the process - without events, which
-//    double copy_time = 0;
-//    double computation_time = 0;
+    // double copy_time = 0;
+    // double computation_time = 0;
 
     // This only works for the overall time, not for anything else, so it's not a good idea:
      std::ofstream results_file;
@@ -367,6 +421,18 @@ int main(int argc, char** argv) {
     for(int run_index = 0; run_index < num_query_execution_runs; run_index++) {
         cout << "Executing query, run " << run_index + 1 << " of " << num_query_execution_runs << "... " << flush;
         auto start = timer::now();
+        
+       	auto gpu_end_offset = cardinality; 
+        if (use_coprocessing) {
+             // Split the work between the CPU and the GPU at 50% each
+             // TODO: 
+             // - Double-check the choice of alignment here
+             // - The parameters here are weird
+             auto cpu_start_offset = cardinality / 2;
+             cpu_start_offset = cardinality - cardinality % num_records_per_scheduled_kernel;
+             (*cpu)(cpu_start_offset, cardinality - cpu_start_offset);
+             gpu_end_offset = cpu_start_offset;
+        } 
 
         // Initialize the aggregates; perhaps we should do this in a single kernel? ... probably not worth it
         streams[0].enqueue.memset(aggregates_on_device.sum_quantity.get(),         0, num_potential_groups * sizeof(sum_quantity_t));
@@ -385,11 +451,11 @@ int main(int argc, char** argv) {
         }
         auto stream_index = 0;
         for (size_t offset_in_table = 0;
-             offset_in_table < cardinality;
+             offset_in_table < gpu_end_offset;
              offset_in_table += num_records_per_scheduled_kernel,
              stream_index = (stream_index+1) % num_gpu_streams) {
 
-            auto num_records_for_this_launch = std::min<cardinality_t>(num_records_per_scheduled_kernel, cardinality - offset_in_table);
+            auto num_records_for_this_launch = std::min<cardinality_t>(num_records_per_scheduled_kernel, gpu_end_offset - offset_in_table);
             auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_records_for_this_launch, return_flag_values_per_container);
             auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_records_for_this_launch, line_status_values_per_container);
 
@@ -425,14 +491,14 @@ int main(int argc, char** argv) {
                 stream_input_buffers.returnflag.get(),
                 stream_input_buffers.linestatus.get(),
                 num_records_for_this_launch);
-
+       
         }
         std::vector<cuda::event_t> completion_events;
         for(int i = 1; i < num_gpu_streams; i++) {
             auto event = streams[i].enqueue.event();
             completion_events.emplace_back(std::move(event));
         }
-
+        
         // It's probably a better idea to go round-robin on the streams here
         streams[0].enqueue.copy(aggregates_on_host.sum_quantity.get(),         aggregates_on_device.sum_quantity.get(),         num_potential_groups * sizeof(sum_quantity_t));
         streams[0].enqueue.copy(aggregates_on_host.sum_base_price.get(),       aggregates_on_device.sum_base_price.get(),       num_potential_groups * sizeof(sum_base_price_t));
@@ -442,11 +508,54 @@ int main(int argc, char** argv) {
         streams[0].enqueue.copy(aggregates_on_host.record_count.get(),         aggregates_on_device.record_count.get(),         num_potential_groups * sizeof(cardinality_t));
 
         streams[0].synchronize();
+
+        if (cpu) {
+            cpu->wait();
+
+/*            // merge
+            int group_order[4];
+            if (apply_compression) {
+                group_order[0] = 6;
+                group_order[1] = 4;
+                group_order[2] = 0;
+                group_order[3] = 5;
+            } else {
+                group_order[0] = magic_hash('A', 'F');
+                group_order[1] = magic_hash('N', 'F');
+                group_order[2] = magic_hash('N', 'O');
+                group_order[3] = magic_hash('R', 'F');
+            }
+*/
+            size_t idx = 0;
+            for (size_t i=0; i<num_potential_groups; i++) {
+                auto& e = cpu->table[i];
+                if (e.count <= 0) {
+                    continue;
+                }
+/*
+                auto group = group_order[idx];
+
+                #define B(i)  aggrs0[group].i += e.i; printf("set %s group %d  parti %d\n", #i, group, e.i)
+
+                B(sum_quantity);
+                B(count);
+                B(sum_base_price);
+                B(sum_disc);
+                B(sum_disc_price);
+                B(sum_charge);
+*/
+                idx++;
+            }
+
+            assert_always(idx == 4);
+        }
+
         auto end = timer::now();
         std::chrono::duration<double> duration(end - start);
         cout << "done." << endl;
         results_file << duration.count() << '\n';
-    }
+	}
+
     cuda::profiling::stop();
 
     if (num_query_execution_runs == 1) {
@@ -499,7 +608,7 @@ int main(int argc, char** argv) {
                 print_dec(" | ",  aggregates_on_host.sum_charge.get()[group]);
                 printf(" | %10u |\n", aggregates_on_host.record_count.get()[group]);
             }
-        }
+		}
 
         cout << "+---------------------------------------------------------------------------------------------------------------+\n";
     }

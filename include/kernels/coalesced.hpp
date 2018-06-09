@@ -68,8 +68,9 @@ __fhd__ bit_container_t get_bit_resolution_element(
         sum_discount_t *sum_discount,
         cardinality_t *record_count,
         ship_date_t *shipdate,
-        DISCOUNT_TYPE *discount,
-        EXTENDEDPRICE_TYPE *extendedprice,
+        discount_t *discount,
+        extended_price_t *extendedprice,
+        ship_date_t *shipdate,
         tax_t *tax,
         return_flag_t *returnflag,
         line_status_t *linestatus,
@@ -77,8 +78,6 @@ __fhd__ bit_container_t get_bit_resolution_element(
         cardinality_t cardinality) {
 
         constexpr size_t N = 18;
-        AggrHashTableLocal agg[N];
-        memset(agg, 0, sizeof(AggrHashTableLocal) * N);
 
         uint64_t i =  (blockIdx.x * blockDim.x + threadIdx.x);
         uint64_t end = (uint64_t)cardinality;
@@ -113,15 +112,16 @@ __fhd__ bit_container_t get_bit_resolution_element(
             if (!agg[i].count) {
                 continue;
             }
-            atomicAdd((uint64_t*)&sum_quantity[i], (uint64_t) agg[i].sum_quantity);
-            atomicAdd((uint64_t*)&sum_base_price[i], (uint64_t) agg[i].sum_base_price);
-            atomicAdd((uint64_t*)&sum_charge[i], (uint64_t) agg[i].sum_charge);
-            atomicAdd((uint64_t*)&sum_discounted_price[i], (uint64_t) agg[i].sum_disc_price);
-            atomicAdd((uint64_t*)&sum_discount[i], (uint64_t) agg[i].sum_disc);
-            atomicAdd((uint64_t*)&record_count[i], (uint64_t) agg[i].count);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_quantity, agg[i].sum_quantity);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_base_price,  agg[i].sum_base_price);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_charge,  agg[i].sum_charge);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_disc_price,  agg[i].sum_disc_price);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_disc,  agg[i].sum_disc);
+            atomicAdd((unsigned long long*) &aggregations[i].count,  agg[i].count);
         }
     }
 */
+
  __global__
 void thread_local_tpchQ01_small_datatypes_coalesced(
 	sum_quantity_t*                      __restrict__ sum_quantity,

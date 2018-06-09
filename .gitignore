@@ -1,7 +1,6 @@
 build
 cub
 cuda-api-wrappers
-cmake
 tpch-dbgen
 scripts
 lineitem.tbl
@@ -12,6 +11,8 @@ debug
 *.rej
 *.diff
 .settings/
-tpch/
-ctags
+tpch
+tags
 *.csv
+tpch
+

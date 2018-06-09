@@ -151,7 +151,18 @@ using Decimal32 = Decimal<9, 2>;
 using Decimal64 = Decimal<15, 2>;
 using Decimal128 = Decimal<15, 2, int128_t>;
 
+
 struct AggrHashTable {
+	int64_t sum_quantity;
+	int64_t count;
+	int64_t sum_base_price;
+	int64_t sum_disc;
+	int128_t sum_disc_price;
+	int128_t sum_charge;
+};
+
+
+struct GPUAggrHashTable {
 	uint64_t sum_quantity;
 	uint64_t count;
 	uint64_t sum_base_price;
@@ -162,7 +173,7 @@ struct AggrHashTable {
 	uint64_t sum_charge_hi;
 };
 
-struct AggrHashTableLocal {
+struct GPUAggrHashTableLocal {
 	uint64_t sum_quantity;
 	uint64_t count;
 	uint64_t sum_base_price;
@@ -254,27 +265,6 @@ public:
 
 
 extern "C" __attribute__((noinline)) void handle_overflow();
-
-extern "C" void clear_tables();
-
-extern AggrHashTable aggrs0[];
-
-extern int64_t aggr_dsm0_sum_quantity[];
-extern int64_t aggr_dsm0_count[];
-extern int64_t aggr_dsm0_sum_base_price[];
-extern int128_t aggr_dsm0_sum_disc_price[];
-extern int128_t aggr_dsm0_sum_charge[];
-extern int64_t aggr_dsm0_sum_disc[];
-
-extern int64_t aggr_avx0_count[];
-extern int64_t aggr_avx0_sum_quantity[];
-extern int64_t aggr_avx0_sum_base_price[];
-extern int64_t aggr_avx0_sum_disc_price_lo[];
-extern int64_t aggr_avx0_sum_disc_price_hi[];
-extern int64_t aggr_avx0_sum_charge_lo[];
-extern int64_t aggr_avx0_sum_charge_hi[];
-extern int64_t aggr_avx0_sum_disc[];
-
 
 inline static int64_t
 m128_hsum_epi64(__m128i a)

@@ -22,8 +22,8 @@ namespace cuda {
         cardinality_t cardinality) {
 
         constexpr size_t N = 18;
-        AggrHashTable agg[N];
-        memset(agg, 0, sizeof(AggrHashTable) * N);
+        GPUAggrHashTable agg[N];
+        memset(agg, 0, sizeof(GPUAggrHashTable) * N);
 
         uint64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
         uint64_t end = min((uint64_t)cardinality, i + VALUES_PER_THREAD);
@@ -51,12 +51,12 @@ namespace cuda {
             if (!agg[i].count) {
                 continue;
             }
-            atomicAdd((uint64_t*)&sum_quantity[i], (uint64_t) agg[i].sum_quantity);
-            atomicAdd((uint64_t*)&sum_base_price[i], (uint64_t) agg[i].sum_base_price);
-            atomicAdd((uint64_t*)&sum_charge[i], (uint64_t) agg[i].sum_charge);
-            atomicAdd((uint64_t*)&sum_discounted_price[i], (uint64_t) agg[i].sum_disc_price);
-            atomicAdd((uint64_t*)&sum_discount[i], (uint64_t) agg[i].sum_disc);
-            atomicAdd((uint64_t*)&record_count[i], (uint64_t) agg[i].count);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_quantity,  agg[i].sum_quantity);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_base_price,  agg[i].sum_base_price);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_charge,  agg[i].sum_charge);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_disc_price,  agg[i].sum_disc_price);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_disc,  agg[i].sum_disc);
+            atomicAdd((unsigned long long*) &aggregations[i].count,  agg[i].count);
         }
 	}
 
@@ -82,8 +82,8 @@ namespace cuda {
         constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
 
         constexpr size_t N = 8;
-        AggrHashTable agg[N];
-        memset(agg, 0, sizeof(AggrHashTable) * N);
+        GPUAggrHashTable agg[N];
+        memset(agg, 0, sizeof(GPUAggrHashTable) * N);
 
         uint64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
         uint64_t end = min((uint64_t)cardinality, i + VALUES_PER_THREAD);
@@ -112,12 +112,12 @@ namespace cuda {
             if (!agg[i].count) {
                 continue;
             }
-            atomicAdd((uint64_t*)&sum_quantity[i], (uint64_t) agg[i].sum_quantity);
-            atomicAdd((uint64_t*)&sum_base_price[i], (uint64_t) agg[i].sum_base_price);
-            atomicAdd((uint64_t*)&sum_charge[i], (uint64_t) agg[i].sum_charge);
-            atomicAdd((uint64_t*)&sum_discounted_price[i], (uint64_t) agg[i].sum_disc_price);
-            atomicAdd((uint64_t*)&sum_discount[i], (uint64_t) agg[i].sum_disc);
-            atomicAdd((uint64_t*)&record_count[i], (uint64_t) agg[i].count);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_quantity, agg[i].sum_quantity * 100);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_base_price, agg[i].sum_base_price);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_charge, agg[i].sum_charge);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_disc_price, agg[i].sum_disc_price);
+            atomicAdd((unsigned long long*) &aggregations[i].sum_disc, agg[i].sum_disc);
+            atomicAdd((unsigned long long*) &aggregations[i].count, agg[i].count);
         }
     }
 }

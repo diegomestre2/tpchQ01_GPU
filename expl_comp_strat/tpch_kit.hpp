@@ -108,6 +108,7 @@ struct MinMax {
 
 template<typename T>
 struct Column : Buffer<T> {
+	using element_type = T;
 	size_t cardinality;
 
 	MinMax<T> minmax;

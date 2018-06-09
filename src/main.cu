@@ -168,19 +168,6 @@ void make_sure_we_are_on_cpu_core_0()
 #include "cpu.h"
 
 
-GPUAggrHashTable aggrs0[MAX_GROUPS] ALIGN;
-
-#define init_table(ag) memset(&aggrs##ag, 0, sizeof(aggrs##ag))
-#define clear(x) memset(x, 0, sizeof(x))
-
-extern "C" void
-clear_tables()
-{
-    init_table(0);
-}
-
-#include "cpu/common.hpp"
-
 int main(int argc, char** argv) {
     cout << "TPC-H Query 1" << '\n';
     make_sure_we_are_on_cpu_core_0();
@@ -217,6 +204,9 @@ int main(int argc, char** argv) {
             use_coprocessing = true;
         } else if (arg.substr(0, sf_argument.size()) == sf_argument) {
             scale_factor = std::stod(arg.substr(sf_argument.size()));
+            if (scale_factor - 0 < 0.001) {
+                std::invalid_argument("Invalid scale factor");
+            }
         } else if (arg.substr(0, streams_argument.size()) == streams_argument) {
             num_gpu_streams = std::stoi(arg.substr(streams_argument.size()));
         } else if (arg.substr(0, threads_per_block_argument.size()) == threads_per_block_argument) {
@@ -228,8 +218,10 @@ int main(int argc, char** argv) {
             exit(1);
         }
     }
-    lineitem li((size_t)(7000000 * scale_factor));
-        // TODO: Make this magic number go away somehow; it's a maximum of 1,500,000 * 7
+    lineitem li((size_t)(7000000 * std::max(scale_factor, 1.0)));
+        // TODO: lineitem should really not need this cap, it should just adjust
+        // allocated space as the need arises (and start with an estimate based on
+        // the file size
 
     std::unique_ptr< ship_date_t[]      > _shipdate;
     std::unique_ptr< return_flag_t[]    > _returnflag;
@@ -246,6 +238,10 @@ int main(int argc, char** argv) {
     if (file_exists(join_path(tpch_directory, "shipdate.bin"))) {
         // binary files (seem to) exist, load them
         cardinality = filesize(join_path(tpch_directory, "shipdate.bin")) / sizeof(ship_date_t);
+        if (cardinality == cardinality_of_scale_factor_1) {
+            cardinality = ((double) cardinality) * scale_factor;
+        }
+        cout << "Lineitem table cardinality for scale factor " << scale_factor << " is " << cardinality << endl;
         if (cardinality == 0) {
             throw std::runtime_error("The lineitem table column cardinality should not be 0");
         }
@@ -264,8 +260,8 @@ int main(int argc, char** argv) {
                 std::get<0>(tup).cardinality = cardinality;
                 std::get<0>(tup).m_ptr = std::get<1>(tup).get();
             },
-			tie(li.l_shipdate,      _shipdate),
-			tie(li.l_returnflag,    _returnflag),
+            tie(li.l_shipdate,      _shipdate),
+            tie(li.l_returnflag,    _returnflag),
             tie(li.l_linestatus,    _linestatus),
             tie(li.l_discount,      _discount),
             tie(li.l_tax,           _tax),
@@ -282,6 +278,9 @@ int main(int argc, char** argv) {
         cout << "Parsing the lineitem table in file " << input_file << endl;
         li.FromFile(input_file.c_str());
         cardinality = li.l_extendedprice.cardinality;
+        if (cardinality == cardinality_of_scale_factor_1) {
+            cardinality = ((double) cardinality) * scale_factor;
+        }
         if (cardinality == 0) {
             throw std::runtime_error("The lineitem table column cardinality should not be 0");
         }
@@ -298,6 +297,7 @@ int main(int argc, char** argv) {
         write_column_to_binary_file(li.l_extendedprice.get(), cardinality, tpch_directory, "extendedprice.bin");
         write_column_to_binary_file(li.l_quantity.get(),      cardinality, tpch_directory, "quantity.bin");    
     }
+
 
     clear_tables(); // currently only used by the CPU implementation
     CoProc* cpu = use_coprocessing ?  new CoProc(li, true) : nullptr;
@@ -343,9 +343,11 @@ int main(int argc, char** argv) {
         assert( (tax_t)            compressed_tax[i]            == tax[i]);
     }
 
-    for(size_t i = 0; i < cardinality; i++) {
-        assert(decode_line_status(get_bit_resolution_element<log_line_status_bits, cardinality_t>(compressed_line_status.get(), i)) == linestatus[i]);
+//    cout << endl;
+    for(cardinality_t i = 0; i < cardinality; i++) {
+//        if (i < 16) cout << "Host " << std::setw(4) << i << " : " << returnflag[i] << " | " << linestatus[i] << endl;
         assert(decode_return_flag(get_bit_resolution_element<log_return_flag_bits, cardinality_t>(compressed_return_flag.get(), i)) == returnflag[i]);
+        assert(decode_line_status(get_bit_resolution_element<log_line_status_bits, cardinality_t>(compressed_line_status.get(), i)) == linestatus[i]);
     }
     cout << "done." << endl;
 
@@ -412,13 +414,13 @@ int main(int argc, char** argv) {
     };
 
     struct stream_input_buffer_set {
-        cuda::memory::device::unique_ptr< compressed::ship_date_t[]      > shipdate;
+        cuda::memory::device::unique_ptr< compressed::ship_date_t[]      > ship_date;
         cuda::memory::device::unique_ptr< compressed::discount_t[]       > discount;
-        cuda::memory::device::unique_ptr< compressed::extended_price_t[] > extendedprice;
+        cuda::memory::device::unique_ptr< compressed::extended_price_t[] > extended_price;
         cuda::memory::device::unique_ptr< compressed::tax_t[]            > tax;
         cuda::memory::device::unique_ptr< compressed::quantity_t[]       > quantity;
-        cuda::memory::device::unique_ptr< bit_container_t[]              > returnflag;
-        cuda::memory::device::unique_ptr< bit_container_t[]              > linestatus;
+        cuda::memory::device::unique_ptr< bit_container_t[]              > return_flag;
+        cuda::memory::device::unique_ptr< bit_container_t[]              > line_status;
     };
 
     std::vector<stream_input_buffer_set> stream_input_buffer_sets;
@@ -456,7 +458,7 @@ int main(int argc, char** argv) {
         cout << "Executing query, run " << run_index + 1 << " of " << num_query_execution_runs << "... " << flush;
         auto start = timer::now();
         
-       	auto gpu_end_offset = cardinality; 
+           auto gpu_end_offset = cardinality; 
         if (use_coprocessing) {
              cpu->Clear();
              // Split the work between the CPU and the GPU at 50% each
@@ -493,18 +495,19 @@ int main(int argc, char** argv) {
 
             auto num_records_for_this_launch = std::min<cardinality_t>(num_records_per_scheduled_kernel, gpu_end_offset - offset_in_table);
             auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_records_for_this_launch, return_flag_values_per_container);
+            cout << "num_return_flag_bit_containers_for_this_launch = " << num_return_flag_bit_containers_for_this_launch << endl;
             auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_records_for_this_launch, line_status_values_per_container);
 
             // auto start_copy = timer::now();  // This can't work, since copying is asynchronous.
             auto& stream = streams[stream_index];
             auto& stream_input_buffers = stream_input_buffer_sets[stream_index];
-            stream.enqueue.copy(stream_input_buffers.shipdate.get()     , compressed_ship_date.get()      + offset_in_table, num_records_for_this_launch * sizeof(compressed::ship_date_t));
+            stream.enqueue.copy(stream_input_buffers.ship_date.get()     , compressed_ship_date.get()      + offset_in_table, num_records_for_this_launch * sizeof(compressed::ship_date_t));
             stream.enqueue.copy(stream_input_buffers.discount.get()     , compressed_discount.get()       + offset_in_table, num_records_for_this_launch * sizeof(compressed::discount_t));
-            stream.enqueue.copy(stream_input_buffers.extendedprice.get(), compressed_extended_price.get() + offset_in_table, num_records_for_this_launch * sizeof(compressed::extended_price_t));
+            stream.enqueue.copy(stream_input_buffers.extended_price.get(), compressed_extended_price.get() + offset_in_table, num_records_for_this_launch * sizeof(compressed::extended_price_t));
             stream.enqueue.copy(stream_input_buffers.tax.get()          , compressed_tax.get()            + offset_in_table, num_records_for_this_launch * sizeof(compressed::tax_t));
             stream.enqueue.copy(stream_input_buffers.quantity.get()     , compressed_quantity.get()       + offset_in_table, num_records_for_this_launch * sizeof(compressed::quantity_t));
-            stream.enqueue.copy(stream_input_buffers.returnflag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t) );
-            stream.enqueue.copy(stream_input_buffers.linestatus.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
+            stream.enqueue.copy(stream_input_buffers.return_flag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t));
+            stream.enqueue.copy(stream_input_buffers.line_status.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
 
             auto num_blocks = div_rounding_up(num_records_for_this_launch, num_threads_per_block);
             auto launch_config = cuda::make_launch_config(num_blocks, num_threads_per_block);
@@ -519,13 +522,13 @@ int main(int argc, char** argv) {
                 aggregates_on_device.sum_charge.get(),
                 aggregates_on_device.sum_discount.get(),
                 aggregates_on_device.record_count.get(),
-                stream_input_buffers.shipdate.get(),
+                stream_input_buffers.ship_date.get(),
                 stream_input_buffers.discount.get(),
-                stream_input_buffers.extendedprice.get(),
+                stream_input_buffers.extended_price.get(),
                 stream_input_buffers.tax.get(),
                 stream_input_buffers.quantity.get(),
-                stream_input_buffers.returnflag.get(),
-                stream_input_buffers.linestatus.get(),
+                stream_input_buffers.return_flag.get(),
+                stream_input_buffers.line_status.get(),
                 num_records_for_this_launch);
        
         }
@@ -589,7 +592,7 @@ int main(int argc, char** argv) {
         std::chrono::duration<double> duration(end - start);
         cout << "done." << endl;
         results_file << duration.count() << '\n';
-	}
+    }
 
     cuda::profiling::stop();
 
@@ -643,7 +646,7 @@ int main(int argc, char** argv) {
                 print_dec(" | ",  aggregates_on_host.sum_charge.get()[group]);
                 printf(" | %10u |\n", aggregates_on_host.record_count.get()[group]);
             }
-		}
+        }
 
         cout << "+---------------------------------------------------------------------------------------------------------------+\n";
     }

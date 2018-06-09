@@ -72,7 +72,7 @@ set(CUDA_LIBRARIES ${CUDA_LIBRARIES} ${CUDA_NVTX_LIBRARY} ${CUDA_cudadevrt_LIBRA
 
 
 # avoid implicitly synchronization with other streams
-set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --default-stream per-thread)
+set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -DGPU --default-stream per-thread)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} --expt-relaxed-constexpr)
 set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -g --restrict --std=c++14 -Xcompiler -D__CORRECT_ISO_CPP11_MATH_H_PROTO -D_MWAITXINTRIN_H_INCLUDED)
 
@@ -101,8 +101,8 @@ include_directories(/usr/local/cuda/include)
 
 
 ### GCC Flags
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DDEBUG -O0 -g")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++14 -march=corei7")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DGPU -DDEBUG -O0 -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++14 -DGPU -march=corei7")
 
 SET(SOURCE_FILES
         src/main.cu

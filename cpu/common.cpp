@@ -121,7 +121,13 @@ ComprData::ComprData(const lineitem& li) : BaseKernel(li)
     l_extendedprice = new_array<int32_t>(cardinality);
     l_quantity = new_array<int16_t>(cardinality);
     for (size_t i=0; i<cardinality; i++) {
+#ifndef GPU
         kernel_compact_init_magic(shipdate);
+        #error 
+#else
+        l_shipdate[i] = li.l_shipdate.get()[i] - 727563;
+        assert(l_shipdate[i] == li.l_shipdate.get()[i] - 727563);
+#endif
         l_returnflag[i] = li.l_returnflag.get()[i]; /* Too lazy for this column */
         l_linestatus[i] = li.l_linestatus.get()[i]; /* Too lazy for this column */
         kernel_compact_init_magic(discount);

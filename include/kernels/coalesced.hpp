@@ -78,6 +78,8 @@ __fhd__ bit_container_t get_bit_resolution_element(
         cardinality_t cardinality) {
 
         constexpr size_t N = 18;
+        GPUAggrHashTable agg[N];
+        memset(agg, 0, sizeof(GPUAggrHashTable) * N);
 
         uint64_t i =  (blockIdx.x * blockDim.x + threadIdx.x);
         uint64_t end = (uint64_t)cardinality;

@@ -20,8 +20,8 @@ namespace cuda {
         quantity_t *quantity,
         cardinality_t cardinality) {
 
-        uint64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
-        uint64_t end = min((uint64_t)cardinality, i + VALUES_PER_THREAD);
+        uint64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
+        uint64_t end = min((uint64_t)cardinality, i + values_per_thread);
         for(; i < end; ++i) {
             if (shipdate[i] <= threshold_ship_date) {
                 const int disc = discount[i];
@@ -31,13 +31,12 @@ namespace cuda {
                 const int disc_price = Decimal64::Mul(disc_1, price);
                 const int charge = Decimal64::Mul(disc_price, tax_1);
                 const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
-                
-                atomicAdd((uint64_t*)&sum_quantity[idx], (uint64_t) quantity[i]);
-                atomicAdd((uint64_t*)&sum_base_price[idx], (uint64_t) price);
-                atomicAdd((uint64_t*)&sum_charge[idx], (uint64_t) charge);
-                atomicAdd((uint64_t*)&sum_discounted_price[idx], (uint64_t)disc_price);
-                atomicAdd((uint64_t*)&sum_discount[idx], (uint64_t) disc);
-                atomicAdd((uint64_t*)&record_count[idx], (uint64_t) 1);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_quantity, quantity[i]);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_base_price, price);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_charge, charge);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc_price, disc_price);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc, disc);
+                atomicAdd((unsigned long long*) &aggregations[idx].count, 1);
             }
         }
     }
@@ -62,8 +61,8 @@ namespace cuda {
         constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
         constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
 
-        uint64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
-        uint64_t end = min((uint64_t)cardinality, i + VALUES_PER_THREAD);
+        uint64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
+        uint64_t end = min((uint64_t)cardinality, i + values_per_thread);
         for(; i < end; ++i) {
             if (shipdate[i] <= compressed_threshold_ship_date) {
                 const int disc = discount[i];
@@ -75,13 +74,13 @@ namespace cuda {
                 const uint8_t rflag = (returnflag[i / 4] & RETURNFLAG_MASK[i % 4]) >> (2 * (i % 4));
                 const uint8_t lstatus = (linestatus[i / 8] & LINESTATUS_MASK[i % 8]) >> (i % 8);
                 const uint8_t idx = rflag + 4 * lstatus;
-                                
-                atomicAdd((uint64_t*)&sum_quantity[idx], (uint64_t) quantity[i] * 100);
-                atomicAdd((uint64_t*)&sum_base_price[idx], (uint64_t) price);
-                atomicAdd((uint64_t*)&sum_charge[idx], (uint64_t) charge);
-                atomicAdd((uint64_t*)&sum_discounted_price[idx], (uint64_t)disc_price);
-                atomicAdd((uint64_t*)&sum_discount[idx], (uint64_t) disc);
-                atomicAdd((uint64_t*)&record_count[idx], (uint64_t) 1);
+
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_quantity,  (quantity[i] * 100));
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_base_price,  price);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_charge,  charge);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc_price,  disc_price);
+                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc,  disc);
+                atomicAdd((unsigned long long*) &aggregations[idx].count,  1);
             }
         }
     }

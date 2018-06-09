@@ -19,6 +19,9 @@
 #include "cpu/common.hpp"
 #include "cpu.h"
 
+#ifndef GPU
+#error The GPU preprocessor directive must be defined (ask Tim for the reason)
+#endif
 
 using std::tie;
 using std::make_pair;
@@ -29,11 +32,15 @@ using std::endl;
 using std::flush;
 using std::string;
 
+using std::cout;
+using std::endl;
+using std::string;
+
 size_t magic_hash(char rf, char ls) {
     return (((rf - 'A')) - (ls - 'F'));
 }
 
-void assert_always(bool a) {
+inline void assert_always(bool a) {
     if (!a) {
         fprintf(stderr, "Assert always failed!");
         exit(1);
@@ -143,9 +150,20 @@ clear_tables()
     init_table(0);
 }
 
+void make_sure_we_are_on_cpu_core_0()
+{
+    // Make sure we are on core 0
+    // TODO: Why not in a function?
+    cpu_set_t cpuset; 
+
+    CPU_ZERO(&cpuset);
+    CPU_SET(0, &cpuset);
+    sched_setaffinity(0, sizeof(cpuset), &cpuset);
+}
+
 int main(int argc, char** argv) {
     cout << "TPC-H Query 1" << '\n';
-    /* load data */
+    make_sure_we_are_on_cpu_core_0();
 
     cardinality_t cardinality;
 
@@ -219,9 +237,13 @@ int main(int argc, char** argv) {
         load_column_from_binary_file(_extendedprice, cardinality, tpch_directory, "extendedprice.bin");
         load_column_from_binary_file(_quantity,      cardinality, tpch_directory, "quantity.bin");
 
-        #define A(name) li.l_##name.cardinality = cardinality; li.l_##name.m_ptr = _##name.get()
-
-        for_each_argument([&](auto t){ std::get<0>(t).cardinality = cardinality; std::get<0>(t).m_ptr = std::get<1>(t).get(); }, 
+        // See: We don't need no stinkin' macros these days. Actually, we can do something
+        // similar with a lot of the replicated code in this file
+        for_each_argument(
+            [&](auto tup){
+                std::get<0>(tup).cardinality = cardinality;
+                std::get<0>(tup).m_ptr = std::get<1>(tup).get();
+            },
 			tie(li.l_shipdate,      _shipdate),
 			tie(li.l_returnflag,    _returnflag),
             tie(li.l_linestatus,    _linestatus),
@@ -230,15 +252,6 @@ int main(int argc, char** argv) {
             tie(li.l_extendedprice, _extendedprice), 
             tie(li.l_quantity,      _quantity)
         );
-/*
-        A(shipdate);
-        A(returnflag);
-        A(linestatus);
-        A(discount);
-        A(tax);
-        A(extendedprice);
-        A(quantity);
-  */      
     } else {
         std::string input_file = join_path(tpch_directory, "lineitem.tbl");
         if (not file_exists(input_file.c_str())) {
@@ -266,7 +279,8 @@ int main(int argc, char** argv) {
         write_column_to_binary_file(li.l_quantity.get(),      cardinality, tpch_directory, "quantity.bin");    
     }
 
-    CoProc* cpu = use_coprocessing ?  new CoProc(li) : nullptr;
+    clear_tables(); // currently only used by the CPU implementation
+    CoProc* cpu = use_coprocessing ?  new CoProc(li, true) : nullptr;
 
     auto compressed_ship_date      = cuda::memory::host::make_unique< compressed::ship_date_t[]      >(cardinality);
     auto compressed_discount       = cuda::memory::host::make_unique< compressed::discount_t[]       >(cardinality);
@@ -424,13 +438,15 @@ int main(int argc, char** argv) {
         
        	auto gpu_end_offset = cardinality; 
         if (use_coprocessing) {
+             cpu->Clear();
              // Split the work between the CPU and the GPU at 50% each
              // TODO: 
              // - Double-check the choice of alignment here
              // - The parameters here are weird
              auto cpu_start_offset = cardinality / 2;
              cpu_start_offset = cardinality - cardinality % num_records_per_scheduled_kernel;
-             (*cpu)(cpu_start_offset, cardinality - cpu_start_offset);
+             auto num_records_for_cpu_to_process = cardinality - cpu_start_offset;
+             (*cpu)(cpu_start_offset, num_records_for_cpu_to_process);
              gpu_end_offset = cpu_start_offset;
         } 
 
@@ -546,7 +562,6 @@ int main(int argc, char** argv) {
 */
                 idx++;
             }
-
             assert_always(idx == 4);
         }
 

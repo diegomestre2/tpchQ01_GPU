@@ -8,17 +8,17 @@
 struct CPUKernel {
 	Morsel<KernelX100<kMagic, true>> m;
 
-	CPUKernel(const lineitem& li) : m(li) {
+	CPUKernel(const lineitem& li, bool wo_core0) : m(li, wo_core0) {
 	}
 
 	void spawn(size_t offset, size_t num) { m.spawn(offset, num); }
 
-	void wait() { m.wait(); }
+	void wait(bool active) { m.wait(active); }
 };
 
-CoProc::CoProc(const lineitem& li)
+CoProc::CoProc(const lineitem& li, bool wo_core0)
 {
-	kernel = new CPUKernel(li);
+	kernel = new CPUKernel(li, wo_core0);
 	table = kernel->m.aggrs0;
 }
 
@@ -37,5 +37,11 @@ CoProc::operator()(size_t offset, size_t num)
 void
 CoProc::wait()
 {
-	kernel->wait();
+	kernel->wait(true);
+}
+
+void
+CoProc::Clear()
+{
+	kernel->m.Clear();
 }

@@ -142,8 +142,13 @@ struct KernelX100 : BaseKernel {
 		/* Ommitted vector allocation on stack, 
 		 * because C++ compilers will produce invalid results together with magic_preaggr (d270d85b8dcef5f295b1c10d4b2336c9be858541)
 		 * Moving allocations to class fixed these issues which will be triggered with O1, O2 and O3 */
-		
+	
+#ifdef GPU
+		const int16_t date = (int32_t)cmp.dte_val - (int32_t)727563;
+#else
+		#error 
 		const int16_t date = cmp.dte_val;
+#endif
 		const int8_t int8_t_one_discount = (int8_t)Decimal64::ToValue(1, 0);
 		const int8_t int8_t_one_tax = (int8_t)Decimal64::ToValue(1, 0);
 
@@ -507,7 +512,7 @@ struct Morsel : BaseKernel {
 		states[id] = nullptr;
 	}
 	
-	Morsel(const lineitem& li) : BaseKernel(li) {
+	Morsel(const lineitem& li, bool wo_core0 = false) : BaseKernel(li) {
 		size_t threadinhos = std::thread::hardware_concurrency();
 		threadinhos/=2;
 		if (threadinhos < 1) {
@@ -527,7 +532,7 @@ struct Morsel : BaseKernel {
 		{
 			std::unique_lock<std::mutex> lock(lock_query);
 
-			for (size_t i=0; i<threadinhos; i++) {
+			for (size_t i=wo_core0 ? 1 : 0; i<threadinhos; i++) {
 				workers.push_back(std::thread(&Morsel::Work, this, i));
 
 				// set affinity
@@ -576,7 +581,10 @@ struct Morsel : BaseKernel {
 		}
 	}
 
-	NOINL void wait() {
+	NOINL void wait(bool active = false) {
+		if (active) {
+			Work(0);
+		}
 		// wait for completion
 		{
 			std::unique_lock<std::mutex> lock(lock_query);

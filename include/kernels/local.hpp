@@ -25,8 +25,8 @@ namespace cuda {
         GPUAggrHashTable agg[N];
         memset(agg, 0, sizeof(GPUAggrHashTable) * N);
 
-        uint64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
-        uint64_t end = min((uint64_t)cardinality, i + VALUES_PER_THREAD);
+        uint64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
+        uint64_t end = min((uint64_t)cardinality, i + values_per_thread);
         
         for(; i < end; ++i) {
             if (shipdate[i] <= 729999) {
@@ -85,8 +85,8 @@ namespace cuda {
         GPUAggrHashTable agg[N];
         memset(agg, 0, sizeof(GPUAggrHashTable) * N);
 
-        uint64_t i = VALUES_PER_THREAD * (blockIdx.x * blockDim.x + threadIdx.x);
-        uint64_t end = min((uint64_t)cardinality, i + VALUES_PER_THREAD);
+        uint64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
+        uint64_t end = min((uint64_t)cardinality, i + values_per_thread);
         for(; i < end; ++i) {
             if (shipdate[i] <= threshold_ship_date) {
                 const int disc = discount[i];

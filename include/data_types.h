@@ -4,6 +4,14 @@
 #include <cstddef>
 #include <exception>
 
+#ifdef __CUDACC__
+#define __fhd__  __forceinline__ __host__ __device__
+#define __fd__   __forceinline__ __device__
+#else
+#define __fhd__ inline
+#define __fd__  inline
+#endif
+
 using std::size_t;
 
 using ship_date_t            = int32_t;
@@ -39,20 +47,15 @@ static_assert(std::is_same<bit_container_t,uint32_t>{}, "Expecting the bit conta
 /**
  * Applies a DICT(1 bit) encoding scheme to line status values
  */
-inline uint8_t encode_line_status(char status)
+__fhd__ uint8_t encode_line_status(char status)
 {
 #ifdef NDEBUG
-	return (status == 'F') ? 1 : 0;
+	return (status == 'F') ? 0 : 1;
 #else
 	switch(status) {
 	case 'F': return 0;
 	case 'O': return 1;
-	default:
-	    {
-	        std::stringstream ss;
-	        ss << "No such line status '" << status << "'";
-	        throw std::invalid_argument(ss.str());
-	    }
+	default:  return 0xFF;
 	}
 #endif
 }
@@ -60,26 +63,25 @@ inline uint8_t encode_line_status(char status)
 /**
  * Applies a DICT(2 bit) encoding scheme to return flag values
  */
-inline uint8_t encode_return_flag(char flag)
+__fhd__ uint8_t encode_return_flag(char flag)
 {
-	switch(flag) {
-	case 'N' : return 0b00;
-	case 'R' : return 0b01;
 #ifdef NDEBUG
-	default:   return 0b10;
+    return ((flag == 'R') << 1) + (flag == 'N');
 #else
-	case 'A' : return 0b10;
-	default:
-    {
-        std::stringstream ss;
-        ss << "No such return flag '" << flag << "'";
-        throw std::invalid_argument(ss.str());
-    }
-#endif
+	switch(flag) {
+	case 'A' : return 0b00;
+	case 'N' : return 0b01;
+	case 'R' : return 0b10;
+	default  : return 0xFF;
 	}
+#endif
 }
 
-inline char decode_line_status(uint8_t encoded_status)
+/**
+ * Decodes using a DICT(1 bit) encoding scheme;
+ * arbitrary output for inputs about 0x1
+ */
+__fhd__ char decode_line_status(uint8_t encoded_status)
 {
 #ifdef NDEBUG
 	return encoded_status == 0 ? 'F' : 'O';
@@ -87,37 +89,30 @@ inline char decode_line_status(uint8_t encoded_status)
 	switch(encoded_status) {
 	case 0b0: return 'F';
 	case 0b1: return 'O';
-	default:
-        {
-            std::stringstream ss;
-            ss << "No such encoded line status'" << encoded_status << "'";
-            throw std::invalid_argument(ss.str());
-        }
+	default:  return '-';
 	}
 #endif
 }
 
 /**
- * Applies a DICT(2 bit) encoding scheme to return flag values
+ * Decodes using a DICT(2 bit) encoding scheme; but -
+ * the dictionary actually only has 3 values;
+ * arbitrary output for inputs of 0x11 and above
  */
-inline uint8_t decode_return_flag(char encoded_flag)
+__fhd__ uint8_t decode_return_flag(char encoded_flag)
 {
-	switch(encoded_flag) {
-	case 0b00: return 'N';
-	case 0b01: return 'R';
 #ifdef NDEBUG
-	default:   return 'A';
+    return (encoded_flag == 0) ? 'A' : ((encoded_flag == 1) ? 'N' : 'R');
 #else
-	case 0b10: return 'A';
-	default:
-    {
-        std::stringstream ss;
-        ss << "No such encoded return flag'" << encoded_flag << "'";
-        throw std::invalid_argument(ss.str());
-    }
-
-#endif
+	switch(encoded_flag) {
+	case 0b00: return 'A';
+	case 0b01: return 'N';
+	case 0b10: return 'R';
+	default:   return '-';
 	}
+#endif
 }
 
 
+#undef __fhd__
+#undef __fd__

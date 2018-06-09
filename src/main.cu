@@ -343,9 +343,7 @@ int main(int argc, char** argv) {
         assert( (tax_t)            compressed_tax[i]            == tax[i]);
     }
 
-//    cout << endl;
     for(cardinality_t i = 0; i < cardinality; i++) {
-//        if (i < 16) cout << "Host " << std::setw(4) << i << " : " << returnflag[i] << " | " << linestatus[i] << endl;
         assert(decode_return_flag(get_bit_resolution_element<log_return_flag_bits, cardinality_t>(compressed_return_flag.get(), i)) == returnflag[i]);
         assert(decode_line_status(get_bit_resolution_element<log_line_status_bits, cardinality_t>(compressed_line_status.get(), i)) == linestatus[i]);
     }
@@ -495,7 +493,6 @@ int main(int argc, char** argv) {
 
             auto num_records_for_this_launch = std::min<cardinality_t>(num_records_per_scheduled_kernel, gpu_end_offset - offset_in_table);
             auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_records_for_this_launch, return_flag_values_per_container);
-            cout << "num_return_flag_bit_containers_for_this_launch = " << num_return_flag_bit_containers_for_this_launch << endl;
             auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_records_for_this_launch, line_status_values_per_container);
 
             // auto start_copy = timer::now();  // This can't work, since copying is asynchronous.
@@ -605,16 +602,8 @@ int main(int argc, char** argv) {
 
         for (size_t group=0; group<num_potential_groups; group++) {
             if (aggregates_on_host.record_count[group] > 0) {
-                char rf = '-', ls = '-';
-                auto return_flag_group_id = group >> 1;
-                auto line_status_group_id = group & 0x1;
-                switch(return_flag_group_id) {
-                case 0:  rf = 'A'; break;
-                case 1:  rf = 'F'; break;
-                case 2:  rf = 'N'; break;
-                default: rf = '-';
-                }
-                ls = (line_status_group_id == 0 ? 'F' : 'O');
+                char rf = decode_return_flag(group >> line_status_bits);
+                char ls = decode_line_status(group & 0b1);
                 if (rf == 'A' and ls == 'F') {
                     if (cardinality == 6001215) {
                         assert(aggregates_on_host.sum_quantity[group] == 3773410700);

@@ -17,6 +17,8 @@ static_assert(num_records_per_scheduled_kernel % num_threads_per_block == 0,
 } // namespace defaults
 
 enum {
+    num_orders_at_scale_factor_1     = 1500000,
+    cardinality_of_scale_factor_1    = 6001215,
     ship_date_frame_of_reference     = 727563, // which date value is this?
     threshold_ship_date              = 729999, // todate_(2, 9, 1998)
     compressed_threshold_ship_date   = threshold_ship_date - ship_date_frame_of_reference,

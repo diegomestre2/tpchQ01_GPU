@@ -1,7 +1,9 @@
 #pragma once
 #include <cuda_runtime.h>
 #include <cub/cub.cuh>
+#include <cuda/api_wrappers.h>
 
+using cuda::warp_size;
 
 #if !defined(__global__)
 #define __global__
@@ -54,10 +56,6 @@ void get_device_properties(){
     }
 }
 
-__device__
-static uint32_t warp_size = 32;
-
-
 /// returns the global id of the executing thread
 __device__ inline uint32_t
 global_thread_id() {
@@ -100,15 +98,3 @@ warp_local_thread_id() {
   return block_local_thread_id() % warp_size;
 }
 
-
-// taken from: https://codeyarns.com/2011/03/02/how-to-do-error-checking-in-cuda/
-#define cuda_check_error()    __cuda_check_error( __FILE__, __LINE__ )
-inline void
-__cuda_check_error(const char *file, const int line ) {
-  cudaError err = cudaGetLastError();
-  if (cudaSuccess != err) {
-    fprintf(stderr, "cuda_check_error() failed at %s:%i : %s\n",
-            file, line, cudaGetErrorString(err) );
-    exit(-1);
-  }
-}

@@ -148,9 +148,11 @@ void thread_local_tpchQ01_small_datatypes_coalesced(
     sum_discount_t         thread_sum_discount         [num_potential_groups] = { 0 };
     cardinality_t          thread_record_count         [num_potential_groups] = { 0 };
 
-    cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x);
+
     cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
-    for(; i < cardinality; i += stride) {
+
+        // TODO: This assumes no overflow, i.e. that the cardinality isn't close to its maximum value
+    for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < cardinality; i += stride) {
         if (shipdate[i] <= compressed_threshold_ship_date) {
             // TODO: Some of these calculations could work on uint32_t
             auto line_quantity         = quantity[i];
@@ -163,15 +165,17 @@ void thread_local_tpchQ01_small_datatypes_coalesced(
             auto line_status_          = get_bit_resolution_element<log_line_status_bits, cardinality_t>(line_status, i);
             auto line_return_flag      = get_bit_resolution_element<log_return_flag_bits, cardinality_t>(return_flag, i);
 
+            int group_index = (line_return_flag << line_status_bits) + line_status_;
+
             #pragma unroll
-            for(int group_index = 0; group_index != num_potential_groups; ++group_index) {
-                if(group_index == group_index) {
-                    thread_sum_quantity        [group_index] += line_quantity;
-                    thread_sum_base_price      [group_index] += line_price;
-                    thread_sum_charge          [group_index] += line_charge;
-                    thread_sum_discounted_price[group_index] += line_discounted_price;
-                    thread_sum_discount        [group_index] += line_discount;
-                    thread_record_count        [group_index] += 1;
+            for(int i = 0; i != num_potential_groups; i++) {
+                if(i == group_index) {
+                    thread_sum_quantity        [i] += line_quantity;
+                    thread_sum_base_price      [i] += line_price;
+                    thread_sum_charge          [i] += line_charge;
+                    thread_sum_discounted_price[i] += line_discounted_price;
+                    thread_sum_discount        [i] += line_discount;
+                    thread_record_count        [i] ++;
                 }
             }
         }

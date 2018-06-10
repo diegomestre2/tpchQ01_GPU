@@ -514,7 +514,7 @@ int main(int argc, char** argv) {
             auto num_blocks = div_rounding_up(
                     num_records_for_this_launch, num_threads_per_block * num_table_records_per_thread);
             auto launch_config = cuda::make_launch_config(num_blocks, num_threads_per_block);
-            cout << "num_blocks = " << num_blocks << ", num_threads_per_block = " << num_threads_per_block << endl;
+            // cout << "num_blocks = " << num_blocks << ", num_threads_per_block = " << num_threads_per_block << endl;
             (void) launch_config;
 
             stream.enqueue.kernel_launch(

@@ -7,6 +7,7 @@ namespace defaults {
 
 enum {
     num_threads_per_block             = 128,
+    num_table_records_per_thread      = 1024,
     num_gpu_streams                   = 4,   // And 2 might just be enough actually
     num_records_per_scheduled_kernel  = 1 << 20, // used for scheduling the kernel
 };

@@ -133,8 +133,9 @@ void print_help() {
     fprintf(stderr, "Unrecognized command line option.\n");
     fprintf(stderr, "Usage: tpch_01 [args]\n");
     fprintf(stderr, "   --sf=[df:1] (number, e.g. 0.01 - 100)\n");
-    fprintf(stderr, "   --streams=[streams:8] (number, e.g. 1 - 64)\n");
-    fprintf(stderr, "   --threads-per-block=[threads:32] (number, e.g. 32 - 1024)\n");
+    fprintf(stderr, "   --streams=[streams:4] (number, e.g. 1 - 64)\n");
+    fprintf(stderr, "   --threads-per-block=[threads:128] (number, e.g. 32 - 1024)\n");
+    fprintf(stderr, "   --records_per_thread=[1024] (number, e.g. 1 - 1048576)\n");
 //    fprintf(stderr, "   --compress\n");
 }
 
@@ -176,6 +177,7 @@ int main(int argc, char** argv) {
 
     double scale_factor = 1;
     int num_gpu_streams = defaults::num_gpu_streams;
+    int num_table_records_per_thread = defaults::num_table_records_per_thread;
     int num_threads_per_block = defaults::num_threads_per_block;
     int num_records_per_scheduled_kernel = defaults::num_records_per_scheduled_kernel;
         // Make sure it's a multiple of num_threads_per_block, or bad things may happen
@@ -188,6 +190,7 @@ int main(int argc, char** argv) {
     string sf_argument = "--sf=";
     string streams_argument = "--streams=";
     string threads_per_block_argument = "--threads-per-block=";
+    string records_per_thread_argument = "--records-per-thread=";
     string num_runs_arguments = "--runs=";
 
     //bool apply_compression = true;
@@ -209,7 +212,9 @@ int main(int argc, char** argv) {
             }
         } else if (arg.substr(0, streams_argument.size()) == streams_argument) {
             num_gpu_streams = std::stoi(arg.substr(streams_argument.size()));
-        } else if (arg.substr(0, threads_per_block_argument.size()) == threads_per_block_argument) {
+        } else if (arg.substr(0, records_per_thread_argument.size()) == records_per_thread_argument) {
+            num_table_records_per_thread = std::stoi(arg.substr(records_per_thread_argument.size()));
+        } else if (arg.substr(0, records_per_thread_argument.size()) == records_per_thread_argument) {
             num_threads_per_block = std::stoi(arg.substr(threads_per_block_argument.size()));
         } else if (arg.substr(0, num_runs_arguments.size()) == num_runs_arguments) {
             num_query_execution_runs = std::stoi(arg.substr(num_runs_arguments.size()));
@@ -506,8 +511,10 @@ int main(int argc, char** argv) {
             stream.enqueue.copy(stream_input_buffers.return_flag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t));
             stream.enqueue.copy(stream_input_buffers.line_status.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
 
-            auto num_blocks = div_rounding_up(num_records_for_this_launch, num_threads_per_block);
+            auto num_blocks = div_rounding_up(
+                    num_records_for_this_launch, num_threads_per_block * num_table_records_per_thread);
             auto launch_config = cuda::make_launch_config(num_blocks, num_threads_per_block);
+            cout << "num_blocks = " << num_blocks << ", num_threads_per_block = " << num_threads_per_block << endl;
             (void) launch_config;
 
             stream.enqueue.kernel_launch(

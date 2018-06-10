@@ -3,7 +3,6 @@
 #include "kernel.hpp"
 #include "constants.hpp"
 #include "data_types.h"
-#include "atomic_operations.cuh"
 #include "bit_operations.h"
 
 #ifdef __CUDACC__

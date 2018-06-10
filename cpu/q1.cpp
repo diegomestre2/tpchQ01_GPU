@@ -125,12 +125,58 @@ void run(const lineitem& li, const std::string& name, Args&&... args)
 #endif
 }
 
-int main() {
-	std::ios::sync_with_stdio(false);
+using namespace std;
+
+inline bool file_exists(const string& name) {
+    struct stat buffer;
+    return (stat (name.c_str(), &buffer) == 0);
+}
+
+inline std::string join_path(std::string a, std::string b) {
+    return a + "/" + b;
+}
+
+std::pair<string,string> split_once(string delimited, char delimiter) {
+    auto pos = delimited.find_first_of(delimiter);
+    return { delimited.substr(0, pos), delimited.substr(pos+1) };
+}
+
+int main(int argc, const char** argv) {
+    double scale_factor = 1;
+
+
+    for(int i = 1; i < argc; i++) {
+        auto arg = string(argv[i]);
+        if (arg.substr(0,2) != "--") {
+            exit(1);
+        }
+        arg = arg.substr(2);
+
+        // A  name=value argument
+        auto p = split_once(arg, '=');
+        auto& arg_name = p.first; auto& arg_value = p.second;
+        if (arg_name == "scale-factor") {
+            scale_factor = std::stod(arg_value);
+            if (scale_factor - 0 < 0.001) {
+                std::invalid_argument("Invalid scale factor");
+            }
+        } else {
+            exit(1);
+        }
+    }
+    std::string tpch_directory = join_path("tpch", std::to_string(scale_factor));
+    std::string input_file = join_path(tpch_directory, "lineitem.tbl");
+
+    if (not file_exists(input_file.c_str())) {
+        throw std::runtime_error("Cannot locate table text file " + input_file);
+        // Not generating it ourselves - that's: 1. Not healthy and 2. Not portable;
+        // setup scripts are intended to do that
+    }
 
 	/* load data */
-	lineitem li(7000000ull);
-	li.FromFile("lineitem.tbl");
+
+    lineitem li((size_t)(7000000 * std::max(scale_factor, 1.0)));
+    li.FromFile(input_file.c_str());
 
 	/* start processing */
 

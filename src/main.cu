@@ -265,7 +265,7 @@ const std::unordered_map<string, cuda::device_function_t> kernels = {
 const std::unordered_map<string, cuda::device_function_t> kernels_compressed = {
     { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01_compressed} },
     { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01_compressed} },
-    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_compressed<> },
+//    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_compressed<> },
 //    { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01_compressed               },
     { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01_compressed      } },
 };
@@ -288,7 +288,7 @@ int main(int argc, char** argv) {
     double scale_factor              = defaults::scale_factor;
     std::string kernel_variant       = defaults::kernel_variant;
     bool should_print_results        = defaults::should_print_results;
-    bool apply_compression           = defaults::should_print_results;
+    bool apply_compression           = defaults::apply_compression;
     int num_gpu_streams              = defaults::num_gpu_streams;
     cuda::grid_block_dimension_t num_threads_per_block
                                      = defaults::num_threads_per_block;

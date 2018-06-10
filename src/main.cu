@@ -1,3 +1,17 @@
+#include "data_types.h"
+#include "constants.hpp"
+#include "bit_operations.h"
+#include "kernel.hpp"
+#include "kernels/global.hpp"
+#include "kernels/ht_in_registers.cuh"
+#include "kernels/ht_in_local_mem.cuh"
+// #include "kernels/ht_per_thread_in_shared_mem.cuh"
+// #include "kernels/ht_per_block_in_shared_mem.cuh"
+#include "../expl_comp_strat/tpch_kit.hpp"
+#include "../expl_comp_strat/common.hpp"
+#include "cpu/common.hpp"
+#include "cpu.h"
+
 #include <iostream>
 #include <cuda/api_wrappers.h>
 #include <vector>
@@ -5,19 +19,7 @@
 #include <fstream>
 #include <chrono>
 #include <tuple>
-
-#include "data_types.h"
-#include "constants.hpp"
-#include "bit_operations.h"
-#include "kernel.hpp"
-//#include "kernels/naive.hpp"
-//#include "kernels/local.hpp"
-#include "kernels/global.hpp"
-#include "kernels/coalesced.hpp"
-#include "../expl_comp_strat/tpch_kit.hpp"
-#include "../expl_comp_strat/common.hpp"
-#include "cpu/common.hpp"
-#include "cpu.h"
+#include <unordered_map>
 
 #ifndef GPU
 #error The GPU preprocessor directive must be defined (ask Tim for the reason)
@@ -162,6 +164,7 @@ void print_help(int argc, char** argv) {
     fprintf(stderr, "   --print-results\n");
     fprintf(stderr, "   --use-global-hash-table\n");
     fprintf(stderr, "   --use-coprocessing (currently ignored)\n");
+    fprintf(stderr, "   --hash-table-placement=[default:in-registers] (one of: in-registers, local-mem, per-thread-shared-mem, global))\n");
     fprintf(stderr, "   --sf=[default:%f] (number, e.g. 0.01 - 100)\n", defaults::scale_factor);
     fprintf(stderr, "   --streams=[default:%u] (number, e.g. 1 - 64)\n", defaults::num_gpu_streams);
     fprintf(stderr, "   --threads-per-block=[default:%u] (number, e.g. 32 - 1024)\n", defaults::num_threads_per_block);
@@ -251,6 +254,22 @@ void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
     cout << "+-------------------------------------------------------------------------------------------------------------------+\n";
 }
 
+const std::unordered_map<string, cuda::device_function_t> kernels = {
+    { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01} },
+    { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01} },
+//    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01<> },
+//    { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01               },
+    { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01}       },
+};
+
+const std::unordered_map<string, cuda::device_function_t> kernels_compressed = {
+    { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01_compressed} },
+    { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01_compressed} },
+//    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_compressed<> },
+//    { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01_compressed               },
+    { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01_compressed      } },
+};
+
 
 int main(int argc, char** argv) {
     cout << "TPC-H Query 1" << '\n';
@@ -258,23 +277,21 @@ int main(int argc, char** argv) {
 
     cardinality_t cardinality;
 
-    double scale_factor = defaults::scale_factor;
-    bool should_print_results = false;
-    bool apply_compression = false;
-    bool use_global_hash_table = false;
-        // Eyal says: A(n atomically-accessed) global hash table is always a bad idea
-        // for hash tables which fit in shared memory. Why can't you listen to
-        // experience?
-    int num_gpu_streams = defaults::num_gpu_streams;
-    int num_threads_per_block = defaults::num_threads_per_block;
-    int num_tuples_per_thread = defaults::num_tuples_per_thread;
+    // Command-line-settable parameters
+    double scale_factor              = defaults::scale_factor;
+    std::string kernel_variant       = defaults::kernel_variant;
+    bool should_print_results        = defaults::should_print_results;
+    bool apply_compression           = defaults::should_print_results;
+    int num_gpu_streams              = defaults::num_gpu_streams;
+    int num_threads_per_block        = defaults::num_threads_per_block;
+    int num_tuples_per_thread        = defaults::num_tuples_per_thread;
     int num_tuples_per_kernel_launch = defaults::num_tuples_per_kernel_launch;
-        // Make sure it's a multiple of num_threads_per_block, or bad things may happen
+        // Make sure it's a multiple of num_threads_per_block and of warp_size, or bad things may happen
+    int num_query_execution_runs     = defaults::num_query_execution_runs;
 
     // This is the number of times we run the actual query execution - the part that we time;
     // it will not include initialization/allocations that are not necessary when the DBMS
     // is brought up. Note the allocation vs sub-allocation issue (see further comments below)
-    int num_query_execution_runs = 5;
 
     //bool apply_compression = true;
     bool use_coprocessing = false;
@@ -297,8 +314,6 @@ int main(int argc, char** argv) {
             apply_compression = true;
         } else if (arg == "print-results") {
             should_print_results = true;
-        } else if (arg == "use-global-hash-table") {
-            use_global_hash_table = true;
         } else {
             // A  name=value argument
             auto p = split_once(arg, '=');
@@ -308,6 +323,12 @@ int main(int argc, char** argv) {
                 if (scale_factor - 0 < 0.001) {
                     std::invalid_argument("Invalid scale factor");
                 }
+            } else if (arg_name == "hash-table-placement") {
+                kernel_variant = arg_value;
+                if (kernels.find(kernel_variant) == kernels.end()) {
+                    throw std::invalid_argument("Invalid kernel variant specified");
+                }
+                cout << "kernel variant is" + kernel_variant << "\n";
             } else if (arg_name == "streams") {
                 num_gpu_streams = std::stoi(arg_value);
             } else if (arg_name == "tuples-per-thread") {
@@ -650,9 +671,7 @@ int main(int argc, char** argv) {
 
             if (apply_compression) {
                 auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
-                auto kernel = use_global_hash_table ?
-                    cuda::global_ht_tpchQ01_compressed :
-                    cuda::thread_local_tpchQ01_compressed_coalesced;
+                auto kernel = kernels_compressed.at(kernel_variant);
                 stream.enqueue.kernel_launch(
                     kernel,
                     launch_config,
@@ -673,9 +692,7 @@ int main(int argc, char** argv) {
             }
             else {
                 auto& input_buffers = stream_input_buffer_sets.uncompressed[stream_index];
-                auto kernel = use_global_hash_table ?
-                    cuda::global_ht_tpchQ01 :
-                    cuda::thread_local_tpchQ01_coalesced;
+                auto kernel = kernels_compressed.at(kernel_variant);
                 stream.enqueue.kernel_launch(
                     kernel,
                     launch_config,

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cuda/api_wrappers.h>
+
 #include <cstdint>
 #include <cstddef>
 #include <exception>

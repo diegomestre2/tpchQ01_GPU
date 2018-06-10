@@ -1,21 +1,29 @@
 #pragma once
 
 #include "data_types.h"
+#include <cuda/api/constants.h>
 #include <climits>
 
 namespace defaults {
 
 enum {
-    num_threads_per_block             = 256,
-    num_tuples_per_thread             = 1024,
-    num_gpu_streams                   = 4,   // And 2 might just be enough actually
-    num_tuples_per_kernel_launch      = 1 << 20, // used for scheduling the kernel
+    num_threads_per_block            = 256,
+    num_tuples_per_thread            = 1024,
+    num_gpu_streams                  = 4,   // And 2 might just be enough actually
+    num_tuples_per_kernel_launch     = 1 << 20, // used for scheduling the kernel
+    should_print_results             = false,
+    apply_compression                = false,
+        // should be true really, but then we'd need a turn-off switch for no compression
+    num_query_execution_runs         = 5,
 };
+
+constexpr const double scale_factor   = 1.0;
+constexpr const char kernel_variant[] = "in-registers";
 
 static_assert(num_tuples_per_kernel_launch % num_threads_per_block == 0,
     "Please allot the same number of records to each thread");
-
-constexpr const double scale_factor = 1.0;
+static_assert(num_tuples_per_kernel_launch % cuda::warp_size == 0,
+    "Please use a multiple of warp_size for num_tuples_per_kernel_launch");
 
 } // namespace defaults
 

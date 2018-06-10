@@ -16,49 +16,8 @@
 
 namespace cuda {
 
-// The following would be better placed in a proper bit vector class having per-element proxies.
-
-template <typename Integer>
-__fhd__ constexpr Integer get_bit_range(
-    const Integer& value,
-    unsigned       start_bit,
-    unsigned       num_bits) noexcept
-{
-    return (value >> start_bit) & ((1 << num_bits) - 1);
-}
-
-template <unsigned LogBitsPerValue, typename Index>
-__fhd__ bit_container_t get_bit_resolution_element(
-    bit_container_t  bit_container,
-    Index            element_index_within_container)
-{
-    enum {
-        bits_per_value = 1 << LogBitsPerValue,
-        elements_per_container = bits_per_bit_container / bits_per_value,
-    };
-    // TODO: This can be improved with some PTX intrinsics
-    return get_bit_range<Index>(bit_container,
-        bits_per_value * element_index_within_container, bits_per_value);
-
-}
-
-template <unsigned LogBitsPerValue, typename Index>
-__fhd__ bit_container_t get_bit_resolution_element(
-    const bit_container_t* __restrict__ data,
-    Index                               element_index)
-{
-    enum {
-        bits_per_value = 1 << LogBitsPerValue,
-        elements_per_container = bits_per_bit_container / bits_per_value
-    };
-    auto index_of_container = element_index / elements_per_container;
-    auto index_within_container = element_index % elements_per_container;
-    auto bit_container = data[index_of_container];
-    return get_bit_resolution_element<LogBitsPerValue, Index>(bit_container, index_within_container);
-}
-
-    __global__
-void thread_local_tpchQ01_coalesced(
+__global__
+void in_registers_ht_tpchQ01(
     sum_quantity_t*          __restrict__ sum_quantity,
     sum_base_price_t*        __restrict__ sum_base_price,
     sum_discounted_price_t*  __restrict__ sum_discounted_price,
@@ -129,7 +88,7 @@ void thread_local_tpchQ01_coalesced(
 }
 
  __global__
-void thread_local_tpchQ01_compressed_coalesced(
+void in_registers_ht_tpchQ01_compressed(
     sum_quantity_t*                      __restrict__ sum_quantity,
     sum_base_price_t*                    __restrict__ sum_base_price,
     sum_discounted_price_t*              __restrict__ sum_discounted_price,
@@ -154,7 +113,6 @@ void thread_local_tpchQ01_compressed_coalesced(
 
 
     cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
-
     for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < num_tuples; i += stride) {
         if (shipdate[i] <= compressed_threshold_ship_date) {
             // TODO: Some of these calculations could work on uint32_t

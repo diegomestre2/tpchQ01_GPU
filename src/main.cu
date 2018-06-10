@@ -265,10 +265,17 @@ const std::unordered_map<string, cuda::device_function_t> kernels = {
 const std::unordered_map<string, cuda::device_function_t> kernels_compressed = {
     { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01_compressed} },
     { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01_compressed} },
-//    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_compressed<> },
+    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_compressed<> },
 //    { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01_compressed               },
     { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01_compressed      } },
 };
+
+// Some kernel variants cannot support as many threads per block as the hardware allows generally,
+// and for these we use a fixed number for now
+const std::unordered_map<string, cuda::grid_block_dimension_t> fixed_threads_per_block = {
+//    { "per-thread-shared-mem", cuda::max_threads_per_block_for_per_thread_shared_mem },
+};
+
 
 
 int main(int argc, char** argv) {
@@ -283,11 +290,13 @@ int main(int argc, char** argv) {
     bool should_print_results        = defaults::should_print_results;
     bool apply_compression           = defaults::should_print_results;
     int num_gpu_streams              = defaults::num_gpu_streams;
-    int num_threads_per_block        = defaults::num_threads_per_block;
+    cuda::grid_block_dimension_t num_threads_per_block
+                                     = defaults::num_threads_per_block;
     int num_tuples_per_thread        = defaults::num_tuples_per_thread;
     int num_tuples_per_kernel_launch = defaults::num_tuples_per_kernel_launch;
         // Make sure it's a multiple of num_threads_per_block and of warp_size, or bad things may happen
     int num_query_execution_runs     = defaults::num_query_execution_runs;
+    bool user_set_num_threads_per_block = false;
 
     // This is the number of times we run the actual query execution - the part that we time;
     // it will not include initialization/allocations that are not necessary when the DBMS
@@ -335,6 +344,7 @@ int main(int argc, char** argv) {
                 num_tuples_per_thread = std::stoi(arg_value);
             } else if (arg_name == "threads-per-block") {
                 num_threads_per_block = std::stoi(arg_value);
+                user_set_num_threads_per_block = true;
             } else if (arg_name == "tuples-per-kernel-launch") {
                 num_tuples_per_kernel_launch = std::stoi(arg_value);
             } else if (arg_name == "runs") {
@@ -348,6 +358,15 @@ int main(int argc, char** argv) {
             }
         }
     }
+    if (fixed_threads_per_block.find(kernel_variant) != fixed_threads_per_block.end()) {
+        if (user_set_num_threads_per_block and
+            (fixed_threads_per_block.at(kernel_variant) != num_threads_per_block)) {
+            throw std::invalid_argument("Invalid number of threads per block for kernel variant "
+                + kernel_variant + " (it must be " + std::to_string(fixed_threads_per_block.at(kernel_variant)) + ")");
+        }
+        num_threads_per_block = fixed_threads_per_block.at(kernel_variant);
+    }
+
     lineitem li((size_t)(7000000 * std::max(scale_factor, 1.0)));
         // TODO: lineitem should really not need this cap, it should just adjust
         // allocated space as the need arises (and start with an estimate based on

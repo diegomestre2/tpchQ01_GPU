@@ -146,7 +146,6 @@ struct KernelX100 : BaseKernel {
 #ifdef GPU
 		const int16_t date = (int32_t)cmp.dte_val - (int32_t)727563;
 #else
-		#error 
 		const int16_t date = cmp.dte_val;
 #endif
 		const int8_t int8_t_one_discount = (int8_t)Decimal64::ToValue(1, 0);
@@ -411,7 +410,7 @@ struct KernelX100 : BaseKernel {
 #include <condition_variable>
 #include <mutex>
 
-template<typename KERNEL>
+template<typename KERNEL, bool full_system = true>
 struct Morsel : BaseKernel {
 
 	std::vector<std::thread> workers;
@@ -485,7 +484,7 @@ struct Morsel : BaseKernel {
 		{
 			std::unique_lock<std::mutex> lock(lock_query);
 			assert(!states[id]);
-			states[id] = new KERNEL(li, id);
+			states[id] = new KERNEL(li, full_system ? id : id*2);
 			cond_finished.notify_all();
 		}
 
@@ -515,6 +514,11 @@ struct Morsel : BaseKernel {
 	Morsel(const lineitem& li, bool wo_core0 = false) : BaseKernel(li) {
 		size_t threadinhos = std::thread::hardware_concurrency();
 		threadinhos/=2;
+
+		if (!full_system) {
+			threadinhos /= 2;
+		}
+
 		if (threadinhos < 1) {
 			threadinhos = 1;
 		}

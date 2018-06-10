@@ -151,7 +151,8 @@ int main() {
 #endif
 	run<KernelX100<kMagic, true>>(li, "$\\text{X100 Compact NSM In-Reg}$", 0);
 
-	run<Morsel<KernelX100<kMagic, true>>>(li, "$\\text{Morsel X100 Compact NSM In-Reg}$");
+	run<Morsel<KernelX100<kMagic, true>, true>>(li, "$\\text{Full system Morsel X100 Compact NSM In-Reg}$");
+	run<Morsel<KernelX100<kMagic, true>, false>>(li, "$\\text{One socket Morsel X100 Compact NSM In-Reg}$");
 	
 
 	//run<Morsel<KernelNaiveCompact>>(li, "$\\text{HyPer Compact NoOverflow}$");

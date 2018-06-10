@@ -123,7 +123,6 @@ ComprData::ComprData(const lineitem& li) : BaseKernel(li)
     for (size_t i=0; i<cardinality; i++) {
 #ifndef GPU
         kernel_compact_init_magic(shipdate);
-        #error 
 #else
         l_shipdate[i] = li.l_shipdate.get()[i] - 727563;
         assert(l_shipdate[i] == li.l_shipdate.get()[i] - 727563);

@@ -19,8 +19,8 @@ threads_per_block = [32, 64, 128, 256, 512, 1024] # Note that some kernels do no
 options = [
 	"",
 	"--apply-compression",
-	"--use-global-ht", # not supported at the moment
-	"--apply-compression --use-global-ht", # not supported at the moment
+	"--use-global-hash-table",
+	"--apply-compression --use-global-hash-table"
 ]
 
 def syscall(cmd):
@@ -40,7 +40,7 @@ def run_test(fname = None, sf = None, streams = None, tpls = None, vals = None, 
 	if os.path.isfile(os.path.join('results', fname)):
 		return
 
-	syscall("""${BINARY} ${OPTIONS} --streams=${STREAMS} --sf=${SF} --tuples-per-launch=${TUPLES} --tuples-per-thread=${VALUES} --threads-per-block=${THREADS}""".replace(
+	syscall("""${BINARY} ${OPTIONS} --streams=${STREAMS} --scale-factor=${SF} --tuples-per-launch=${TUPLES} --tuples-per-thread=${VALUES} --threads-per-block=${THREADS}""".replace(
 		"${BINARY}", binary).replace(
 		"${OPTIONS}", options).replace(
 		"${STREAMS}", str(streams)).replace(

@@ -12,7 +12,7 @@
 #include "kernel.hpp"
 //#include "kernels/naive.hpp"
 //#include "kernels/local.hpp"
-//#include "kernels/global.hpp"
+#include "kernels/global.hpp"
 #include "kernels/coalesced.hpp"
 #include "../expl_comp_strat/tpch_kit.hpp"
 #include "../expl_comp_strat/common.hpp"
@@ -159,7 +159,9 @@ void print_help(int argc, char** argv) {
     fprintf(stderr, "Unrecognized command line option.\n");
     fprintf(stderr, "Usage: %s [args]\n", argv[0]);
     fprintf(stderr, "   --apply-compression\n");
-    fprintf(stderr, "   --use-global-ht\n");
+    fprintf(stderr, "   --print-results\n");
+    fprintf(stderr, "   --use-global-hash-table\n");
+    fprintf(stderr, "   --use-coprocessing (currently ignored)\n");
     fprintf(stderr, "   --sf=[default:%f] (number, e.g. 0.01 - 100)\n", defaults::scale_factor);
     fprintf(stderr, "   --streams=[default:%u] (number, e.g. 1 - 64)\n", defaults::num_gpu_streams);
     fprintf(stderr, "   --threads-per-block=[default:%u] (number, e.g. 32 - 1024)\n", defaults::num_threads_per_block);
@@ -197,6 +199,59 @@ void make_sure_we_are_on_cpu_core_0()
 #include "cpu.h"
 
 
+std::pair<string,string> split_once(string delimited, char delimiter) {
+    auto pos = delimited.find_first_of(delimiter);
+    return { delimited.substr(0, pos), delimited.substr(pos+1) };
+}
+
+template <typename T>
+void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
+    cout << "+---------------------------------------------------- Results ------------------------------------------------------+\n";
+    cout << "|  LS | RF |  sum_quantity        |  sum_base_price      |  sum_disc_price      |  sum_charge          | count      |\n";
+    cout << "+-------------------------------------------------------------------------------------------------------------------+\n";
+    auto print_dec = [] (auto s, auto x) { printf("%s%17ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
+
+    for (int group=0; group<num_potential_groups; group++) {
+        if (true) { // (aggregates_on_host.record_count[group] > 0) {
+            char rf = decode_return_flag(group >> line_status_bits);
+            char ls = decode_line_status(group & 0b1);
+            if (rf == 'A' and ls == 'F') {
+                if (cardinality == 6001215) {
+                    assert(aggregates_on_host.sum_quantity[group] == 3773410700);
+                    assert(aggregates_on_host.record_count[group] == 1478493);
+                }
+            } else if (rf == 'N' and ls == 'F') {
+                if (cardinality == 6001215) {
+                    assert(aggregates_on_host.sum_quantity[group] == 99141700);
+                    assert(aggregates_on_host.record_count[group] == 38854);
+                }
+            } else if (rf == 'N' and ls == 'O') {
+                rf = 'N';
+                ls = 'O';
+                if (cardinality == 6001215) {
+                    assert(aggregates_on_host.sum_quantity[group] == 7447604000);
+                    assert(aggregates_on_host.record_count[group] == 2920374);
+                }
+            } else if (rf == 'R' and ls == 'F') {
+                if (cardinality == 6001215) {
+                    assert(aggregates_on_host.sum_quantity[group]== 3771975300);
+                    assert(aggregates_on_host.record_count[group]== 1478870);
+                }
+            }
+
+            printf("| # %c | %c ", rf, ls);
+            print_dec(" | ",  aggregates_on_host.sum_quantity.get()[group]);
+            print_dec(" | ",  aggregates_on_host.sum_base_price.get()[group]);
+            print_dec(" | ",  aggregates_on_host.sum_discounted_price.get()[group]);
+            print_dec(" | ",  aggregates_on_host.sum_charge.get()[group]);
+            printf(" | %10u |\n", aggregates_on_host.record_count.get()[group]);
+        }
+    }
+
+    cout << "+-------------------------------------------------------------------------------------------------------------------+\n";
+}
+
+
 int main(int argc, char** argv) {
     cout << "TPC-H Query 1" << '\n';
     make_sure_we_are_on_cpu_core_0();
@@ -204,7 +259,12 @@ int main(int argc, char** argv) {
     cardinality_t cardinality;
 
     double scale_factor = defaults::scale_factor;
+    bool should_print_results = false;
     bool apply_compression = false;
+    bool use_global_hash_table = false;
+        // Eyal says: A(n atomically-accessed) global hash table is always a bad idea
+        // for hash tables which fit in shared memory. Why can't you listen to
+        // experience?
     int num_gpu_streams = defaults::num_gpu_streams;
     int num_threads_per_block = defaults::num_threads_per_block;
     int num_tuples_per_thread = defaults::num_tuples_per_thread;
@@ -216,48 +276,55 @@ int main(int argc, char** argv) {
     // is brought up. Note the allocation vs sub-allocation issue (see further comments below)
     int num_query_execution_runs = 5;
 
-    string sf_argument = "--sf=";
-    string streams_argument = "--streams=";
-    string threads_per_block_argument = "--threads-per-block=";
-    string tuples_per_thread_argument = "--tuples-per-thread=";
-    string tuples_per_kernel_argument = "--tuples-per-kernel=";
-    string num_runs_arguments = "--runs=";
-
     //bool apply_compression = true;
     bool use_coprocessing = false;
 
     for(int i = 1; i < argc; i++) {
         auto arg = string(argv[i]);
-        if (arg == "--device") {
+        if (arg.substr(0,2) != "--") {
+            print_help(argc, argv);
+            exit(EXIT_FAILURE);
+        }
+        arg = arg.substr(2);
+        if (arg == "device") {
             get_device_properties();
             exit(1);
      //   } else if (arg == "--compress") {
      //       apply_compression = true;
-        } else if (arg == "--use-coprocessing") {
+        } else if (arg == "use-coprocessing") {
             use_coprocessing = true;
-        } else if (arg == "--apply-compression") {
+        } else if (arg == "apply-compression") {
             apply_compression = true;
-        } else if (arg.substr(0, sf_argument.size()) == sf_argument) {
-            scale_factor = std::stod(arg.substr(sf_argument.size()));
-            if (scale_factor - 0 < 0.001) {
-                std::invalid_argument("Invalid scale factor");
-            }
-        } else if (arg.substr(0, streams_argument.size()) == streams_argument) {
-            num_gpu_streams = std::stoi(arg.substr(streams_argument.size()));
-        } else if (arg.substr(0, tuples_per_thread_argument.size()) == tuples_per_thread_argument) {
-            num_tuples_per_thread = std::stoi(arg.substr(tuples_per_thread_argument.size()));
-        } else if (arg.substr(0, tuples_per_thread_argument.size()) == tuples_per_thread_argument) {
-            num_threads_per_block = std::stoi(arg.substr(threads_per_block_argument.size()));
-        } else if (arg.substr(0, tuples_per_kernel_argument.size()) == tuples_per_kernel_argument) {
-            num_tuples_per_kernel_launch = std::stoi(arg.substr(tuples_per_kernel_argument.size()));
-        } else if (arg.substr(0, num_runs_arguments.size()) == num_runs_arguments) {
-            num_query_execution_runs = std::stoi(arg.substr(num_runs_arguments.size()));
-            if (num_query_execution_runs <= 0) {
-                throw std::invalid_argument("Number of runs must be positive");
-            }
+        } else if (arg == "print-results") {
+            should_print_results = true;
+        } else if (arg == "use-global-hash-table") {
+            use_global_hash_table = true;
         } else {
-            print_help(argc, argv);
-            exit(EXIT_FAILURE);
+            // A  name=value argument
+            auto p = split_once(arg, '=');
+            auto& arg_name = p.first; auto& arg_value = p.second;
+            if (arg_name == "scale-factor") {
+                scale_factor = std::stod(arg_value);
+                if (scale_factor - 0 < 0.001) {
+                    std::invalid_argument("Invalid scale factor");
+                }
+            } else if (arg_name == "streams") {
+                num_gpu_streams = std::stoi(arg_value);
+            } else if (arg_name == "tuples-per-thread") {
+                num_tuples_per_thread = std::stoi(arg_value);
+            } else if (arg_name == "threads-per-block") {
+                num_threads_per_block = std::stoi(arg_value);
+            } else if (arg_name == "tuples-per-kernel-launch") {
+                num_tuples_per_kernel_launch = std::stoi(arg_value);
+            } else if (arg_name == "runs") {
+                num_query_execution_runs = std::stoi(arg_value);
+                if (num_query_execution_runs <= 0) {
+                    throw std::invalid_argument("Number of runs must be positive");
+                }
+            } else {
+                print_help(argc, argv);
+                exit(EXIT_FAILURE);
+            }
         }
     }
     lineitem li((size_t)(7000000 * std::max(scale_factor, 1.0)));
@@ -583,8 +650,11 @@ int main(int argc, char** argv) {
 
             if (apply_compression) {
                 auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
+                auto kernel = use_global_hash_table ?
+                    cuda::global_ht_tpchQ01_compressed :
+                    cuda::thread_local_tpchQ01_compressed_coalesced;
                 stream.enqueue.kernel_launch(
-                    cuda::thread_local_tpchQ01_small_datatypes_coalesced,
+                    kernel,
                     launch_config,
                     aggregates_on_device.sum_quantity.get(),
                     aggregates_on_device.sum_base_price.get(),
@@ -603,8 +673,11 @@ int main(int argc, char** argv) {
             }
             else {
                 auto& input_buffers = stream_input_buffer_sets.uncompressed[stream_index];
+                auto kernel = use_global_hash_table ?
+                    cuda::global_ht_tpchQ01 :
+                    cuda::thread_local_tpchQ01_coalesced;
                 stream.enqueue.kernel_launch(
-                    cuda::thread_local_tpchQ01_coalesced,
+                    kernel,
                     launch_config,
                     aggregates_on_device.sum_quantity.get(),
                     aggregates_on_device.sum_base_price.get(),
@@ -636,6 +709,12 @@ int main(int argc, char** argv) {
         streams[0].enqueue.copy(aggregates_on_host.sum_discount.get(),         aggregates_on_device.sum_discount.get(),         num_potential_groups * sizeof(sum_discount_t));
         streams[0].enqueue.copy(aggregates_on_host.record_count.get(),         aggregates_on_device.record_count.get(),         num_potential_groups * sizeof(cardinality_t));
 
+        // TODO: There's some sort of result stability issue here
+/*
+        for(int i = 1; i < num_gpu_streams; i++) {
+            streams[i].synchronize();
+        }
+*/
         streams[0].synchronize();
 
         if (cpu) {
@@ -682,55 +761,11 @@ int main(int argc, char** argv) {
         std::chrono::duration<double> duration(end - start);
         cout << "done." << endl;
         results_file << duration.count() << '\n';
-    }
 
-    cuda::profiling::stop();
-
-    if (num_query_execution_runs == 1) {
-        cout << "\n"
-                "+---------------------------------------------------- Results ------------------------------------------------------+\n";
-        cout << "|  LS | RF |  sum_quantity        |  sum_base_price      |  sum_disc_price      |  sum_charge          | count      |\n";
-        cout << "+-------------------------------------------------------------------------------------------------------------------+\n";
-        auto print_dec = [] (auto s, auto x) { printf("%s%17ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
-
-        for (size_t group=0; group<num_potential_groups; group++) {
-            if (true) { // (aggregates_on_host.record_count[group] > 0) {
-                char rf = decode_return_flag(group >> line_status_bits);
-                char ls = decode_line_status(group & 0b1);
-                if (rf == 'A' and ls == 'F') {
-                    if (cardinality == 6001215) {
-                        assert(aggregates_on_host.sum_quantity[group] == 3773410700);
-                        assert(aggregates_on_host.record_count[group] == 1478493);
-                    }
-                } else if (rf == 'N' and ls == 'F') {
-                    if (cardinality == 6001215) {
-                        assert(aggregates_on_host.sum_quantity[group] == 99141700);
-                        assert(aggregates_on_host.record_count[group] == 38854);
-                    }
-                } else if (rf == 'N' and ls == 'O') {
-                    rf = 'N';
-                    ls = 'O';
-                    if (cardinality == 6001215) {
-                        assert(aggregates_on_host.sum_quantity[group] == 7447604000);
-                        assert(aggregates_on_host.record_count[group] == 2920374);
-                    }
-                } else if (rf == 'R' and ls == 'F') {
-                    if (cardinality == 6001215) {
-                        assert(aggregates_on_host.sum_quantity[group]== 3771975300);
-                        assert(aggregates_on_host.record_count[group]== 1478870);
-                    }
-                }
-
-                printf("| # %c | %c ", rf, ls);
-                print_dec(" | ",  aggregates_on_host.sum_quantity.get()[group]);
-                print_dec(" | ",  aggregates_on_host.sum_base_price.get()[group]);
-                print_dec(" | ",  aggregates_on_host.sum_discounted_price.get()[group]);
-                print_dec(" | ",  aggregates_on_host.sum_charge.get()[group]);
-                printf(" | %10u |\n", aggregates_on_host.record_count.get()[group]);
-            }
+        if (should_print_results) {
+            print_results(aggregates_on_host, cardinality);
         }
-
-        cout << "+-------------------------------------------------------------------------------------------------------------------+\n";
     }
+    cuda::profiling::stop();
     results_file.close();
 }

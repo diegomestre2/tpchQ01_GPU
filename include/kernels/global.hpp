@@ -1,87 +1,94 @@
 #pragma once
 
 #include "kernel.hpp"
+#include "constants.hpp"
 #include "data_types.h"
+#include "bit_operations.h"
+
 namespace cuda {
-    __global__
-    void global_ht_tpchQ01(
-        sum_quantity_t *sum_quantity,
-        sum_base_price_t *sum_base_price,
-        sum_discounted_price_t *sum_discounted_price,
-        sum_charge_t *sum_charge,
-        sum_discount_t *sum_discount,
-        cardinality_t *record_count,
-        ship_date_t *shipdate,
-        discount_t *discount,
-        extended_price_t *extendedprice,
-        tax_t *tax,
-        return_flag_t *returnflag,
-        line_status_t *linestatus,
-        quantity_t *quantity,
-        cardinality_t cardinality) {
+__global__
+void global_ht_tpchQ01(
+    sum_quantity_t*          __restrict__ sum_quantity,
+    sum_base_price_t*        __restrict__ sum_base_price,
+    sum_discounted_price_t*  __restrict__ sum_discounted_price,
+    sum_charge_t*            __restrict__ sum_charge,
+    sum_discount_t*          __restrict__ sum_discount,
+    cardinality_t*           __restrict__ record_count,
+    const ship_date_t*       __restrict__ shipdate,
+    const discount_t*        __restrict__ discount,
+    const extended_price_t*  __restrict__ extended_price,
+    const tax_t*             __restrict__ tax,
+    const quantity_t*        __restrict__ quantity,
+    const return_flag_t*     __restrict__ return_flag,
+    const line_status_t*     __restrict__ line_status,
+    cardinality_t                         num_tuples)
+{
+    cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
+    for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < num_tuples; i += stride) {
+        if (shipdate[i] <= threshold_ship_date) {
+            auto line_quantity         = quantity[i];
+            auto line_discount         = discount[i];
+            auto line_price            = extended_price[i];
+            auto line_discount_factor  = Decimal64::ToValue(1, 0) - line_discount;
+            auto line_discounted_price = Decimal64::Mul(line_discount_factor, line_price);
+            auto line_tax_factor       = tax[i] + Decimal64::ToValue(1, 0);
+            auto line_charge           = Decimal64::Mul(line_discounted_price, line_tax_factor);
+            auto line_return_flag      = return_flag[i];
+            auto line_status_          = line_status[i];
 
-        uint64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
-        uint64_t end = min((uint64_t)cardinality, i + values_per_thread);
-        for(; i < end; ++i) {
-            if (shipdate[i] <= threshold_ship_date) {
-                const int disc = discount[i];
-                const int price = extendedprice[i];
-                const int disc_1 = Decimal64::ToValue(1, 0) - disc;
-                const int tax_1 = tax[i] + Decimal64::ToValue(1, 0);
-                const int disc_price = Decimal64::Mul(disc_1, price);
-                const int charge = Decimal64::Mul(disc_price, tax_1);
-                const idx_t idx = magic_hash(returnflag[i], linestatus[i]);
-                atomicAdd((unsigned long long*) &aggregations[idx].sum_quantity, quantity[i]);
-                atomicAdd((unsigned long long*) &aggregations[idx].sum_base_price, price);
-                atomicAdd((unsigned long long*) &aggregations[idx].sum_charge, charge);
-                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc_price, disc_price);
-                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc, disc);
-                atomicAdd((unsigned long long*) &aggregations[idx].count, 1);
-            }
-        }
-    }
+            int group_index =
+                (encode_return_flag(line_return_flag) << line_status_bits) + encode_line_status(line_status_);
 
-    __global__
-    void global_ht_tpchQ01_small_datatypes(
-        sum_quantity_t *sum_quantity,
-        sum_base_price_t *sum_base_price,
-        sum_discounted_price_t *sum_discounted_price,
-        sum_charge_t *sum_charge,
-        sum_discount_t *sum_discount,
-        cardinality_t *record_count,
-        compressed::ship_date_t *shipdate,
-        compressed::discount_t *discount,
-        compressed::extended_price_t *extendedprice,
-        compressed::tax_t *tax,
-        compressed::return_flag_t *returnflag,
-        compressed::line_status_t *linestatus,
-        compressed::quantity_t *quantity,
-        cardinality_t cardinality) {
-
-        constexpr uint8_t RETURNFLAG_MASK[] = { 0x03, 0x0C, 0x30, 0xC0 };
-        constexpr uint8_t LINESTATUS_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
-
-        uint64_t i = values_per_thread * (blockIdx.x * blockDim.x + threadIdx.x);
-        uint64_t end = min((uint64_t)cardinality, i + values_per_thread);
-        for(; i < end; ++i) {
-            if (shipdate[i] <= compressed_threshold_ship_date) {
-                const int disc = discount[i];
-                const int price = extendedprice[i];
-                const int disc_1 = Decimal64::ToValue(1, 0) - disc;
-                const int tax_1 = tax[i] + Decimal64::ToValue(1, 0);
-                const int disc_price = Decimal64::Mul(disc_1, price);
-                const int charge = Decimal64::Mul(disc_price, tax_1);
-                const uint8_t rflag = (returnflag[i / 4] & RETURNFLAG_MASK[i % 4]) >> (2 * (i % 4));
-                const uint8_t lstatus = (linestatus[i / 8] & LINESTATUS_MASK[i % 8]) >> (i % 8);
-                const uint8_t idx = rflag + 4 * lstatus;
-
-                atomicAdd((unsigned long long*) &aggregations[idx].sum_quantity,  (quantity[i] * 100));
-                atomicAdd((unsigned long long*) &aggregations[idx].sum_base_price,  price);
-                atomicAdd((unsigned long long*) &aggregations[idx].sum_charge,  charge);
-                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc_price,  disc_price);
-                atomicAdd((unsigned long long*) &aggregations[idx].sum_disc,  disc);
-                atomicAdd((unsigned long long*) &aggregations[idx].count,  1);
-            }
+            atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], line_quantity);
+            atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], line_price);
+            atomicAdd( (unsigned long long* ) & sum_charge          [group_index], line_charge);
+            atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], line_discounted_price);
+            atomicAdd( (unsigned long long* ) & sum_discount        [group_index], line_discount);
+            atomicAdd(                        & record_count        [group_index], 1);
         }
     }
 }
+
+__global__
+void global_ht_tpchQ01_compressed(
+    sum_quantity_t*                      __restrict__ sum_quantity,
+    sum_base_price_t*                    __restrict__ sum_base_price,
+    sum_discounted_price_t*              __restrict__ sum_discounted_price,
+    sum_charge_t*                        __restrict__ sum_charge,
+    sum_discount_t*                      __restrict__ sum_discount,
+    cardinality_t*                       __restrict__ record_count,
+    const compressed::ship_date_t*       __restrict__ shipdate,
+    const compressed::discount_t*        __restrict__ discount,
+    const compressed::extended_price_t*  __restrict__ extended_price,
+    const compressed::tax_t*             __restrict__ tax,
+    const compressed::quantity_t*        __restrict__ quantity,
+    const bit_container_t*               __restrict__ return_flag,
+    const bit_container_t*               __restrict__ line_status,
+    cardinality_t                                     num_tuples)
+{
+    cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
+    for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i <num_tuples; i += stride) {
+        if (shipdate[i] <= compressed_threshold_ship_date) {
+            auto line_quantity         = quantity[i];
+            auto line_discount         = discount[i];
+            auto line_price            = extended_price[i];
+            auto line_discount_factor  = Decimal64::ToValue(1, 0) - line_discount;
+            auto line_discounted_price = Decimal64::Mul(line_discount_factor, line_price);
+            auto line_tax_factor       = tax[i] + Decimal64::ToValue(1, 0);
+            auto line_charge           = Decimal64::Mul(line_discounted_price, line_tax_factor);
+            auto line_return_flag      = get_bit_resolution_element<log_return_flag_bits, cardinality_t>(return_flag, i);
+            auto line_status_          = get_bit_resolution_element<log_line_status_bits, cardinality_t>(line_status, i);
+
+            int group_index = (line_return_flag << line_status_bits) + line_status_;
+
+            atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], line_quantity);
+            atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], line_price);
+            atomicAdd( (unsigned long long* ) & sum_charge          [group_index], line_charge);
+            atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], line_discounted_price);
+            atomicAdd( (unsigned long long* ) & sum_discount        [group_index], line_discount);
+            atomicAdd(                        & record_count        [group_index], 1);
+        }
+    }
+}
+
+} // namespace cuda

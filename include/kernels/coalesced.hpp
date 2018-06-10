@@ -72,7 +72,7 @@ void thread_local_tpchQ01_coalesced(
     const quantity_t*        __restrict__ quantity,
     const return_flag_t*     __restrict__ return_flag,
     const line_status_t*     __restrict__ line_status,
-    cardinality_t                         cardinality)
+    cardinality_t                         num_tuples)
 {
     sum_quantity_t         thread_sum_quantity         [num_potential_groups] = { 0 };
     sum_base_price_t       thread_sum_base_price       [num_potential_groups] = { 0 };
@@ -83,16 +83,7 @@ void thread_local_tpchQ01_coalesced(
 
 
     cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
-
-        // TODO: This assumes no overflow, i.e. that the cardinality isn't close to its maximum value
-    for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < cardinality; i += stride) {
-
-/*
-        if (i < 32) {
-            thread_printf("quantity %6u    RF + LS = %c + %c",
-                (unsigned) quantity[i], return_flag[i], line_status[i]);
-        }
-*/
+    for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < num_tuples; i += stride) {
 
         if (shipdate[i] <= threshold_ship_date) {
             // TODO: Some of these calculations could work on uint32_t
@@ -138,7 +129,7 @@ void thread_local_tpchQ01_coalesced(
 }
 
  __global__
-void thread_local_tpchQ01_small_datatypes_coalesced(
+void thread_local_tpchQ01_compressed_coalesced(
     sum_quantity_t*                      __restrict__ sum_quantity,
     sum_base_price_t*                    __restrict__ sum_base_price,
     sum_discounted_price_t*              __restrict__ sum_discounted_price,
@@ -152,7 +143,7 @@ void thread_local_tpchQ01_small_datatypes_coalesced(
     const compressed::quantity_t*        __restrict__ quantity,
     const bit_container_t*               __restrict__ return_flag,
     const bit_container_t*               __restrict__ line_status,
-    cardinality_t                                     cardinality)
+    cardinality_t                                     num_tuples)
  {
     sum_quantity_t         thread_sum_quantity         [num_potential_groups] = { 0 };
     sum_base_price_t       thread_sum_base_price       [num_potential_groups] = { 0 };
@@ -164,8 +155,7 @@ void thread_local_tpchQ01_small_datatypes_coalesced(
 
     cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
 
-        // TODO: This assumes no overflow, i.e. that the cardinality isn't close to its maximum value
-    for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < cardinality; i += stride) {
+    for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < num_tuples; i += stride) {
         if (shipdate[i] <= compressed_threshold_ship_date) {
             // TODO: Some of these calculations could work on uint32_t
             auto line_quantity         = quantity[i];

@@ -62,7 +62,7 @@ namespace cuda {
 
 
     __global__
-    void thread_local_tpchQ01_small_datatypes(
+    void thread_local_tpchQ01_compressed(
         sum_quantity_t *sum_quantity,
         sum_base_price_t *sum_base_price,
         sum_discounted_price_t *sum_discounted_price,

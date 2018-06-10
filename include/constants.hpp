@@ -6,16 +6,19 @@
 namespace defaults {
 
 enum {
-    num_threads_per_block             = 128,
-    num_table_records_per_thread      = 1024,
+    num_threads_per_block             = 256,
+    num_tuples_per_thread             = 1024,
     num_gpu_streams                   = 4,   // And 2 might just be enough actually
-    num_records_per_scheduled_kernel  = 1 << 20, // used for scheduling the kernel
+    num_tuples_per_kernel_launch      = 1 << 20, // used for scheduling the kernel
 };
 
-static_assert(num_records_per_scheduled_kernel % num_threads_per_block == 0,
+static_assert(num_tuples_per_kernel_launch % num_threads_per_block == 0,
     "Please allot the same number of records to each thread");
 
+constexpr const double scale_factor = 1.0;
+
 } // namespace defaults
+
 
 enum {
     num_orders_at_scale_factor_1     = 1500000,

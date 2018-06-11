@@ -3,12 +3,12 @@ import os
 
 binary = "build/release/bin/tpch_01"
 
-default_sf = 100
+default_sf = 1
 default_options = "--apply-compression"
-default_streams = 8
-default_tuples_per_launch = 131072
-default_tuples_per_thread = 256
-default_threads_per_block = 512
+default_streams = 4
+default_tuples_per_launch = 1 << 20
+default_tuples_per_thread = 1024
+default_threads_per_block = 256
 
 sfs = [1, 10, 100]
 streams = [1, 2, 3, 4, 6, 8, 16, 32]
@@ -17,10 +17,18 @@ tuples_per_thread = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096] # 
 threads_per_block = [32, 64, 128, 256, 512, 1024] # Note that some kernels do not supported the entire ranges, and need either many or not-too-many
 
 options = [
-	"",
-	"--apply-compression",
-	"--use-global-hash-table",
-	"--apply-compression --use-global-hash-table"
+	"--hash-table-placement=local-mem",
+	"--hash-table-placement=in-registers",
+	"--hash-table-placement=global",
+	"--hash-table-placement=local-mem --apply-compression",
+	"--hash-table-placement=in-registers --apply-compression",
+	"--hash-table-placement=global --apply-compression",
+	"--hash-table-placement=local-mem --apply-compression --use-coprocessing",
+	"--hash-table-placement=in-registers --apply-compression --use-coprocessing",
+	"--hash-table-placement=global --apply-compression --use-coprocessing",
+	"--hash-table-placement=local-mem --apply-compression --use-filter-pushdown",
+	"--hash-table-placement=in-registers --apply-compression --use-filter-pushdown",
+	"--hash-table-placement=global --apply-compression --use-filter-pushdown",
 ]
 
 def syscall(cmd):
@@ -40,7 +48,7 @@ def run_test(fname = None, sf = None, streams = None, tpls = None, vals = None, 
 	if os.path.isfile(os.path.join('results', fname)):
 		return
 
-	syscall("""${BINARY} ${OPTIONS} --streams=${STREAMS} --scale-factor=${SF} --tuples-per-launch=${TUPLES} --tuples-per-thread=${VALUES} --threads-per-block=${THREADS}""".replace(
+	syscall("""${BINARY} ${OPTIONS} --streams=${STREAMS} --scale-factor=${SF} --tuples-per-kernel-launch=${TUPLES} --tuples-per-thread=${VALUES} --threads-per-block=${THREADS}""".replace(
 		"${BINARY}", binary).replace(
 		"${OPTIONS}", options).replace(
 		"${STREAMS}", str(streams)).replace(
@@ -58,9 +66,9 @@ os.system('mkdir -p results/options')
 for opt in options:
 	run_test(fname="options/results-%s.csv" % (opt.replace(" ", "")), options = opt)
 
-os.system('mkdir -p results/sf')
-for sf in sfs:
-	run_test(fname="sf/results-sf%s.csv" % str(sf), sf=sf)
+# os.system('mkdir -p results/sf')
+# for sf in sfs:
+# 	run_test(fname="sf/results-sf%s.csv" % str(sf), sf=sf)
 
 os.system('mkdir -p results/streams')
 for stream in streams:

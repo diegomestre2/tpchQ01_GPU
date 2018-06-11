@@ -708,10 +708,9 @@ int main(int argc, char** argv) {
                     input_buffers.return_flag.get(),
                     input_buffers.line_status.get(),
                     num_tuples_for_this_launch);
-            }
-            else {
+            } else {
                 auto& input_buffers = stream_input_buffer_sets.uncompressed[stream_index];
-                auto kernel = kernels_compressed.at(kernel_variant);
+                auto kernel = kernels.at(kernel_variant);
                 stream.enqueue.kernel_launch(
                     kernel,
                     launch_config,

@@ -39,12 +39,12 @@ void global_ht_tpchQ01(
             int group_index =
                 (encode_return_flag(line_return_flag) << line_status_bits) + encode_line_status(line_status_);
 
-            atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], line_quantity);
-            atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], line_price);
-            atomicAdd( (unsigned long long* ) & sum_charge          [group_index], line_charge);
-            atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], line_discounted_price);
-            atomicAdd( (unsigned long long* ) & sum_discount        [group_index], line_discount);
-            atomicAdd(                        & record_count        [group_index], 1);
+            atomicAdd( & sum_quantity        [group_index], line_quantity);
+            atomicAdd( & sum_base_price      [group_index], line_price);
+            atomicAdd( & sum_charge          [group_index], line_charge);
+            atomicAdd( & sum_discounted_price[group_index], line_discounted_price);
+            atomicAdd( & sum_discount        [group_index], line_discount);
+            atomicAdd( & record_count        [group_index], 1);
         }
     }
 }
@@ -81,12 +81,12 @@ void global_ht_tpchQ01_compressed(
 
             int group_index = (line_return_flag << line_status_bits) + line_status_;
 
-            atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], line_quantity);
-            atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], line_price);
-            atomicAdd( (unsigned long long* ) & sum_charge          [group_index], line_charge);
-            atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], line_discounted_price);
-            atomicAdd( (unsigned long long* ) & sum_discount        [group_index], line_discount);
-            atomicAdd(                        & record_count        [group_index], 1);
+            atomicAdd( & sum_quantity        [group_index], line_quantity);
+            atomicAdd( & sum_base_price      [group_index], line_price);
+            atomicAdd( & sum_charge          [group_index], line_charge);
+            atomicAdd( & sum_discounted_price[group_index], line_discounted_price);
+            atomicAdd( & sum_discount        [group_index], line_discount);
+            atomicAdd( & record_count        [group_index], 1);
         }
     }
 }
@@ -124,12 +124,12 @@ void global_ht_tpchQ01_filter_pushdown_compressed (
 
             int group_index = (line_return_flag << line_status_bits) + line_status_;
 
-            atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], line_quantity);
-            atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], line_price);
-            atomicAdd( (unsigned long long* ) & sum_charge          [group_index], line_charge);
-            atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], line_discounted_price);
-            atomicAdd( (unsigned long long* ) & sum_discount        [group_index], line_discount);
-            atomicAdd(                        & record_count        [group_index], 1);
+            atomicAdd( & sum_quantity        [group_index], line_quantity);
+            atomicAdd( & sum_base_price      [group_index], line_price);
+            atomicAdd( & sum_charge          [group_index], line_charge);
+            atomicAdd( & sum_discounted_price[group_index], line_discounted_price);
+            atomicAdd( & sum_discount        [group_index], line_discount);
+            atomicAdd( & record_count        [group_index], 1);
         }
     }
 }

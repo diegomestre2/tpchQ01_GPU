@@ -108,12 +108,12 @@ void thread_in_shared_mem_ht_tpchQ01(
     // These manual casts are really unbecoming. We need a wrapper...
     #pragma unroll
     for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
-        atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], thread_sums_of_quantity        [group_index * warp_size]);
-        atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], thread_sums_of_base_price      [group_index * warp_size]);
-        atomicAdd( (unsigned long long* ) & sum_charge          [group_index], thread_sums_of_charge          [group_index * warp_size]);
-        atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], thread_sums_of_discounted_price[group_index * warp_size]);
-        atomicAdd( (unsigned long long* ) & sum_discount        [group_index], thread_sums_of_discount        [group_index * warp_size]);
-        atomicAdd(                        & record_count        [group_index], thread_record_counts           [group_index * warp_size]);
+        atomicAdd( & sum_quantity        [group_index], thread_sums_of_quantity        [group_index * warp_size]);
+        atomicAdd( & sum_base_price      [group_index], thread_sums_of_base_price      [group_index * warp_size]);
+        atomicAdd( & sum_charge          [group_index], thread_sums_of_charge          [group_index * warp_size]);
+        atomicAdd( & sum_discounted_price[group_index], thread_sums_of_discounted_price[group_index * warp_size]);
+        atomicAdd( & sum_discount        [group_index], thread_sums_of_discount        [group_index * warp_size]);
+        atomicAdd( & record_count        [group_index], thread_record_counts           [group_index * warp_size]);
     }
 }
 
@@ -204,12 +204,12 @@ void thread_in_shared_mem_ht_tpchQ01_compressed(
     // These manual casts are really unbecoming. We need a wrapper...
     #pragma unroll
     for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
-        atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], thread_sums_of_quantity        [group_index * warp_size]);
-        atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], thread_sums_of_base_price      [group_index * warp_size]);
-        atomicAdd( (unsigned long long* ) & sum_charge          [group_index], thread_sums_of_charge          [group_index * warp_size]);
-        atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], thread_sums_of_discounted_price[group_index * warp_size]);
-        atomicAdd( (unsigned long long* ) & sum_discount        [group_index], thread_sums_of_discount        [group_index * warp_size]);
-        atomicAdd(                        & record_count        [group_index], thread_record_counts           [group_index * warp_size]);
+        atomicAdd( & sum_quantity        [group_index], thread_sums_of_quantity        [group_index * warp_size]);
+        atomicAdd( & sum_base_price      [group_index], thread_sums_of_base_price      [group_index * warp_size]);
+        atomicAdd( & sum_charge          [group_index], thread_sums_of_charge          [group_index * warp_size]);
+        atomicAdd( & sum_discounted_price[group_index], thread_sums_of_discounted_price[group_index * warp_size]);
+        atomicAdd( & sum_discount        [group_index], thread_sums_of_discount        [group_index * warp_size]);
+        atomicAdd( & record_count        [group_index], thread_record_counts           [group_index * warp_size]);
     }
 
 }

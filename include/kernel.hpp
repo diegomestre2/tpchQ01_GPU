@@ -7,6 +7,7 @@
 #include "constants.hpp"
 #include "../expl_comp_strat/common.hpp"
 #include "data_types.h"
+#include <cuda_runtime_api.h>
 
 using namespace cooperative_groups;
 
@@ -17,6 +18,23 @@ using namespace cooperative_groups;
 #define __fhd__ inline
 #define __fd__  inline
 #endif
+
+// Annoyingly, CUDA - upto and including version 9.2 - provide atomic
+// operation wrappers for unsigned int and unsigned long long int, but
+// not for the in-between type of unsigned long int. So - we
+// have to make our own. Don't worry about the condition checks -
+// they are optimied away at compile time and the result is basically
+// a single PTX instruction (provided the value is available)
+__fd__ unsigned long int atomicAdd(unsigned long int *address, unsigned long int val)
+{
+	if (sizeof (unsigned long int) == sizeof(unsigned long long int)) {
+		return atomicAdd(reinterpret_cast<unsigned long long int*>(address), val);
+	}
+	else if (sizeof (unsigned long int) == sizeof(unsigned int)) {
+		return  atomicAdd(reinterpret_cast<unsigned int*>(address), val);
+	}
+	else return 0;
+}
 
 namespace cuda{
 

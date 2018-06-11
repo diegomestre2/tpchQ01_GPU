@@ -73,12 +73,12 @@ void in_local_mem_ht_tpchQ01(
     // These manual casts are really unbecoming. We need a wrapper...
     #pragma unroll
     for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
-        atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
-        atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
-        atomicAdd( (unsigned long long* ) & sum_charge          [group_index], thread_sum_charge          [group_index]);
-        atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
-        atomicAdd( (unsigned long long* ) & sum_discount        [group_index], thread_sum_discount        [group_index]);
-        atomicAdd(                        & record_count        [group_index], thread_record_count        [group_index]);
+        atomicAdd( & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
+        atomicAdd( & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
+        atomicAdd( & sum_charge          [group_index], thread_sum_charge          [group_index]);
+        atomicAdd( & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
+        atomicAdd( & sum_discount        [group_index], thread_sum_discount        [group_index]);
+        atomicAdd( & record_count        [group_index], thread_record_count        [group_index]);
     }
 }
 
@@ -137,12 +137,12 @@ void in_local_mem_ht_tpchQ01_compressed(
     // These manual casts are really unbecoming. We need a wrapper...
     #pragma unroll
     for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
-        atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
-        atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
-        atomicAdd( (unsigned long long* ) & sum_charge          [group_index], thread_sum_charge          [group_index]);
-        atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
-        atomicAdd( (unsigned long long* ) & sum_discount        [group_index], thread_sum_discount        [group_index]);
-        atomicAdd(                        & record_count        [group_index], thread_record_count        [group_index]);
+        atomicAdd( & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
+        atomicAdd( & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
+        atomicAdd( & sum_charge          [group_index], thread_sum_charge          [group_index]);
+        atomicAdd( & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
+        atomicAdd( & sum_discount        [group_index], thread_sum_discount        [group_index]);
+        atomicAdd( & record_count        [group_index], thread_record_count        [group_index]);
     }
 }
 
@@ -202,12 +202,12 @@ void in_local_mem_ht_tpchQ01_filter_pushdown_compressed(
     // These manual casts are really unbecoming. We need a wrapper...
     #pragma unroll
     for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
-        atomicAdd( (unsigned long long* ) & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
-        atomicAdd( (unsigned long long* ) & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
-        atomicAdd( (unsigned long long* ) & sum_charge          [group_index], thread_sum_charge          [group_index]);
-        atomicAdd( (unsigned long long* ) & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
-        atomicAdd( (unsigned long long* ) & sum_discount        [group_index], thread_sum_discount        [group_index]);
-        atomicAdd(                        & record_count        [group_index], thread_record_count        [group_index]);
+        atomicAdd( & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
+        atomicAdd( & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
+        atomicAdd( & sum_charge          [group_index], thread_sum_charge          [group_index]);
+        atomicAdd( & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
+        atomicAdd( & sum_discount        [group_index], thread_sum_discount        [group_index]);
+        atomicAdd( & record_count        [group_index], thread_record_count        [group_index]);
     }
 }
 

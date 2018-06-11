@@ -2,7 +2,7 @@
 #include "constants.hpp"
 #include "bit_operations.h"
 #include "kernel.hpp"
-#include "kernels/global.hpp"
+#include "kernels/ht_in_global_mem.hpp"
 #include "kernels/ht_in_registers.cuh"
 #include "kernels/ht_in_local_mem.cuh"
 #include "kernels/ht_per_thread_in_shared_mem.cuh"

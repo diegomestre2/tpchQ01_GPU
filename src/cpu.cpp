@@ -37,7 +37,7 @@ CoProc::operator()(size_t offset, size_t num)
 void
 CoProc::wait()
 {
-	kernel->wait(true);
+	kernel->wait(false);
 }
 
 void

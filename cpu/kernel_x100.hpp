@@ -518,6 +518,9 @@ struct Morsel : BaseKernel {
 		if (!full_system) {
 			threadinhos /= 2;
 		}
+		if (wo_core0) {
+			threadinhos--;
+		}
 
 		if (threadinhos < 1) {
 			threadinhos = 1;
@@ -536,13 +539,13 @@ struct Morsel : BaseKernel {
 		{
 			std::unique_lock<std::mutex> lock(lock_query);
 
-			for (size_t i=wo_core0 ? 1 : 0; i<threadinhos; i++) {
+			for (size_t i=0 ; i<threadinhos; i++) {
 				workers.push_back(std::thread(&Morsel::Work, this, i));
 
 				// set affinity
 				cpu_set_t cpuset;
 				CPU_ZERO(&cpuset);
-				CPU_SET(i, &cpuset);
+				CPU_SET(i + wo_core0 ? 1 : 0, &cpuset);
 				int rc = pthread_setaffinity_np(workers[i].native_handle(), sizeof(cpu_set_t), &cpuset);
 				assert(rc == 0 && "Setting affinity failed");
 			}
@@ -553,7 +556,7 @@ struct Morsel : BaseKernel {
 
 			while (true) {
 				bool all_up = true;
-				for (auto& s : states) {
+				for(auto& s : states) {
 					all_up &= !!s;
 				}	
 				if (!all_up) {
@@ -613,7 +616,9 @@ struct Morsel : BaseKernel {
 	virtual void Clear() override
 	{
 		for (auto& s : states) {
-			s->Clear();
+			if (s) {
+				s->Clear();
+			}
 		}
 
 		BaseKernel::Clear();

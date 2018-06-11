@@ -47,6 +47,7 @@ size_t magic_hash(char rf, char ls) {
 }
 
 inline void assert_always(bool a) {
+    assert(a);
     if (!a) {
         fprintf(stderr, "Assert always failed!");
         exit(1);
@@ -162,7 +163,7 @@ void print_help(int argc, char** argv) {
     fprintf(stderr, "Usage: %s [args]\n", argv[0]);
     fprintf(stderr, "   --apply-compression\n");
     fprintf(stderr, "   --print-results\n");
-    fprintf(stderr, "   --use-global-hash-table\n");
+    fprintf(stderr, "   --use-filter-pushdown\n");
     fprintf(stderr, "   --use-coprocessing (currently ignored)\n");
     fprintf(stderr, "   --hash-table-placement=[default:in-registers] (one of: in-registers, local-mem, per-thread-shared-mem, global))\n");
     fprintf(stderr, "   --sf=[default:%f] (number, e.g. 0.01 - 100)\n", defaults::scale_factor);
@@ -627,17 +628,19 @@ int main(int argc, char** argv) {
 
     for(int run_index = 0; run_index < num_query_execution_runs; run_index++) {
         cout << "Executing query, run " << run_index + 1 << " of " << num_query_execution_runs << "... " << flush;
+        if (use_coprocessing) {
+             cpu->Clear();
+         }
         auto start = timer::now();
         
         auto gpu_end_offset = cardinality;
         if (use_coprocessing) {
-             cpu->Clear();
              // Split the work between the CPU and the GPU at 50% each
              // TODO: 
              // - Double-check the choice of alignment here
              // - The parameters here are weird
-             auto cpu_start_offset = cardinality / 2;
-             cpu_start_offset = cardinality - cardinality % num_tuples_per_kernel_launch;
+             auto cpu_start_offset = cardinality - cardinality / 20;
+             cpu_start_offset = cpu_start_offset - cpu_start_offset % num_tuples_per_kernel_launch;
              auto num_records_for_cpu_to_process = cardinality - cpu_start_offset;
              (*cpu)(cpu_start_offset, num_records_for_cpu_to_process);
              gpu_end_offset = cpu_start_offset;
@@ -800,38 +803,30 @@ int main(int argc, char** argv) {
         if (cpu) {
             cpu->wait();
 
-/*            // merge
-            int group_order[4];
-            if (apply_compression) {
-                group_order[0] = 6;
-                group_order[1] = 4;
-                group_order[2] = 0;
-                group_order[3] = 5;
-            } else {
-                group_order[0] = magic_hash('A', 'F');
-                group_order[1] = magic_hash('N', 'F');
-                group_order[2] = magic_hash('N', 'O');
-                group_order[3] = magic_hash('R', 'F');
-            }
-*/
+            // merge
+            // int group_order[4];
+            // group_order[0] = 6;
+            // group_order[1] = 4;
+            // group_order[2] = 0;
+            // group_order[3] = 5;
             size_t idx = 0;
-            for (size_t i=0; i<num_potential_groups; i++) {
+            for (size_t i=0; i<MAX_GROUPS; i++) {
                 auto& e = cpu->table[i];
                 if (e.count <= 0) {
                     continue;
                 }
-/*
-                auto group = group_order[idx];
 
-                #define B(i)  aggrs0[group].i += e.i; printf("set %s group %d  parti %d\n", #i, group, e.i)
+                // auto group = group_order[idx];
 
-                B(sum_quantity);
-                B(count);
-                B(sum_base_price);
-                B(sum_disc);
-                B(sum_disc_price);
-                B(sum_charge);
-*/
+                // #define B(i)  aggrs0[group].i += e.i
+
+                // B(sum_quantity);
+                // B(count);
+                // B(sum_base_price);
+                // B(sum_disc);
+                // B(sum_disc_price);
+                // B(sum_charge);
+
                 idx++;
             }
             assert_always(idx == 4);

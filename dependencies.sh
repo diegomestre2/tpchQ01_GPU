@@ -8,14 +8,6 @@ else
 	source configuration.sh
 fi
 
-if [ ! -d cub ]
-then
-	git clone https://github.com/NVlabs/cub
-	cd cub
-	git reset --hard c3cceac115c072fb63df1836ff46d8c60d9eb304
-	cd ..
-fi
-
 if [ ! -d cuda-api-wrappers ]
 then
 	git clone https://github.com/eyalroz/cuda-api-wrappers

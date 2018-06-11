@@ -1,7 +1,7 @@
 #pragma once
 #include <cuda_runtime.h>
-#include <cub/cub.cuh>
 #include <cuda/api_wrappers.h>
+#include <iostream>
 
 using cuda::warp_size;
 

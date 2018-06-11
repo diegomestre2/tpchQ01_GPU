@@ -40,19 +40,6 @@ find_package(Numa REQUIRED)
 include_directories(${NUMA_INCLUDE_DIR})
 
 
-# NVidia CUB
-# git clone git@github.com:NVlabs/cub.git
-find_package(CUB 1.5.0 REQUIRED)
-if(CUB_FOUND)
-    include_directories(${CUB_INCLUDE_DIRS})
-    message(STATUS "CUB FOUND: ${CUB_INCLUDE_DIRS}")
-else()
-    # Database Template Library (DTL)
-    # git clone https://github.com/NVlabs/cub.git cub
-    message(STATUS "CUB NOT FOUND. Including it as submodule...")
-    include_directories(../cub/cub/)
-endif()
-
 find_package(CUDAAPIWrappers REQUIRED)
 include_directories(${CUDA_API_WRAPPERS_INCLUDE_DIRS})
 # but what about the library search path?

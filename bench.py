@@ -3,7 +3,7 @@ import os
 
 binary = "build/release/bin/tpch_01"
 
-default_sf = 1
+default_sf = 100
 default_options = "--apply-compression"
 default_streams = 4
 default_tuples_per_launch = 1 << 20
@@ -12,7 +12,7 @@ default_threads_per_block = 256
 
 sfs = [1, 10, 100]
 streams = [1, 2, 3, 4, 6, 8, 16, 32]
-tuples_per_launch = [1024, 2*1024, 4*1024, 8*1024, 16*1024, 64*1024, 128*1024, 256*1024, 512*1024, 1024*1024, 2*1024*1024]
+tuples_per_launch = [1024, 2*1024, 4*1024, 8*1024, 16*1024, 32*1024, 64*1024, 128*1024, 256*1024, 512*1024, 1024*1024, 2*1024*1024]
 tuples_per_thread = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096] # anything below 32 is probably kind of silly  
 threads_per_block = [32, 64, 128, 256, 512, 1024] # Note that some kernels do not supported the entire ranges, and need either many or not-too-many
 

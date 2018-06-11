@@ -7,6 +7,13 @@ set(CMAKE_VERBOSE_MAKEFILE OFF)
 # Project name, version & build type
 # -----------------------------------
 
+ADD_DEFINITIONS(
+  -std=c++14
+  -march=native
+  -O3
+  -ftree-vectorize -ftree-slp-vectorize -funroll-all-loops -fpeel-loops -fomit-frame-pointer 
+)
+
 add_subdirectory(cpu)
 
 if (NOT CMAKE_BUILD_TYPE OR CMAKE_BUILD_TYPE STREQUAL "")
@@ -103,7 +110,7 @@ include_directories(/usr/local/cuda/include)
 
 ### GCC Flags
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DGPU -DDEBUG -O0 -g")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -std=c++14 -DGPU -march=corei7")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGPU")
 
 SET(SOURCE_FILES
         src/main.cu

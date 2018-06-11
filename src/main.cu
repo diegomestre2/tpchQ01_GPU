@@ -270,6 +270,12 @@ const std::unordered_map<string, cuda::device_function_t> kernels_compressed = {
     { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01_compressed      } },
 };
 
+const std::unordered_map<string, cuda::device_function_t> kernels_filter_pushdown = {
+    { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01_filter_pushdown_compressed} },
+     { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed} },
+     { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01_filter_pushdown_compressed      } },
+};
+
 // Some kernel variants cannot support as many threads per block as the hardware allows generally,
 // and for these we use a fixed number for now
 const std::unordered_map<string, cuda::grid_block_dimension_t> fixed_threads_per_block = {
@@ -288,6 +294,7 @@ int main(int argc, char** argv) {
     double scale_factor              = defaults::scale_factor;
     std::string kernel_variant       = defaults::kernel_variant;
     bool should_print_results        = defaults::should_print_results;
+    bool use_filter_pushdown         = false;
     bool apply_compression           = defaults::apply_compression;
     int num_gpu_streams              = defaults::num_gpu_streams;
     cuda::grid_block_dimension_t num_threads_per_block
@@ -321,7 +328,10 @@ int main(int argc, char** argv) {
             use_coprocessing = true;
         } else if (arg == "apply-compression") {
             apply_compression = true;
-        } else if (arg == "print-results") {
+        } else if (arg == "use-filter-pushdown") {
+            use_filter_pushdown = true;
+            apply_compression = true;
+        }  else if (arg == "print-results") {
             should_print_results = true;
         } else {
             // A  name=value argument
@@ -459,6 +469,7 @@ int main(int argc, char** argv) {
     auto compressed_quantity       = cuda::memory::host::make_unique< compressed::quantity_t[]       >(cardinality);
     auto compressed_return_flag    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, return_flag_values_per_container));
     auto compressed_line_status    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, line_status_values_per_container));
+    auto ship_date_bit_vector      = cuda::memory::host::make_unique< uint8_t[] >(div_rounding_up(cardinality, 8));
 
     // Eyal says: Drop these copies, we really don't need them AFAICT
     auto ship_date      = _shipdate.get();
@@ -653,21 +664,34 @@ int main(int argc, char** argv) {
              stream_index = (stream_index+1) % num_gpu_streams)
         {
             auto num_tuples_for_this_launch = std::min<cardinality_t>(num_tuples_per_kernel_launch, gpu_end_offset - offset_in_table);
+            auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, return_flag_values_per_container);
+            auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, line_status_values_per_container);
 
             // auto start_copy = timer::now();  // This can't work, since copying is asynchronous.
             auto& stream = streams[stream_index];
-            if (apply_compression) {
-                auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, return_flag_values_per_container);
-                auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, line_status_values_per_container);
 
+            if (apply_compression) {
                 auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
-                stream.enqueue.copy(input_buffers.ship_date.get()     , compressed_ship_date.get()      + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::ship_date_t));
                 stream.enqueue.copy(input_buffers.discount.get()      , compressed_discount.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::discount_t));
                 stream.enqueue.copy(input_buffers.extended_price.get(), compressed_extended_price.get() + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::extended_price_t));
                 stream.enqueue.copy(input_buffers.tax.get()           , compressed_tax.get()            + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::tax_t));
                 stream.enqueue.copy(input_buffers.quantity.get()      , compressed_quantity.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::quantity_t));
                 stream.enqueue.copy(input_buffers.return_flag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t));
                 stream.enqueue.copy(input_buffers.line_status.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
+                if (use_filter_pushdown) {
+                    auto shipdate_bit_vector = ship_date_bit_vector.get();
+                    auto shipdate_compressed = compressed_ship_date.get();
+                    size_t target = offset_in_table + num_tuples_for_this_launch;
+                    for(size_t i = offset_in_table; i < target; i += 8) {
+                        shipdate_bit_vector[i / 8] = 0;
+                        for(size_t j = 0; j < std::min((size_t) 8, target - i); j++) {
+                            shipdate_bit_vector[i / 8] |= (shipdate_compressed[i + j] < compressed_threshold_ship_date) << j;
+                        }
+                    }
+                    stream.enqueue.copy(input_buffers.ship_date.get()     , shipdate_bit_vector             + offset_in_table / 8, ((num_tuples_for_this_launch + 7) / 8) * sizeof(uint8_t));
+                } else {
+                    stream.enqueue.copy(input_buffers.ship_date.get()     , compressed_ship_date.get()      + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::ship_date_t));
+                }
             }
             else {
                 auto& input_buffers = stream_input_buffer_sets.uncompressed[stream_index];
@@ -688,7 +712,28 @@ int main(int argc, char** argv) {
             // cout << "num_blocks = " << num_blocks << ", num_threads_per_block = " << num_threads_per_block << endl;
             (void) launch_config;
 
-            if (apply_compression) {
+            
+            if (use_filter_pushdown) {
+                auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
+                auto kernel = kernels_filter_pushdown.at(kernel_variant);
+                stream.enqueue.kernel_launch(
+                    kernel,
+                    launch_config,
+                    aggregates_on_device.sum_quantity.get(),
+                    aggregates_on_device.sum_base_price.get(),
+                    aggregates_on_device.sum_discounted_price.get(),
+                    aggregates_on_device.sum_charge.get(),
+                    aggregates_on_device.sum_discount.get(),
+                    aggregates_on_device.record_count.get(),
+                    input_buffers.ship_date.get(),
+                    input_buffers.discount.get(),
+                    input_buffers.extended_price.get(),
+                    input_buffers.tax.get(),
+                    input_buffers.quantity.get(),
+                    input_buffers.return_flag.get(),
+                    input_buffers.line_status.get(),
+                    num_tuples_for_this_launch);
+            } else if (apply_compression) {
                 auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
                 auto kernel = kernels_compressed.at(kernel_variant);
                 stream.enqueue.kernel_launch(

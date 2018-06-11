@@ -5,7 +5,7 @@
 #include "kernels/global.hpp"
 #include "kernels/ht_in_registers.cuh"
 #include "kernels/ht_in_local_mem.cuh"
-// #include "kernels/ht_per_thread_in_shared_mem.cuh"
+#include "kernels/ht_per_thread_in_shared_mem.cuh"
 // #include "kernels/ht_per_block_in_shared_mem.cuh"
 #include "../expl_comp_strat/tpch_kit.hpp"
 #include "../expl_comp_strat/common.hpp"
@@ -30,16 +30,9 @@ using std::make_pair;
 using std::make_unique;
 using std::unique_ptr;
 using std::cout;
+using std::cerr;
 using std::endl;
 using std::flush;
-using std::string;
-
-using std::cout;
-using std::endl;
-using std::string;
-
-using std::cout;
-using std::endl;
 using std::string;
 
 size_t magic_hash(char rf, char ls) {
@@ -258,7 +251,7 @@ void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
 const std::unordered_map<string, cuda::device_function_t> kernels = {
     { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01} },
     { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01} },
-//    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01<> },
+    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01<> },
 //    { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01               },
     { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01}       },
 };
@@ -266,21 +259,21 @@ const std::unordered_map<string, cuda::device_function_t> kernels = {
 const std::unordered_map<string, cuda::device_function_t> kernels_compressed = {
     { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01_compressed} },
     { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01_compressed} },
-//    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_compressed<> },
+    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_compressed<> },
 //    { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01_compressed               },
     { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01_compressed      } },
 };
 
 const std::unordered_map<string, cuda::device_function_t> kernels_filter_pushdown = {
     { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01_filter_pushdown_compressed} },
-     { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed} },
-     { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01_filter_pushdown_compressed      } },
+    { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed} },
+    { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01_filter_pushdown_compressed      } },
 };
 
 // Some kernel variants cannot support as many threads per block as the hardware allows generally,
 // and for these we use a fixed number for now
 const std::unordered_map<string, cuda::grid_block_dimension_t> fixed_threads_per_block = {
-//    { "per-thread-shared-mem", cuda::max_threads_per_block_for_per_thread_shared_mem },
+    { "per-thread-shared-mem", cuda::max_threads_per_block_for_per_thread_shared_mem },
 };
 
 
@@ -341,12 +334,14 @@ int main(int argc, char** argv) {
             if (arg_name == "scale-factor") {
                 scale_factor = std::stod(arg_value);
                 if (scale_factor - 0 < 0.001) {
-                    std::invalid_argument("Invalid scale factor");
+                    cerr << "Invalid scale factor " + std::to_string(scale_factor) << endl;
+					exit(EXIT_FAILURE);
                 }
             } else if (arg_name == "hash-table-placement") {
                 kernel_variant = arg_value;
                 if (kernels.find(kernel_variant) == kernels.end()) {
-                    throw std::invalid_argument("Invalid kernel variant specified");
+                    cerr << "No kernel variant named \"" + kernel_variant + "\" is available" << endl;
+					exit(EXIT_FAILURE);
                 }
             } else if (arg_name == "streams") {
                 num_gpu_streams = std::stoi(arg_value);
@@ -360,7 +355,8 @@ int main(int argc, char** argv) {
             } else if (arg_name == "runs") {
                 num_query_execution_runs = std::stoi(arg_value);
                 if (num_query_execution_runs <= 0) {
-                    throw std::invalid_argument("Number of runs must be positive");
+                    cerr << "Number of runs must be positive" << endl;
+					exit(EXIT_FAILURE);
                 }
             } else {
                 print_help(argc, argv);

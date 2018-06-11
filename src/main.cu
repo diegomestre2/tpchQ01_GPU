@@ -252,25 +252,27 @@ void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
 }
 
 const std::unordered_map<string, cuda::device_function_t> kernels = {
-    { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01} },
-    { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01} },
+    { "local-mem",             cuda::in_local_mem_ht_tpchQ01           },
+    { "in-registers",          cuda::in_registers_ht_tpchQ01           },
     { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01<> },
-//    { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01               },
-    { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01}       },
+//  { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01             },
+    { "global",                &cuda::global_ht_tpchQ01                },
 };
 
 const std::unordered_map<string, cuda::device_function_t> kernels_compressed = {
-    { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01_compressed} },
-    { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01_compressed} },
+    { "local-mem",             cuda::in_local_mem_ht_tpchQ01_compressed           },
+    { "in-registers",          cuda::in_registers_ht_tpchQ01_compressed           },
     { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_compressed<> },
-//    { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01_compressed               },
-    { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01_compressed      } },
+//  { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01_compressed             },
+    { "global",                cuda::global_ht_tpchQ01_compressed                 },
 };
 
 const std::unordered_map<string, cuda::device_function_t> kernels_filter_pushdown = {
-    { "local-mem",             cuda::device_function_t{(void*) &cuda::in_local_mem_ht_tpchQ01_filter_pushdown_compressed} },
-    { "in-registers",          cuda::device_function_t{(void*) &cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed} },
-    { "global",                cuda::device_function_t{(void*) &cuda::global_ht_tpchQ01_filter_pushdown_compressed      } },
+    { "local-mem",             cuda::in_local_mem_ht_tpchQ01_filter_pushdown_compressed    },
+    { "in-registers",          cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed    },
+    { "global",                cuda::global_ht_tpchQ01_filter_pushdown_compressed          },
+//  { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01_pushdown_compressed             },
+    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_pushdown_compressed<> },
 };
 
 // Some kernel variants cannot support as many threads per block as the hardware allows generally,
@@ -680,6 +682,7 @@ int main(int argc, char** argv) {
                 stream.enqueue.copy(input_buffers.return_flag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t));
                 stream.enqueue.copy(input_buffers.line_status.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
                 if (use_filter_pushdown) {
+					cuda::profiling::scoped_range_marker("on-CPU filtering");
                     auto shipdate_bit_vector = ship_date_bit_vector.get();
                     auto shipdate_compressed = compressed_ship_date.get();
                     size_t target = offset_in_table + num_tuples_for_this_launch;

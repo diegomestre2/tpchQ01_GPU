@@ -542,12 +542,14 @@ struct Morsel : BaseKernel {
 			for (size_t i=0 ; i<threadinhos; i++) {
 				workers.push_back(std::thread(&Morsel::Work, this, i));
 
+#if 0
 				// set affinity
 				cpu_set_t cpuset;
 				CPU_ZERO(&cpuset);
 				CPU_SET(i + wo_core0 ? 1 : 0, &cpuset);
 				int rc = pthread_setaffinity_np(workers[i].native_handle(), sizeof(cpu_set_t), &cpuset);
 				assert(rc == 0 && "Setting affinity failed");
+#endif
 			}
 		}
 

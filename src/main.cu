@@ -348,7 +348,6 @@ int main(int argc, char** argv) {
                 if (kernels.find(kernel_variant) == kernels.end()) {
                     throw std::invalid_argument("Invalid kernel variant specified");
                 }
-                cout << "kernel variant is" + kernel_variant << "\n";
             } else if (arg_name == "streams") {
                 num_gpu_streams = std::stoi(arg_value);
             } else if (arg_name == "tuples-per-thread") {

@@ -184,6 +184,8 @@ clear_tables()
 
 void make_sure_we_are_on_cpu_core_0()
 {
+#if 0
+    // CPU affinities are devil's work
     // Make sure we are on core 0
     // TODO: Why not in a function?
     cpu_set_t cpuset; 
@@ -191,6 +193,7 @@ void make_sure_we_are_on_cpu_core_0()
     CPU_ZERO(&cpuset);
     CPU_SET(0, &cpuset);
     sched_setaffinity(0, sizeof(cpuset), &cpuset);
+#endif
 }
 
 #include "cpu.h"

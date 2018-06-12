@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 project(adms)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 set(CMAKE_VERBOSE_MAKEFILE OFF)
+set(DATA_FILES_DIR "tpch")
 
 # ----------------------------------
 # Project name, version & build type
@@ -112,3 +113,87 @@ SET(SOURCE_FILES
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin")
 cuda_add_executable(tpch_01 ${SOURCE_FILES})
 target_link_libraries(tpch_01 ${LIBS} ${NUMA_LIBRARY})
+
+##########################
+## Data table generation
+##########################
+
+add_custom_command(
+    OUTPUT
+        ${DATA_FILES_DIR}/1.000000/lineitem.tbl
+    DEPENDS
+        scripts/genlineitem.sh
+    COMMAND
+        +scripts/genlineitem.sh 1
+    COMMAND
+        +mkdir -p ${DATA_FILES_DIR}/1.000000
+    COMMAND
+        +mv lineitem.tbl  ${DATA_FILES_DIR}/1.000000/lineitem.tbl
+    COMMENT
+        "Generating data table for scale factor 1"
+    VERBATIM
+    )
+# Is this next line even necessary?
+set_source_files_properties( 
+	${DATA_FILES_DIR}/1.000000/lineitem.tbl PROPERTIES GENERATED true )
+add_custom_target(
+	data_table_sf_1 ALL
+	DEPENDS 
+		${DATA_FILES_DIR}/1.000000/lineitem.tbl
+	)
+
+add_custom_command(
+    OUTPUT
+        ${DATA_FILES_DIR}/10.000000/lineitem.tbl
+    DEPENDS
+        scripts/genlineitem.sh
+    COMMAND
+        +scripts/genlineitem.sh 10
+    COMMAND
+        +mkdir -p ${DATA_FILES_DIR}/10.000000
+    COMMAND
+        +mv lineitem.tbl  ${DATA_FILES_DIR}/10.000000/lineitem.tbl
+    COMMENT
+        "Generating data table for scale factor 10"
+    VERBATIM
+    )
+set_source_files_properties( 
+	${DATA_FILES_DIR}/10.000000/lineitem.tbl PROPERTIES GENERATED true )
+add_custom_target(
+	data_table_sf_10 # Note: NOT part of ALL
+	DEPENDS 
+		${DATA_FILES_DIR}/10.000000/lineitem.tbl
+	)
+
+add_custom_command(
+    OUTPUT
+        ${DATA_FILES_DIR}/100.000000/lineitem.tbl
+    DEPENDS
+        scripts/genlineitem.sh
+    COMMAND
+        +scripts/genlineitem.sh 100
+    COMMAND
+        +mkdir -p ${DATA_FILES_DIR}/100.000000
+    COMMAND
+        +mv lineitem.tbl  ${DATA_FILES_DIR}/100.000000/lineitem.tbl
+    COMMENT
+        "Generating data table for scale factor 100"
+    VERBATIM
+    )
+set_source_files_properties( 
+	${DATA_FILES_DIR}/100.000000/lineitem.tbl PROPERTIES GENERATED true )
+add_custom_target(
+	data_table_sf_100 # Note: NOT part of ALL
+	DEPENDS 
+		${DATA_FILES_DIR}/100.000000/lineitem.tbl
+	)
+
+add_custom_target(
+	notify_about_higher_sf_generation ALL
+	COMMAND 
+		echo "Consider generating the SF 10 and SF 100 tables by make\\'ing targets data_table_sf10 and data_table_sf100 respectively"
+	DEPENDS
+		data_table_sf_1 
+		tpch_01
+	)
+

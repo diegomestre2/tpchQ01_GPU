@@ -1,5 +1,3 @@
-build
-cub
 cuda-api-wrappers
 tpch-dbgen
 scripts
@@ -15,3 +13,9 @@ tpch
 tags
 *.csv
 tpch
+CMakeCache.txt
+CMakeFiles/
+bin/
+cmake_install.cmake
+cpu/
+

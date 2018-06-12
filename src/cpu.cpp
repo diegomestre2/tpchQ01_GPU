@@ -40,6 +40,17 @@ CoProc::wait()
 	kernel->wait(false);
 }
 
+size_t
+CoProc::numExtantGroups() const
+{
+	unsigned long long num_extant_groups { 0 };
+    for (size_t i = 0; i < MAX_GROUPS; i++) {
+        if (table[i].count > 0) { num_extant_groups++; }
+    }
+    return num_extant_groups;
+}
+
+
 void
 CoProc::Clear()
 {

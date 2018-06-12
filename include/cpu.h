@@ -20,6 +20,8 @@ struct CoProc {
 
 	void wait();
 	void Clear();
+	size_t numExtantGroups() const;
+		// Avoiding inclusion of anything else.
 };
 
 #endif

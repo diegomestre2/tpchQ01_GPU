@@ -11,24 +11,13 @@
 #include "../expl_comp_strat/common.hpp"
 #include "cpu/common.hpp"
 #include "cpu.h"
-
-#if __cplusplus >= 201703L
-#include <filesystem>
-using namespace filesystem = std::filesystem;
-#elif __cplusplus >= 201402L
-#include <experimental/filesystem>
-namespace filesystem = std::experimental::filesystem;
-#else
-#error This code must be compiled using the C++14 language started or later
-#endif
+#include "file_access.hpp"
 
 #include <iostream>
 #include <cuda/api_wrappers.h>
 #include <vector>
 #include <iomanip>
-#include <fstream>
 #include <chrono>
-#include <ios>
 #include <unordered_map>
 
 #ifndef GPU
@@ -61,23 +50,25 @@ struct stream_input_buffer_set;
 enum : bool { is_compressed = true, is_not_compressed = false};
 
 template <> struct stream_input_buffer_set<is_compressed> {
-    cuda::memory::device::unique_ptr< compressed::ship_date_t[]      > ship_date;
-    cuda::memory::device::unique_ptr< compressed::discount_t[]       > discount;
-    cuda::memory::device::unique_ptr< compressed::extended_price_t[] > extended_price;
-    cuda::memory::device::unique_ptr< compressed::tax_t[]            > tax;
-    cuda::memory::device::unique_ptr< compressed::quantity_t[]       > quantity;
-    cuda::memory::device::unique_ptr< bit_container_t[]              > return_flag;
-    cuda::memory::device::unique_ptr< bit_container_t[]              > line_status;
+	template <typename T> using unique_ptr = cuda::memory::device::unique_ptr<T>;
+    unique_ptr< compressed::ship_date_t[]      > ship_date;
+    unique_ptr< compressed::discount_t[]       > discount;
+    unique_ptr< compressed::extended_price_t[] > extended_price;
+    unique_ptr< compressed::tax_t[]            > tax;
+    unique_ptr< compressed::quantity_t[]       > quantity;
+    unique_ptr< bit_container_t[]              > return_flag;
+    unique_ptr< bit_container_t[]              > line_status;
 };
 
 template <> struct stream_input_buffer_set<is_not_compressed> {
-    cuda::memory::device::unique_ptr< ship_date_t[]      > ship_date;
-    cuda::memory::device::unique_ptr< discount_t[]       > discount;
-    cuda::memory::device::unique_ptr< extended_price_t[] > extended_price;
-    cuda::memory::device::unique_ptr< tax_t[]            > tax;
-    cuda::memory::device::unique_ptr< quantity_t[]       > quantity;
-    cuda::memory::device::unique_ptr< return_flag_t[]    > return_flag;
-    cuda::memory::device::unique_ptr< line_status_t[]    > line_status;
+	template <typename T> using unique_ptr = cuda::memory::device::unique_ptr<T>;
+    unique_ptr< ship_date_t[]      > ship_date;
+    unique_ptr< discount_t[]       > discount;
+    unique_ptr< extended_price_t[] > extended_price;
+    unique_ptr< tax_t[]            > tax;
+    unique_ptr< quantity_t[]       > quantity;
+    unique_ptr< return_flag_t[]    > return_flag;
+    unique_ptr< line_status_t[]    > line_status;
 };
 
 
@@ -93,50 +84,6 @@ constexpr inline int div_rounding_up(const int& dividend, const int& divisor)
     // Hopefully the compiler will optimize the two calls away.
     return std::div(dividend, divisor).quot + !(!std::div(dividend, divisor).rem);
 #endif
-}
-
-template <typename UniquePtr>
-void load_column_from_binary_file(
-    UniquePtr&               buffer,
-    cardinality_t            cardinality,
-    const filesystem::path&  directory,
-    const string&            file_name)
-{
-    // TODO: C++'ify the file access (will also guarantee exception safety)
-    using raw_ptr_type = typename std::decay<decltype(buffer.get())>::type;
-    using element_type = typename std::remove_pointer<raw_ptr_type>::type;
-    auto file_path = directory / file_name;
-    buffer = std::make_unique<element_type[]>(cardinality);
-    cout << "Loading a column from " << file_path << " ... " << flush;
-    FILE* pFile = fopen(file_path.c_str(), "rb");
-    if (pFile == nullptr) { throw std::runtime_error("Failed opening file " + file_path.string()); }
-    auto num_elements_read = fread(buffer.get(), sizeof(element_type), cardinality, pFile);
-    if (num_elements_read != cardinality) {
-        throw std::runtime_error("Failed reading sufficient data from " +
-            file_path.string() + " : expected " + std::to_string(cardinality) + " elements but read only " + std::to_string(num_elements_read) + "."); }
-    fclose(pFile);
-    cout << "done." << endl;
-}
-
-template <typename T>
-void write_column_to_binary_file(
-    const T*                buffer,
-    cardinality_t           cardinality,
-    const filesystem::path& directory,
-    const string&           file_name)
-{
-    auto file_path = directory / file_name;
-    cout << "Writing a column to " << file_path << " ... " << flush;
-    FILE* pFile = fopen(file_path.c_str(), "wb+");
-    if (pFile == nullptr) { throw std::runtime_error("Failed opening file " + file_path.string()); }
-    auto num_elements_written = fwrite(buffer, sizeof(T), cardinality, pFile);
-    fclose(pFile);
-    if (num_elements_written != cardinality) {
-        remove(file_path.c_str());
-        throw std::runtime_error("Failed writing all elements to the file - only " +
-            std::to_string(num_elements_written) + " written: " + strerror(errno));
-    }
-    cout << "done." << endl;
 }
 
 void print_help(int argc, char** argv) {
@@ -159,17 +106,6 @@ void for_each_argument(F f, Args&&... args) {
     [](...){}((f(std::forward<Args>(args)), 0)...);
 }
 
-GPUAggrHashTable aggrs0[num_potential_groups] ALIGN;
-
-#define init_table(ag) memset(&aggrs##ag, 0, sizeof(aggrs##ag))
-#define clear(x) memset(x, 0, sizeof(x))
-
-extern "C" void
-clear_tables()
-{
-    init_table(0);
-}
-
 void make_sure_we_are_on_cpu_core_0()
 {
 #if 0
@@ -183,9 +119,6 @@ void make_sure_we_are_on_cpu_core_0()
     sched_setaffinity(0, sizeof(cpuset), &cpuset);
 #endif
 }
-
-#include "cpu.h"
-
 
 std::pair<string,string> split_once(string delimited, char delimiter) {
     auto pos = delimited.find_first_of(delimiter);
@@ -448,9 +381,7 @@ int main(int argc, char** argv) {
         write_column_to_binary_file(li.l_quantity.get(),      cardinality, data_files_directory, "quantity.bin");
     }
 
-
-    clear_tables(); // currently only used by the CPU implementation
-    CoProc* cpu = use_coprocessing ?  new CoProc(li, true) : nullptr;
+    CoProc* cpu_coprocessor = use_coprocessing ?  new CoProc(li, true) : nullptr;
 
     auto compressed_ship_date      = cuda::memory::host::make_unique< compressed::ship_date_t[]      >(cardinality);
     auto compressed_discount       = cuda::memory::host::make_unique< compressed::discount_t[]       >(cardinality);
@@ -618,7 +549,7 @@ int main(int argc, char** argv) {
     for(int run_index = 0; run_index < num_query_execution_runs; run_index++) {
         cout << "Executing query, run " << run_index + 1 << " of " << num_query_execution_runs << "... " << flush;
         if (use_coprocessing) {
-             cpu->Clear();
+             cpu_coprocessor->Clear();
         }
         auto start = timer::now();
         
@@ -631,7 +562,7 @@ int main(int argc, char** argv) {
              auto cpu_start_offset = cardinality - cardinality / 20;
              cpu_start_offset = cpu_start_offset - cpu_start_offset % num_tuples_per_kernel_launch;
              auto num_records_for_cpu_to_process = cardinality - cpu_start_offset;
-             (*cpu)(cpu_start_offset, num_records_for_cpu_to_process);
+             (*cpu_coprocessor)(cpu_start_offset, num_records_for_cpu_to_process);
              gpu_end_offset = cpu_start_offset;
         } 
 
@@ -790,43 +721,18 @@ int main(int argc, char** argv) {
 */
         streams[0].synchronize();
 
-        if (cpu) {
-            cpu->wait();
-
-            // merge
-            // int group_order[4];
-            // group_order[0] = 6;
-            // group_order[1] = 4;
-            // group_order[2] = 0;
-            // group_order[3] = 5;
-            size_t idx = 0;
-            for (size_t i=0; i<MAX_GROUPS; i++) {
-                auto& e = cpu->table[i];
-                if (e.count <= 0) {
-                    continue;
-                }
-
-                // auto group = group_order[idx];
-
-                // #define B(i)  aggrs0[group].i += e.i
-
-                // B(sum_quantity);
-                // B(count);
-                // B(sum_base_price);
-                // B(sum_disc);
-                // B(sum_disc_price);
-                // B(sum_charge);
-
-                idx++;
-            }
-            assert_always(idx == 4);
-        }
+        if (cpu_coprocessor) { cpu_coprocessor->wait(); }
 
         auto end = timer::now();
+
         std::chrono::duration<double> duration(end - start);
         cout << "done." << endl;
         results_file << duration.count() << '\n';
-
+        if (cpu_coprocessor) { 
+			assert_always(cpu_coprocessor->numExtantGroups() == 4); 
+				// Actually, for scale factors under, say, 0.001, this
+				// may realistically end up being 3 instead of 4
+		}
         if (should_print_results) {
             print_results(aggregates_on_host, cardinality);
         }

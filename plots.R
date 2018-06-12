@@ -56,7 +56,7 @@ total_data %>% group_by(tuples, stream) %>% summarise(time=median(time)) %>% as.
 
 pdf("plots/streams.pdf", width=7, height=7)
 ggplot(data = total_data, aes(x = tuples, y = stream)) +
-  geom_tile(aes(fill = time)) + xlab("Total Streams (#)") + ylab("Tuples Per Streams (#)") +
+  geom_tile(aes(fill = time)) + xlab("# Tuples per Kernel Launch") + ylab("Number of Streams") +
    scale_x_continuous(trans='log2', breaks=tuples) + scale_y_continuous(trans='log2', breaks=streams)
 dev.off()
 

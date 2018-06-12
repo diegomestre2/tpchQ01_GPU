@@ -1,12 +1,20 @@
 # TPC-H Query 01 Optimized for GPU execution
-One more way to run TPC-H Query 01...
+We hereby present the source code used to evaluate TPC-H Query 01 optimized for CPU-GPU co-processing.
 
-#### Issues:
+#### Implementations Flavors:
 
-- Modify Q01 for different Selectivities
-- Compression scheme for the data
-- CPU implementation
-- GPU implementation
+| Implementation Flavor | Split CPU-GPU Computation | Filter Pushdown | Hash table Placement | Compression | Time (sec) |
+| --------------------- | ------------------------- | --------------- | -------------------- | ----------- | ---------- |
+| Global full           |             -             |         -       |        Global        |      -      |   12.60    |
+| In-register full      |             -             |         -       |        Register      |      -      |   12.45    |
+| Local full            |             -             |         -       |        Local         |      -      |   12.40    |
+| Local fp small        |             -             |         X       |        Local         |      X      |    0.76    |
+| In-register fp small  |             -             |         X       |        Register      |      X      |    0.76    |
+| Global fp small       |             -             |         X       |        Global        |      X      |    0.76    |
+| Global small          |             -             |         -       |        Global        |      x      |    0.74    |
+| In-register small     |             -             |         -       |        Register      |      X      |    0.68    | | Local small           |             -             |         -       |        Register      |      X      |    0.57    | | Global sc small       |             X             |         -       |        Register      |      X      |    0.51    |
+| In-register sc small  |             X             |         -       |        Register      |      X      |    0.43    | | Local sc small        |             X             |         -       |        Register      |      X      |    0.38    | | SharedMemory sc small |             X             |         -       |        Register      |      X      |    0.37    |
+
 
 ## Requirements
 

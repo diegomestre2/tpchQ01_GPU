@@ -181,7 +181,7 @@ print_arr(long long int* a, size_t* indices)
 			if (i != 0) {
 				printf(", ");
 			}
-			printf("%ld", a[indices[i]]);
+			printf("%lld", a[indices[i]]);
 			
 		}
 	} else {
@@ -189,7 +189,7 @@ print_arr(long long int* a, size_t* indices)
 			if (i != 0) {
 				printf(", ");
 			}
-			printf("%ld", a[i]);
+			printf("%lld", a[i]);
 			
 		}
 	}

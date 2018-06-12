@@ -26,7 +26,7 @@ Primitives::partial_shuffle_scalar(idx_t* RESTRICT gids, sel_t* RESTRICT aggr_se
 	#define new_group(n, dstpos) \
 		do { \
 			if (UNLIKELY(buf_ins##n >= buf_end##n)) { \
-				printf("gid %d -> %d, %d\n", gid, gid & 0xFF, gid >> 8); \
+				printf("gid %lld -> %d, %lld\n", (long long int) gid, (unsigned) (gid & 0xFF), (long long int) (gid >> 8)); \
 				assert(false && "bail out"); /* Never happens in Q1 */ \
 			} \
 			*dstpos = buf_ins##n; \

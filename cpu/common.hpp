@@ -9,6 +9,7 @@
 #include <vector>
 #include "tpch_kit.hpp"
 #include <limits>
+#include <cinttypes>
 
 #include <x86intrin.h>
 
@@ -461,3 +462,4 @@ popcount_up_to_16_gather_epi32(__m512i a)
 #endif
 
 #endif
+

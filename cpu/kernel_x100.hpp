@@ -2,6 +2,7 @@
 #define H_KERNEL_X100
 
 #include "common.hpp"
+#include <cinttypes>
 
 enum AggrFlavour {
 	k1Step, kMultiplePrims, kMagic, kMagicFused, kNoAggr
@@ -128,7 +129,7 @@ struct KernelX100 : BaseKernel {
 		p(aggr_disc);
 		p(aggr_count);
 
-		printf("aggr on full vector (no tuples filtered) %d/%d\n", prof_num_full_aggr, prof_num_strides);
+		printf("aggr on full vector (no tuples filtered) %" PRId64 "/%" PRId64 "\n", prof_num_full_aggr, prof_num_strides);
 #endif
 	}
 

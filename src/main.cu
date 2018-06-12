@@ -12,13 +12,23 @@
 #include "cpu/common.hpp"
 #include "cpu.h"
 
+#if __cplusplus >= 201703L
+#include <filesystem>
+using namespace filesystem = std::filesystem;
+#elif __cplusplus >= 201402L
+#include <experimental/filesystem>
+namespace filesystem = std::experimental::filesystem;
+#else
+#error This code must be compiled using the C++14 language started or later
+#endif
+
 #include <iostream>
 #include <cuda/api_wrappers.h>
 #include <vector>
 #include <iomanip>
 #include <fstream>
 #include <chrono>
-#include <tuple>
+#include <ios>
 #include <unordered_map>
 
 #ifndef GPU
@@ -35,42 +45,15 @@ using std::endl;
 using std::flush;
 using std::string;
 
-size_t magic_hash(char rf, char ls) {
-    return (((rf - 'A')) - (ls - 'F'));
-}
-
 inline void assert_always(bool a) {
     assert(a);
     if (!a) {
         fprintf(stderr, "Assert always failed!");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 }
 
-void syscall(string command) {
-    auto x = system(command.c_str());
-    (void) x;
-}
-
-#define GIGA (1024 * 1024 * 1024)
-#define MEGA (1024 * 1024)
-#define KILO (1024)
-
 using timer = std::chrono::high_resolution_clock;
-
-inline bool file_exists(const string& name) {
-    struct stat buffer;
-    return (stat (name.c_str(), &buffer) == 0);
-}
-
-inline string join_path(string a, string b) {
-    return a + "/" + b;
-}
-
-std::ifstream::pos_type filesize(string filename) {
-    std::ifstream in(filename.c_str(), std::ifstream::ate | std::ifstream::binary);
-    return in.tellg();
-}
 
 template <bool Compressed>
 struct stream_input_buffer_set;
@@ -114,33 +97,38 @@ constexpr inline int div_rounding_up(const int& dividend, const int& divisor)
 
 template <typename UniquePtr>
 void load_column_from_binary_file(
-    UniquePtr&          buffer,
-    cardinality_t       cardinality,
-    const string&  directory,
-    const string&  file_name)
+    UniquePtr&               buffer,
+    cardinality_t            cardinality,
+    const filesystem::path&  directory,
+    const string&            file_name)
 {
     // TODO: C++'ify the file access (will also guarantee exception safety)
     using raw_ptr_type = typename std::decay<decltype(buffer.get())>::type;
     using element_type = typename std::remove_pointer<raw_ptr_type>::type;
-    auto file_path = join_path(directory, file_name);
+    auto file_path = directory / file_name;
     buffer = std::make_unique<element_type[]>(cardinality);
     cout << "Loading a column from " << file_path << " ... " << flush;
     FILE* pFile = fopen(file_path.c_str(), "rb");
-    if (pFile == nullptr) { throw std::runtime_error("Failed opening file " + file_path); }
+    if (pFile == nullptr) { throw std::runtime_error("Failed opening file " + file_path.string()); }
     auto num_elements_read = fread(buffer.get(), sizeof(element_type), cardinality, pFile);
     if (num_elements_read != cardinality) {
         throw std::runtime_error("Failed reading sufficient data from " +
-            file_path + " : expected " + std::to_string(cardinality) + " elements but read only " + std::to_string(num_elements_read) + "."); }
+            file_path.string() + " : expected " + std::to_string(cardinality) + " elements but read only " + std::to_string(num_elements_read) + "."); }
     fclose(pFile);
     cout << "done." << endl;
 }
 
 template <typename T>
-void write_column_to_binary_file(const T* buffer, cardinality_t cardinality, const string& directory, const string& file_name) {
-    auto file_path = join_path(directory, file_name);
+void write_column_to_binary_file(
+    const T*                buffer,
+    cardinality_t           cardinality,
+    const filesystem::path& directory,
+    const string&           file_name)
+{
+    auto file_path = directory / file_name;
     cout << "Writing a column to " << file_path << " ... " << flush;
     FILE* pFile = fopen(file_path.c_str(), "wb+");
-    if (pFile == nullptr) { throw std::runtime_error("Failed opening file " + file_path); }
+    if (pFile == nullptr) { throw std::runtime_error("Failed opening file " + file_path.string()); }
     auto num_elements_written = fwrite(buffer, sizeof(T), cardinality, pFile);
     fclose(pFile);
     if (num_elements_written != cardinality) {
@@ -340,13 +328,13 @@ int main(int argc, char** argv) {
                 scale_factor = std::stod(arg_value);
                 if (scale_factor - 0 < 0.001) {
                     cerr << "Invalid scale factor " + std::to_string(scale_factor) << endl;
-					exit(EXIT_FAILURE);
+                    exit(EXIT_FAILURE);
                 }
             } else if (arg_name == "hash-table-placement") {
                 kernel_variant = arg_value;
                 if (kernels.find(kernel_variant) == kernels.end()) {
                     cerr << "No kernel variant named \"" + kernel_variant + "\" is available" << endl;
-					exit(EXIT_FAILURE);
+                    exit(EXIT_FAILURE);
                 }
             } else if (arg_name == "streams") {
                 num_gpu_streams = std::stoi(arg_value);
@@ -361,7 +349,7 @@ int main(int argc, char** argv) {
                 num_query_execution_runs = std::stoi(arg_value);
                 if (num_query_execution_runs <= 0) {
                     cerr << "Number of runs must be positive" << endl;
-					exit(EXIT_FAILURE);
+                    exit(EXIT_FAILURE);
                 }
             } else {
                 print_help(argc, argv);
@@ -391,11 +379,11 @@ int main(int argc, char** argv) {
     std::unique_ptr< extended_price_t[] > _extendedprice;
     std::unique_ptr< quantity_t[]       > _quantity;
 
-    // TODO: Use std::filesystem for the filesystem stuff
-    string tpch_directory = join_path("tpch", std::to_string(scale_factor));
-    if (file_exists(join_path(tpch_directory, "shipdate.bin"))) {
+    auto data_files_directory =
+        filesystem::path(defaults::tpch_data_subdirectory) / std::to_string(scale_factor);
+    if (filesystem::exists(data_files_directory / "shipdate.bin")) {
         // binary files (seem to) exist, load them
-        cardinality = filesize(join_path(tpch_directory, "shipdate.bin")) / sizeof(ship_date_t);
+        cardinality = filesystem::file_size(data_files_directory / "shipdate.bin") / sizeof(ship_date_t);
         if (cardinality == cardinality_of_scale_factor_1) {
             cardinality = ((double) cardinality) * scale_factor;
         }
@@ -403,13 +391,13 @@ int main(int argc, char** argv) {
         if (cardinality == 0) {
             throw std::runtime_error("The lineitem table column cardinality should not be 0");
         }
-        load_column_from_binary_file(_shipdate,      cardinality, tpch_directory, "shipdate.bin");
-        load_column_from_binary_file(_returnflag,    cardinality, tpch_directory, "returnflag.bin");
-        load_column_from_binary_file(_linestatus,    cardinality, tpch_directory, "linestatus.bin");
-        load_column_from_binary_file(_discount,      cardinality, tpch_directory, "discount.bin");
-        load_column_from_binary_file(_tax,           cardinality, tpch_directory, "tax.bin");
-        load_column_from_binary_file(_extendedprice, cardinality, tpch_directory, "extendedprice.bin");
-        load_column_from_binary_file(_quantity,      cardinality, tpch_directory, "quantity.bin");
+        load_column_from_binary_file(_shipdate,      cardinality, data_files_directory, "shipdate.bin");
+        load_column_from_binary_file(_returnflag,    cardinality, data_files_directory, "returnflag.bin");
+        load_column_from_binary_file(_linestatus,    cardinality, data_files_directory, "linestatus.bin");
+        load_column_from_binary_file(_discount,      cardinality, data_files_directory, "discount.bin");
+        load_column_from_binary_file(_tax,           cardinality, data_files_directory, "tax.bin");
+        load_column_from_binary_file(_extendedprice, cardinality, data_files_directory, "extendedprice.bin");
+        load_column_from_binary_file(_quantity,      cardinality, data_files_directory, "quantity.bin");
 
         // See: We don't need no stinkin' macros these days. Actually, we can do something
         // similar with a lot of the replicated code in this file
@@ -428,16 +416,17 @@ int main(int argc, char** argv) {
         );
     } else {
         // TODO: Take this out into a script
-        syscall("mkdir -p tpch");
-        syscall(string("mkdir -p ") + tpch_directory);
-        std::string input_file = join_path(tpch_directory, "lineitem.tbl");
-        if (not file_exists(input_file.c_str())) {
-            throw std::runtime_error("Cannot locate table text file " + input_file);
+
+        filesystem::create_directory(defaults::tpch_data_subdirectory);
+        filesystem::create_directory(data_files_directory);
+        auto table_file_path = data_files_directory / lineitem_table_file_name;
+        if (not filesystem::exists(table_file_path)) {
+            throw std::runtime_error("Cannot locate table text file " + table_file_path.string());
             // Not generating it ourselves - that's: 1. Not healthy and 2. Not portable;
             // setup scripts are intended to do that
         }
-        cout << "Parsing the lineitem table in file " << input_file << endl;
-        li.FromFile(input_file.c_str());
+        cout << "Parsing the lineitem table in file " << table_file_path << endl;
+        li.FromFile(table_file_path.c_str());
         cardinality = li.l_extendedprice.cardinality;
         if (cardinality == cardinality_of_scale_factor_1) {
             cardinality = ((double) cardinality) * scale_factor;
@@ -448,15 +437,15 @@ int main(int argc, char** argv) {
         cout << "CSV read & parsed; table length: " << cardinality << " records." << endl;
         auto write_to = [&](auto& uptr, const char* filename) {
             using T = typename std::remove_pointer<typename std::decay<decltype(uptr.get())>::type>::type;
-            load_column_from_binary_file(uptr.get(), cardinality, tpch_directory, "shipdate.bin");
+            load_column_from_binary_file(uptr.get(), cardinality, data_files_directory, "shipdate.bin");
         };
-        write_column_to_binary_file(li.l_shipdate.get(),      cardinality, tpch_directory, "shipdate.bin");
-        write_column_to_binary_file(li.l_returnflag.get(),    cardinality, tpch_directory, "returnflag.bin");
-        write_column_to_binary_file(li.l_linestatus.get(),    cardinality, tpch_directory, "linestatus.bin");
-        write_column_to_binary_file(li.l_discount.get(),      cardinality, tpch_directory, "discount.bin");
-        write_column_to_binary_file(li.l_tax.get(),           cardinality, tpch_directory, "tax.bin");
-        write_column_to_binary_file(li.l_extendedprice.get(), cardinality, tpch_directory, "extendedprice.bin");
-        write_column_to_binary_file(li.l_quantity.get(),      cardinality, tpch_directory, "quantity.bin");    
+        write_column_to_binary_file(li.l_shipdate.get(),      cardinality, data_files_directory, "shipdate.bin");
+        write_column_to_binary_file(li.l_returnflag.get(),    cardinality, data_files_directory, "returnflag.bin");
+        write_column_to_binary_file(li.l_linestatus.get(),    cardinality, data_files_directory, "linestatus.bin");
+        write_column_to_binary_file(li.l_discount.get(),      cardinality, data_files_directory, "discount.bin");
+        write_column_to_binary_file(li.l_tax.get(),           cardinality, data_files_directory, "tax.bin");
+        write_column_to_binary_file(li.l_extendedprice.get(), cardinality, data_files_directory, "extendedprice.bin");
+        write_column_to_binary_file(li.l_quantity.get(),      cardinality, data_files_directory, "quantity.bin");
     }
 
 
@@ -630,7 +619,7 @@ int main(int argc, char** argv) {
         cout << "Executing query, run " << run_index + 1 << " of " << num_query_execution_runs << "... " << flush;
         if (use_coprocessing) {
              cpu->Clear();
-         }
+        }
         auto start = timer::now();
         
         auto gpu_end_offset = cardinality;
@@ -682,7 +671,7 @@ int main(int argc, char** argv) {
                 stream.enqueue.copy(input_buffers.return_flag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t));
                 stream.enqueue.copy(input_buffers.line_status.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
                 if (use_filter_pushdown) {
-					cuda::profiling::scoped_range_marker("on-CPU filtering");
+                    cuda::profiling::scoped_range_marker("on-CPU filtering");
                     auto shipdate_bit_vector = ship_date_bit_vector.get();
                     auto shipdate_compressed = compressed_ship_date.get();
                     size_t target = offset_in_table + num_tuples_for_this_launch;

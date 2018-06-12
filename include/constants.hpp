@@ -25,7 +25,12 @@ static_assert(num_tuples_per_kernel_launch % num_threads_per_block == 0,
 static_assert(num_tuples_per_kernel_launch % cuda::warp_size == 0,
     "Please use a multiple of warp_size for num_tuples_per_kernel_launch");
 
+constexpr const char tpch_data_subdirectory[]
+                                      = "tpch";
 } // namespace defaults
+
+constexpr const char lineitem_table_file_name[]
+                                      = "lineitem.tbl";
 
 
 enum {

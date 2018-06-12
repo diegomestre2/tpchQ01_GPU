@@ -43,8 +43,8 @@ include_directories(${NUMA_INCLUDE_DIR})
 find_package(CUDAAPIWrappers REQUIRED)
 include_directories(${CUDA_API_WRAPPERS_INCLUDE_DIRS})
 # but what about the library search path?
-link_libraries(${CUDA_API_WRAPPERS_LIBS} "-lcudadevrt")
-#add_subdirectory(../cub/cub cub)
+
+link_libraries(${CUDA_API_WRAPPERS_LIBS} stdc++fs)
 
 include_directories(SYSTEM ../)
 include_directories("include")

@@ -122,9 +122,9 @@ add_custom_command(
     OUTPUT
         ${DATA_FILES_DIR}/1.000000/lineitem.tbl
     DEPENDS
-        scripts/genlineitem.sh
+        ${CMAKE_SOURCE_DIR}/scripts/genlineitem.sh
     COMMAND
-        +../scripts/genlineitem.sh 1
+        +${CMAKE_SOURCE_DIR}/scripts/genlineitem.sh 1
     COMMAND
         +mkdir -p ${DATA_FILES_DIR}/1.000000
     COMMAND
@@ -146,9 +146,9 @@ add_custom_command(
     OUTPUT
         ${DATA_FILES_DIR}/10.000000/lineitem.tbl
     DEPENDS
-        scripts/genlineitem.sh
+        ${CMAKE_SOURCE_DIR}/scripts/genlineitem.sh
     COMMAND
-        +scripts/genlineitem.sh 10
+        +${CMAKE_SOURCE_DIR}/scripts/genlineitem.sh 10
     COMMAND
         +mkdir -p ${DATA_FILES_DIR}/10.000000
     COMMAND
@@ -169,9 +169,9 @@ add_custom_command(
     OUTPUT
         ${DATA_FILES_DIR}/100.000000/lineitem.tbl
     DEPENDS
-        scripts/genlineitem.sh
+        ${CMAKE_SOURCE_DIR}/scripts/genlineitem.sh
     COMMAND
-        +scripts/genlineitem.sh 100
+        +${CMAKE_SOURCE_DIR}/scripts/genlineitem.sh 100
     COMMAND
         +mkdir -p ${DATA_FILES_DIR}/100.000000
     COMMAND

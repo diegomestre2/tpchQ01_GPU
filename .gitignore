@@ -3,7 +3,7 @@ tpch-dbgen
 scripts
 lineitem.tbl
 debug
-build
+build/
 .project
 .cproject
 *.orig
@@ -19,4 +19,4 @@ CMakeFiles/
 bin/
 cmake_install.cmake
 cpu/
-
+Makefile

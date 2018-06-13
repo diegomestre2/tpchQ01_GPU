@@ -1,5 +1,5 @@
 # TPC-H Query 01 Optimized for GPU execution
-We hereby present the source code used to evaluate TPC-H Query 01 optimized for CPU-GPU co-processing.
+We hereby present the source code used to evaluate TPC-H Query 01 optimized for CPU-GPU co-processing. (Paper submitted to ADMS 2018)
 
 #### TPC-H Query 01 Versions:
 
@@ -8,16 +8,16 @@ We hereby present the source code used to evaluate TPC-H Query 01 optimized for 
 | Global full           |             -             |         -       |        Global        |      -      |   12.60    |
 | In-register full      |             -             |         -       |        Register      |      -      |   12.45    |
 | Local full            |             -             |         -       |        Local         |      -      |   12.40    |
-| Local fp small        |             -             |         X       |        Local         |      X      |    0.76    |
-| In-register fp small  |             -             |         X       |        Register      |      X      |    0.76    |
-| Global fp small       |             -             |         X       |        Global        |      X      |    0.76    |
-| Global small          |             -             |         -       |        Global        |      x      |    0.74    |
-| In-register small     |             -             |         -       |        Register      |      X      |    0.68    | 
-| Local small           |             -             |         -       |        Register      |      X      |    0.57    | 
-| Global sc small       |             X             |         -       |        Register      |      X      |    0.51    |
-| In-register sc small  |             X             |         -       |        Register      |      X      |    0.43    | 
-| Local sc small        |             X             |         -       |        Register      |      X      |    0.38    | 
-| SharedMemory sc small |             X             |         -       |        Register      |      X      |    0.37    |
+| Local fp small        |             -             |         √       |        Local         |      √      |    0.76    |
+| In-register fp small  |             -             |         √       |        Register      |      √      |    0.76    |
+| Global fp small       |             -             |         √       |        Global        |      √      |    0.76    |
+| Global small          |             -             |         -       |        Global        |      √      |    0.74    |
+| In-register small     |             -             |         -       |        Register      |      √      |    0.68    | 
+| Local small           |             -             |         -       |        Local         |      √      |    0.57    | 
+| Global sc small       |             √             |         -       |        Global        |      √      |    0.51    |
+| In-register sc small  |             √             |         -       |        Register      |      √      |    0.43    | 
+| Local sc small        |             √             |         -       |        Local         |      √      |    0.38    | 
+| SharedMemory sc small |             √             |         -       |        Shared        |      √      |    0.37    |
 
 
 ## Requirements
@@ -25,8 +25,8 @@ We hereby present the source code used to evaluate TPC-H Query 01 optimized for 
 - CUDA v9.0 or later is recommended.
 - A C++11-capable compiler compatible with your version of CUDA.
 - CMake v3.1 or later
-- CUB Library
-- CUDA_API_WRAPPERS library
+- CUB Library (https://github.com/NVlabs/cub)
+- CUDA_API_WRAPPERS Library (https://github.com/eyalroz/cuda-api-wrappers)
 
 ## How to Run
 

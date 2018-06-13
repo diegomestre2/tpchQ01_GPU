@@ -124,7 +124,7 @@ add_custom_command(
     DEPENDS
         scripts/genlineitem.sh
     COMMAND
-        +scripts/genlineitem.sh 1
+        +../scripts/genlineitem.sh 1
     COMMAND
         +mkdir -p ${DATA_FILES_DIR}/1.000000
     COMMAND

@@ -314,7 +314,9 @@ int main(int argc, char** argv) {
 
     auto data_files_directory =
         filesystem::path(defaults::tpch_data_subdirectory) / std::to_string(scale_factor);
-    if (filesystem::exists(data_files_directory / "shipdate.bin")) {
+    auto parsed_columns_are_cached =
+        filesystem::exists(data_files_directory / "shipdate.bin");
+    if (parsed_columns_are_cached) {
         // binary files (seem to) exist, load them
         cardinality = filesystem::file_size(data_files_directory / "shipdate.bin") / sizeof(ship_date_t);
         if (cardinality == cardinality_of_scale_factor_1) {
@@ -392,14 +394,13 @@ int main(int argc, char** argv) {
     auto compressed_line_status    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, line_status_values_per_container));
     auto ship_date_bit_vector      = cuda::memory::host::make_unique< uint8_t[] >(div_rounding_up(cardinality, 8));
 
-    // Eyal says: Drop these copies, we really don't need them AFAICT
-    auto ship_date      = _shipdate.get();
-    auto return_flag    = _returnflag.get();
-    auto line_status    = _linestatus.get();
-    auto discount       = _discount.get();
-    auto tax            = _tax.get();
-    auto extended_price = _extendedprice.get();
-    auto quantity       = _quantity.get();
+    auto ship_date      = li.l_shipdate.get();
+    auto return_flag    = li.l_returnflag.get();
+    auto line_status    = li.l_linestatus.get();
+    auto discount       = li.l_discount.get();
+    auto tax            = li.l_tax.get();
+    auto extended_price = li.l_extendedprice.get();
+    auto quantity       = li.l_quantity.get();
 
     if (apply_compression) {
         cout << "Preprocessing/compressing column data... " << flush;

@@ -1,5 +1,5 @@
 # TPC-H Query 01 Optimized for GPU execution
-We hereby present the source code used to evaluate TPC-H Query 01 optimized for CPU-GPU co-processing. (Paper submitted to ADMS 2018)
+We hereby present the source code used to evaluate TPC-H Query 01 optimized for CPU-GPU co-processing. (Paper accepted to ADMS/VLDB 2018)
 
 #### TPC-H Query 01 Versions:
 

@@ -47,9 +47,9 @@ include_directories(${CUDA_API_WRAPPERS_INCLUDE_DIRS})
 
 link_libraries(${CUDA_API_WRAPPERS_LIBS} stdc++fs)
 
-include_directories(SYSTEM ../)
-include_directories("include")
-include_directories(".")
+#include_directories(SYSTEM ../)
+include_directories("src")
+include_directories(".") # for including <cpu/whatever> from within src
 
 ### CUDA
 

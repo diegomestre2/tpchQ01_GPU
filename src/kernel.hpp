@@ -5,7 +5,7 @@
 // #include <cooperative_groups.h>
 #include "helper.hpp"
 #include "constants.hpp"
-#include "../expl_comp_strat/common.hpp"
+#include "expl_comp_strat/common.hpp"
 #include "data_types.h"
 #include <cuda_runtime_api.h>
 

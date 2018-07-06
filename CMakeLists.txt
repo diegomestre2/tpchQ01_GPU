@@ -104,8 +104,8 @@ SET(SOURCE_FILES
         src/main.cu
         src/cpu.cpp
         # expl_comp_strat/common.cpp
-        expl_comp_strat/tpch_kit.cpp
-        expl_comp_strat/monetdb.cpp
+        src/expl_comp_strat/tpch_kit.cpp
+        src/expl_comp_strat/monetdb.cpp
         cpu/vectorized.cpp
         cpu/common.cpp
         )

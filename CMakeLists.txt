@@ -192,7 +192,7 @@ add_custom_target(
 add_custom_target(
 	notify_about_higher_sf_generation ALL
 	COMMAND 
-		echo "Consider generating the SF 10 and SF 100 tables by make\\'ing targets data_table_sf10 and data_table_sf100 respectively"
+		echo "Consider generating the SF 10 and SF 100 tables by make\\'ing targets data_table_sf_10 and data_table_sf_100 respectively"
 	DEPENDS
 		data_table_sf_1 
 		tpch_01

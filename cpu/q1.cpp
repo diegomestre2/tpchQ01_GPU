@@ -12,7 +12,6 @@
 #include "kernel_x100.hpp"
 #include "kernel_x100_old.hpp"
 #include "kernel_avx512.hpp"
-//#include "kernel_weld.hpp"
 
 #include <tuple>
 

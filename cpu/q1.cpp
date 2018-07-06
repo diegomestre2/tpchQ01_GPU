@@ -164,7 +164,7 @@ int main(int argc, const char** argv) {
             exit(1);
         }
     }
-    std::string tpch_directory = join_path("tpch", std::to_string(scale_factor));
+    std::string tpch_directory = join_path(EXPAND_THEN_QUOTE(DATA_FILES_DIR) , std::to_string(scale_factor));
     std::string input_file = join_path(tpch_directory, "lineitem.tbl");
 
     if (not file_exists(input_file.c_str())) {

@@ -19,6 +19,12 @@
 #define DBG_ASSERT(x)
 #endif
 
+#ifndef QUOTE
+#define QUOTE(x) #x
+#endif
+#ifndef EXPAND_THEN_QUOTE
+#define EXPAND_THEN_QUOTE(str) QUOTE(str)
+#endif
 
 // #define RESTRICT
 #define RESTRICT __restrict__ 

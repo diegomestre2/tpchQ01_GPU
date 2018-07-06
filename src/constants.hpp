@@ -25,8 +25,16 @@ static_assert(num_tuples_per_kernel_launch % num_threads_per_block == 0,
 static_assert(num_tuples_per_kernel_launch % cuda::warp_size == 0,
     "Please use a multiple of warp_size for num_tuples_per_kernel_launch");
 
+#ifndef QUOTE
+#define QUOTE(x) #x
+#endif
+#ifndef EXPAND_THEN_QUOTE
+#define EXPAND_THEN_QUOTE(str) QUOTE(str)
+#endif
+
 constexpr const char tpch_data_subdirectory[]
-                                      = "tpch";
+                                      = EXPAND_THEN_QUOTE(DATA_FILES_DIR);
+
 } // namespace defaults
 
 constexpr const char lineitem_table_file_name[]

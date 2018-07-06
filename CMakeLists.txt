@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 project(adms)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules")
 set(CMAKE_VERBOSE_MAKEFILE OFF)
-set(DATA_FILES_DIR "tpch")
+set(DATA_FILES_DIR "tpch_data")
 
 # ----------------------------------
 # Project name, version & build type
@@ -13,6 +13,7 @@ ADD_DEFINITIONS(
   -march=native
   -O3
   -ftree-vectorize -ftree-slp-vectorize -funroll-all-loops -fpeel-loops -fomit-frame-pointer 
+  -DDATA_FILES_DIR=${DATA_FILES_DIR}
 )
 
 add_subdirectory(cpu)

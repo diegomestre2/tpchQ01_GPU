@@ -1,9 +1,9 @@
+#include "helper.hpp"
 #include "data_types.h"
 #include "constants.hpp"
 #include "bit_operations.h"
-#include "kernel.hpp"
 #include "kernels/ht_in_global_mem.hpp"
-#include "kernels/ht_in_registers.cuh"
+#include "kernels/ht_per_thread_in_registers.cuh"
 #include "kernels/ht_in_local_mem.cuh"
 #include "kernels/ht_per_thread_in_shared_mem.cuh"
 // #include "kernels/ht_per_block_in_shared_mem.cuh"
@@ -19,6 +19,7 @@
 #include <iomanip>
 #include <chrono>
 #include <unordered_map>
+#include <numeric>
 
 #ifndef GPU
 #error The GPU preprocessor directive must be defined (ask Tim for the reason)
@@ -173,64 +174,68 @@ void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
 }
 
 const std::unordered_map<string, cuda::device_function_t> kernels = {
-    { "local-mem",             cuda::in_local_mem_ht_tpchQ01           },
-    { "in-registers",          cuda::in_registers_ht_tpchQ01           },
-    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01<> },
-//  { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01             },
-    { "global",                &cuda::global_ht_tpchQ01                },
+    { "local-mem",               cuda::in_local_mem_ht_tpchQ01            },
+//    { "in-registers",            cuda::in_registers_ht_tpchQ01            },
+    { "in-registers-per-thread", cuda::in_registers_per_thread_ht_tpchQ01 },
+    { "per-thread-shared-mem",   cuda::thread_in_shared_mem_ht_tpchQ01<>  },
+//  { "per-block-shared-mem",    cuda::shared_mem_ht_tpchQ01              },
+    { "global",                  cuda::global_ht_tpchQ01                  },
 };
 
 const std::unordered_map<string, cuda::device_function_t> kernels_compressed = {
-    { "local-mem",             cuda::in_local_mem_ht_tpchQ01_compressed           },
-    { "in-registers",          cuda::in_registers_ht_tpchQ01_compressed           },
-    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_compressed<> },
-//  { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01_compressed             },
-    { "global",                cuda::global_ht_tpchQ01_compressed                 },
+    { "local-mem",               cuda::in_local_mem_ht_tpchQ01_compressed            },
+//    { "in-registers",            cuda::in_registers_ht_tpchQ01_compressed            },
+    { "in-registers-per-thread", cuda::in_registers_per_thread_ht_tpchQ01_compressed },
+    { "per-thread-shared-mem",   cuda::thread_in_shared_mem_ht_tpchQ01_compressed<>  },
+//  { "per-block-shared-mem",    cuda::shared_mem_ht_tpchQ01_compressed              },
+    { "global",                  cuda::global_ht_tpchQ01_compressed                  },
 };
 
 const std::unordered_map<string, cuda::device_function_t> kernels_filter_pushdown = {
-    { "local-mem",             cuda::in_local_mem_ht_tpchQ01_filter_pushdown_compressed    },
-    { "in-registers",          cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed    },
-    { "global",                cuda::global_ht_tpchQ01_filter_pushdown_compressed          },
-//  { "per-block-shared-mem",  cuda::shared_mem_ht_tpchQ01_pushdown_compressed             },
-    { "per-thread-shared-mem", cuda::thread_in_shared_mem_ht_tpchQ01_pushdown_compressed<> },
+    { "local-mem",               cuda::in_local_mem_ht_tpchQ01_filter_pushdown_compressed            },
+//    { "in-registers",            cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed            },
+    { "in-registers-per-thread", cuda::in_registers_per_thread_ht_tpchQ01_filter_pushdown_compressed },
+    { "global",                  cuda::global_ht_tpchQ01_filter_pushdown_compressed                  },
+//  { "per-block-shared-mem",    cuda::shared_mem_ht_tpchQ01_pushdown_compressed                     },
+    { "per-thread-shared-mem",   cuda::thread_in_shared_mem_ht_tpchQ01_pushdown_compressed<>         },
 };
 
 // Some kernel variants cannot support as many threads per block as the hardware allows generally,
 // and for these we use a fixed number for now
 const std::unordered_map<string, cuda::grid_block_dimension_t> fixed_threads_per_block = {
     { "per-thread-shared-mem", cuda::max_threads_per_block_for_per_thread_shared_mem },
+    { "in-registers",          cuda::threads_per_block_for_in_registers_hash_table },
 };
 
+struct q1_params_t {
 
+	// Command-line-settable parameters
 
-int main(int argc, char** argv) {
-    cout << "TPC-H Query 1" << '\n';
-    make_sure_we_are_on_cpu_core_0();
-
-    cardinality_t cardinality;
-
-    // Command-line-settable parameters
-    double scale_factor              = defaults::scale_factor;
-    std::string kernel_variant       = defaults::kernel_variant;
-    bool should_print_results        = defaults::should_print_results;
-    bool use_filter_pushdown         = false;
-    bool apply_compression           = defaults::apply_compression;
-    int num_gpu_streams              = defaults::num_gpu_streams;
+	double scale_factor                  { defaults::scale_factor };
+    std::string kernel_variant           { defaults::kernel_variant };
+    bool should_print_results            { defaults::should_print_results };
+    bool use_filter_pushdown             { false };
+    bool apply_compression               { defaults::apply_compression };
+    int num_gpu_streams                  { defaults::num_gpu_streams };
     cuda::grid_block_dimension_t num_threads_per_block
-                                     = defaults::num_threads_per_block;
-    int num_tuples_per_thread        = defaults::num_tuples_per_thread;
-    int num_tuples_per_kernel_launch = defaults::num_tuples_per_kernel_launch;
+                                         { defaults::num_threads_per_block };
+    int num_tuples_per_thread            { defaults::num_tuples_per_thread };
+    int num_tuples_per_kernel_launch     { defaults::num_tuples_per_kernel_launch };
         // Make sure it's a multiple of num_threads_per_block and of warp_size, or bad things may happen
-    int num_query_execution_runs     = defaults::num_query_execution_runs;
-    bool user_set_num_threads_per_block = false;
 
-    // This is the number of times we run the actual query execution - the part that we time;
+	// This is the number of times we run the actual query execution - the part that we time;
     // it will not include initialization/allocations that are not necessary when the DBMS
     // is brought up. Note the allocation vs sub-allocation issue (see further comments below)
+    int num_query_execution_runs         { defaults::num_query_execution_runs };
 
-    //bool apply_compression = true;
-    bool use_coprocessing = false;
+    bool use_coprocessing                { false };
+
+    bool user_set_num_threads_per_block  { false };
+};
+
+q1_params_t parse_command_line(int argc, char** argv)
+{
+	q1_params_t params;
 
     for(int i = 1; i < argc; i++) {
         auto arg = string(argv[i]);
@@ -242,45 +247,43 @@ int main(int argc, char** argv) {
         if (arg == "device") {
             get_device_properties();
             exit(1);
-     //   } else if (arg == "--compress") {
-     //       apply_compression = true;
         } else if (arg == "use-coprocessing") {
-            use_coprocessing = true;
+            params.use_coprocessing = true;
         } else if (arg == "apply-compression") {
-            apply_compression = true;
+        	params.apply_compression = true;
         } else if (arg == "use-filter-pushdown") {
-            use_filter_pushdown = true;
-            apply_compression = true;
+        	params.use_filter_pushdown = true;
+        	params.apply_compression = true;
         }  else if (arg == "print-results") {
-            should_print_results = true;
+        	params.should_print_results = true;
         } else {
             // A  name=value argument
             auto p = split_once(arg, '=');
             auto& arg_name = p.first; auto& arg_value = p.second;
             if (arg_name == "scale-factor") {
-                scale_factor = std::stod(arg_value);
-                if (scale_factor - 0 < 0.001) {
-                    cerr << "Invalid scale factor " + std::to_string(scale_factor) << endl;
+            	params.scale_factor = std::stod(arg_value);
+                if (params.scale_factor - 0 < 0.001) {
+                    cerr << "Invalid scale factor " + std::to_string(params.scale_factor) << endl;
                     exit(EXIT_FAILURE);
                 }
             } else if (arg_name == "hash-table-placement") {
-                kernel_variant = arg_value;
-                if (kernels.find(kernel_variant) == kernels.end()) {
-                    cerr << "No kernel variant named \"" + kernel_variant + "\" is available" << endl;
+            	params.kernel_variant = arg_value;
+                if (kernels.find(params.kernel_variant) == kernels.end()) {
+                    cerr << "No kernel variant named \"" + params.kernel_variant + "\" is available" << endl;
                     exit(EXIT_FAILURE);
                 }
             } else if (arg_name == "streams") {
-                num_gpu_streams = std::stoi(arg_value);
+            	params.num_gpu_streams = std::stoi(arg_value);
             } else if (arg_name == "tuples-per-thread") {
-                num_tuples_per_thread = std::stoi(arg_value);
+            	params.num_tuples_per_thread = std::stoi(arg_value);
             } else if (arg_name == "threads-per-block") {
-                num_threads_per_block = std::stoi(arg_value);
-                user_set_num_threads_per_block = true;
+            	params.num_threads_per_block = std::stoi(arg_value);
+                params.user_set_num_threads_per_block = true;
             } else if (arg_name == "tuples-per-kernel-launch") {
-                num_tuples_per_kernel_launch = std::stoi(arg_value);
+            	params.num_tuples_per_kernel_launch = std::stoi(arg_value);
             } else if (arg_name == "runs") {
-                num_query_execution_runs = std::stoi(arg_value);
-                if (num_query_execution_runs <= 0) {
+            	params.num_query_execution_runs = std::stoi(arg_value);
+                if (params.num_query_execution_runs <= 0) {
                     cerr << "Number of runs must be positive" << endl;
                     exit(EXIT_FAILURE);
                 }
@@ -290,16 +293,27 @@ int main(int argc, char** argv) {
             }
         }
     }
-    if (fixed_threads_per_block.find(kernel_variant) != fixed_threads_per_block.end()) {
-        if (user_set_num_threads_per_block and
-            (fixed_threads_per_block.at(kernel_variant) != num_threads_per_block)) {
+    if (fixed_threads_per_block.find(params.kernel_variant) != fixed_threads_per_block.end()) {
+        if (params.user_set_num_threads_per_block and
+            (fixed_threads_per_block.at(params.kernel_variant) != params.num_threads_per_block)) {
             throw std::invalid_argument("Invalid number of threads per block for kernel variant "
-                + kernel_variant + " (it must be " + std::to_string(fixed_threads_per_block.at(kernel_variant)) + ")");
+                + params.kernel_variant + " (it must be "
+                + std::to_string(fixed_threads_per_block.at(params.kernel_variant)) + ")");
         }
-        num_threads_per_block = fixed_threads_per_block.at(kernel_variant);
+        params.num_threads_per_block = fixed_threads_per_block.at(params.kernel_variant);
     }
+    return params;
+}
 
-    lineitem li((size_t)(7000000 * std::max(scale_factor, 1.0)));
+int main(int argc, char** argv) {
+    cout << "TPC-H Query 1" << '\n';
+    make_sure_we_are_on_cpu_core_0();
+
+    auto params = parse_command_line(argc, argv);
+    cardinality_t cardinality; // This is computed rather than being set manually
+
+
+    lineitem li((size_t)(7000000 * std::max(params.scale_factor, 1.0)));
         // TODO: lineitem should really not need this cap, it should just adjust
         // allocated space as the need arises (and start with an estimate based on
         // the file size
@@ -313,16 +327,16 @@ int main(int argc, char** argv) {
     std::unique_ptr< quantity_t[]       > _quantity;
 
     auto data_files_directory =
-        filesystem::path(defaults::tpch_data_subdirectory) / std::to_string(scale_factor);
+        filesystem::path(defaults::tpch_data_subdirectory) / std::to_string(params.scale_factor);
     auto parsed_columns_are_cached =
         filesystem::exists(data_files_directory / "shipdate.bin");
     if (parsed_columns_are_cached) {
         // binary files (seem to) exist, load them
         cardinality = filesystem::file_size(data_files_directory / "shipdate.bin") / sizeof(ship_date_t);
         if (cardinality == cardinality_of_scale_factor_1) {
-            cardinality = ((double) cardinality) * scale_factor;
+            cardinality = ((double) cardinality) * params.scale_factor;
         }
-        cout << "Lineitem table cardinality for scale factor " << scale_factor << " is " << cardinality << endl;
+        cout << "Lineitem table cardinality for scale factor " << params.scale_factor << " is " << cardinality << endl;
         if (cardinality == 0) {
             throw std::runtime_error("The lineitem table column cardinality should not be 0");
         }
@@ -364,7 +378,7 @@ int main(int argc, char** argv) {
         li.FromFile(table_file_path.c_str());
         cardinality = li.l_extendedprice.cardinality;
         if (cardinality == cardinality_of_scale_factor_1) {
-            cardinality = ((double) cardinality) * scale_factor;
+            cardinality = ((double) cardinality) * params.scale_factor;
         }
         if (cardinality == 0) {
             throw std::runtime_error("The lineitem table column cardinality should not be 0");
@@ -383,16 +397,18 @@ int main(int argc, char** argv) {
         write_column_to_binary_file(li.l_quantity.get(),      cardinality, data_files_directory, "quantity.bin");
     }
 
-    CoProc* cpu_coprocessor = use_coprocessing ?  new CoProc(li, true) : nullptr;
+    CoProc* cpu_coprocessor = params.use_coprocessing ?  new CoProc(li, true) : nullptr;
 
     auto compressed_ship_date      = cuda::memory::host::make_unique< compressed::ship_date_t[]      >(cardinality);
     auto compressed_discount       = cuda::memory::host::make_unique< compressed::discount_t[]       >(cardinality);
     auto compressed_extended_price = cuda::memory::host::make_unique< compressed::extended_price_t[] >(cardinality);
     auto compressed_tax            = cuda::memory::host::make_unique< compressed::tax_t[]            >(cardinality);
     auto compressed_quantity       = cuda::memory::host::make_unique< compressed::quantity_t[]       >(cardinality);
+
     auto compressed_return_flag    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, return_flag_values_per_container));
     auto compressed_line_status    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, line_status_values_per_container));
-    auto ship_date_bit_vector      = cuda::memory::host::make_unique< uint8_t[] >(div_rounding_up(cardinality, 8));
+
+    auto ship_date_bit_vector      = cuda::memory::host::make_unique< uint8_t[]         >(div_rounding_up(cardinality, 8));
 
     auto ship_date      = li.l_shipdate.get();
     auto return_flag    = li.l_returnflag.get();
@@ -402,7 +418,7 @@ int main(int argc, char** argv) {
     auto extended_price = li.l_extendedprice.get();
     auto quantity       = li.l_quantity.get();
 
-    if (apply_compression) {
+    if (params.apply_compression) {
         cout << "Preprocessing/compressing column data... " << flush;
 
         // Man, we really need to have a sub-byte-length-value container class
@@ -498,38 +514,38 @@ int main(int argc, char** argv) {
         std::vector<stream_input_buffer_set<is_compressed    > > compressed;
     } stream_input_buffer_sets;
     std::vector<cuda::stream_t<>> streams;
-    if (apply_compression) {
-        stream_input_buffer_sets.compressed.reserve(num_gpu_streams);
+    if (params.apply_compression) {
+        stream_input_buffer_sets.compressed.reserve(params.num_gpu_streams);
     } else {
-        stream_input_buffer_sets.uncompressed.reserve(num_gpu_streams);
+        stream_input_buffer_sets.uncompressed.reserve(params.num_gpu_streams);
     }
-    streams.reserve(num_gpu_streams);
+    streams.reserve(params.num_gpu_streams);
         // We'll be scheduling (most of) our work in a round-robin fashion on all of
         // the streams, to prevent the GPU from idling.
 
 
-    for (int i = 0; i < num_gpu_streams; ++i) {
-        if (apply_compression) {
+    for (int i = 0; i < params.num_gpu_streams; ++i) {
+        if (params.apply_compression) {
             auto input_buffers = stream_input_buffer_set<is_compressed>{
-                cuda::memory::device::make_unique< compressed::ship_date_t[]      >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< compressed::discount_t[]       >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< compressed::extended_price_t[] >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< compressed::tax_t[]            >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< compressed::quantity_t[]       >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(num_tuples_per_kernel_launch, return_flag_values_per_container)),
-                cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(num_tuples_per_kernel_launch, line_status_values_per_container))
+                cuda::memory::device::make_unique< compressed::ship_date_t[]      >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< compressed::discount_t[]       >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< compressed::extended_price_t[] >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< compressed::tax_t[]            >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< compressed::quantity_t[]       >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(params.num_tuples_per_kernel_launch, return_flag_values_per_container)),
+                cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(params.num_tuples_per_kernel_launch, line_status_values_per_container))
             };
             stream_input_buffer_sets.compressed.emplace_back(std::move(input_buffers));
         }
         else {
             auto input_buffers = stream_input_buffer_set<is_not_compressed>{
-                cuda::memory::device::make_unique< ship_date_t[]      >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< discount_t[]       >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< extended_price_t[] >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< tax_t[]            >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< quantity_t[]       >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< return_flag_t[]    >(cuda_device, num_tuples_per_kernel_launch),
-                cuda::memory::device::make_unique< line_status_t[]    >(cuda_device, num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< ship_date_t[]      >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< discount_t[]       >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< extended_price_t[] >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< tax_t[]            >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< quantity_t[]       >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< return_flag_t[]    >(cuda_device, params.num_tuples_per_kernel_launch),
+                cuda::memory::device::make_unique< line_status_t[]    >(cuda_device, params.num_tuples_per_kernel_launch),
             };
             stream_input_buffer_sets.uncompressed.emplace_back(std::move(input_buffers));
         }
@@ -547,21 +563,21 @@ int main(int argc, char** argv) {
 
      cuda::profiling::start();
 
-    for(int run_index = 0; run_index < num_query_execution_runs; run_index++) {
-        cout << "Executing query, run " << run_index + 1 << " of " << num_query_execution_runs << "... " << flush;
-        if (use_coprocessing) {
+    for(int run_index = 0; run_index < params.num_query_execution_runs; run_index++) {
+        cout << "Executing query, run " << run_index + 1 << " of " << params.num_query_execution_runs << "... " << flush;
+        if (params.use_coprocessing) {
              cpu_coprocessor->Clear();
         }
         auto start = timer::now();
         
         auto gpu_end_offset = cardinality;
-        if (use_coprocessing) {
+        if (params.use_coprocessing) {
              // Split the work between the CPU and the GPU at 50% each
              // TODO: 
              // - Double-check the choice of alignment here
              // - The parameters here are weird
              auto cpu_start_offset = cardinality - cardinality / 20;
-             cpu_start_offset = cpu_start_offset - cpu_start_offset % num_tuples_per_kernel_launch;
+             cpu_start_offset = cpu_start_offset - cpu_start_offset % params.num_tuples_per_kernel_launch;
              auto num_records_for_cpu_to_process = cardinality - cpu_start_offset;
              (*cpu_coprocessor)(cpu_start_offset, num_records_for_cpu_to_process);
              gpu_end_offset = cpu_start_offset;
@@ -577,24 +593,24 @@ int main(int argc, char** argv) {
 
         cuda::event_t aggregates_initialized_event = streams[0].enqueue.event(
             cuda::event::sync_by_blocking, cuda::event::dont_record_timings, cuda::event::not_interprocess);
-        for (int i = 1; i < num_gpu_streams; ++i) {
+        for (int i = 1; i < params.num_gpu_streams; ++i) {
             streams[i].enqueue.wait(aggregates_initialized_event);
             // The other streams also require the aggregates to be initialized before doing any work
         }
         auto stream_index = 0;
         for (size_t offset_in_table = 0;
              offset_in_table < gpu_end_offset;
-             offset_in_table += num_tuples_per_kernel_launch,
-             stream_index = (stream_index+1) % num_gpu_streams)
+             offset_in_table += params.num_tuples_per_kernel_launch,
+             stream_index = (stream_index+1) % params.num_gpu_streams)
         {
-            auto num_tuples_for_this_launch = std::min<cardinality_t>(num_tuples_per_kernel_launch, gpu_end_offset - offset_in_table);
+            auto num_tuples_for_this_launch = std::min<cardinality_t>(params.num_tuples_per_kernel_launch, gpu_end_offset - offset_in_table);
             auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, return_flag_values_per_container);
             auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, line_status_values_per_container);
 
             // auto start_copy = timer::now();  // This can't work, since copying is asynchronous.
             auto& stream = streams[stream_index];
 
-            if (apply_compression) {
+            if (params.apply_compression) {
                 auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
                 stream.enqueue.copy(input_buffers.discount.get()      , compressed_discount.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::discount_t));
                 stream.enqueue.copy(input_buffers.extended_price.get(), compressed_extended_price.get() + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::extended_price_t));
@@ -602,7 +618,7 @@ int main(int argc, char** argv) {
                 stream.enqueue.copy(input_buffers.quantity.get()      , compressed_quantity.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::quantity_t));
                 stream.enqueue.copy(input_buffers.return_flag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t));
                 stream.enqueue.copy(input_buffers.line_status.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
-                if (use_filter_pushdown) {
+                if (params.use_filter_pushdown) {
                     cuda::profiling::scoped_range_marker("on-CPU filtering");
                     auto shipdate_bit_vector = ship_date_bit_vector.get();
                     auto shipdate_compressed = compressed_ship_date.get();
@@ -630,17 +646,17 @@ int main(int argc, char** argv) {
             }
 
             auto num_blocks = div_rounding_up(
-                    num_tuples_for_this_launch, num_threads_per_block * num_tuples_per_thread);
+                    num_tuples_for_this_launch, params.num_threads_per_block * params.num_tuples_per_thread);
             // NOTE: If the number of blocks drops below the number of GPU cores, this is definitely useless,
             // and to be on the safe side - twice as many.
-            auto launch_config = cuda::make_launch_config(num_blocks, num_threads_per_block);
-            // cout << "num_blocks = " << num_blocks << ", num_threads_per_block = " << num_threads_per_block << endl;
+            auto launch_config = cuda::make_launch_config(num_blocks, params.num_threads_per_block);
+            // cout << "num_blocks = " << num_blocks << ", params.num_threads_per_block = " << params.num_threads_per_block << endl;
             (void) launch_config;
 
             
-            if (use_filter_pushdown) {
+            if (params.use_filter_pushdown) {
                 auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
-                auto kernel = kernels_filter_pushdown.at(kernel_variant);
+                auto kernel = kernels_filter_pushdown.at(params.kernel_variant);
                 stream.enqueue.kernel_launch(
                     kernel,
                     launch_config,
@@ -658,9 +674,9 @@ int main(int argc, char** argv) {
                     input_buffers.return_flag.get(),
                     input_buffers.line_status.get(),
                     num_tuples_for_this_launch);
-            } else if (apply_compression) {
+            } else if (params.apply_compression) {
                 auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
-                auto kernel = kernels_compressed.at(kernel_variant);
+                auto kernel = kernels_compressed.at(params.kernel_variant);
                 stream.enqueue.kernel_launch(
                     kernel,
                     launch_config,
@@ -680,7 +696,7 @@ int main(int argc, char** argv) {
                     num_tuples_for_this_launch);
             } else {
                 auto& input_buffers = stream_input_buffer_sets.uncompressed[stream_index];
-                auto kernel = kernels.at(kernel_variant);
+                auto kernel = kernels.at(params.kernel_variant);
                 stream.enqueue.kernel_launch(
                     kernel,
                     launch_config,
@@ -701,7 +717,7 @@ int main(int argc, char** argv) {
             }
         }
         std::vector<cuda::event_t> completion_events;
-        for(int i = 1; i < num_gpu_streams; i++) {
+        for(int i = 1; i < params.num_gpu_streams; i++) {
             auto event = streams[i].enqueue.event();
             completion_events.emplace_back(std::move(event));
         }
@@ -716,7 +732,7 @@ int main(int argc, char** argv) {
 
         // TODO: There's some sort of result stability issue here
 /*
-        for(int i = 1; i < num_gpu_streams; i++) {
+        for(int i = 1; i < params.num_gpu_streams; i++) {
             streams[i].synchronize();
         }
 */
@@ -734,7 +750,7 @@ int main(int argc, char** argv) {
 				// Actually, for scale factors under, say, 0.001, this
 				// may realistically end up being 3 instead of 4
 		}
-        if (should_print_results) {
+        if (params.should_print_results) {
             print_results(aggregates_on_host, cardinality);
         }
     }

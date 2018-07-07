@@ -1,18 +1,10 @@
 #pragma once
 
-#include "kernel.hpp"
+#include "preprocessor_shorthands.cuh"
+#include "atomics.cuh"
 #include "constants.hpp"
 #include "data_types.h"
 #include "bit_operations.h"
-
-#ifdef __CUDACC__
-#define __fhd__  __forceinline__ __host__ __device__
-#define __fd__   __forceinline__ __device__
-#else
-#define __fhd__ inline
-#define __fd__  inline
-#endif
-
 
 namespace cuda {
 

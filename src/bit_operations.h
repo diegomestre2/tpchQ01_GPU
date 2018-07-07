@@ -14,11 +14,11 @@
 
 template <typename Integer>
 __fhd__ constexpr Integer get_bit_range(
-	const Integer& value,
-	unsigned       start_bit,
-	unsigned       num_bits) noexcept
+    const Integer& value,
+    unsigned       start_bit,
+    unsigned       num_bits) noexcept
 {
-	return (value >> start_bit) & ((1 << num_bits) - 1);
+    return (value >> start_bit) & ((1 << num_bits) - 1);
 }
 
 /**
@@ -26,26 +26,26 @@ __fhd__ constexpr Integer get_bit_range(
  */
 template <typename Integer>
 __fhd__ constexpr void set_bit_range(
-	Integer&  value,
-	unsigned  start_bit,
-	unsigned  num_bits,
-	Integer   sub_value) noexcept
+    Integer&  value,
+    unsigned  start_bit,
+    unsigned  num_bits,
+    Integer   sub_value) noexcept
 {
-	value |= (sub_value << start_bit);
+    value |= (sub_value << start_bit);
 }
 
 template <unsigned LogBitsPerValue, typename Index>
 __fhd__ bit_container_t get_bit_resolution_element(
-	bit_container_t  bit_container,
-	Index            element_index_within_container)
+    bit_container_t  bit_container,
+    Index            element_index_within_container)
 {
-	enum {
-		bits_per_value = 1 << LogBitsPerValue,
-		elements_per_container = bits_per_bit_container / bits_per_value,
-	};
-	// TODO: This can be improved with some PTX intrinsics
-	return get_bit_range<Index>(bit_container,
-		bits_per_value * element_index_within_container, bits_per_value);
+    enum {
+        bits_per_value = 1 << LogBitsPerValue,
+        elements_per_container = bits_per_bit_container / bits_per_value,
+    };
+    // TODO: This can be improved with some PTX intrinsics
+    return get_bit_range<Index>(bit_container,
+        bits_per_value * element_index_within_container, bits_per_value);
 
 }
 
@@ -54,62 +54,62 @@ __fhd__ bit_container_t get_bit_resolution_element(
  */
 template <unsigned LogBitsPerValue, typename Index>
 __fhd__ void set_bit_resolution_element(
-	bit_container_t& bit_container,
-	Index            element_index_within_container,
-	bit_container_t  value)
+    bit_container_t& bit_container,
+    Index            element_index_within_container,
+    bit_container_t  value)
 {
-	enum {
-		bits_per_value = 1 << LogBitsPerValue,
-		elements_per_container = bits_per_bit_container / bits_per_value,
-	};
-	// TODO: This might be improved with some PTX intrinsics
-	set_bit_range<Index>(bit_container,
-		bits_per_value * element_index_within_container, bits_per_value, value);
+    enum {
+        bits_per_value = 1 << LogBitsPerValue,
+        elements_per_container = bits_per_bit_container / bits_per_value,
+    };
+    // TODO: This might be improved with some PTX intrinsics
+    set_bit_range<Index>(bit_container,
+        bits_per_value * element_index_within_container, bits_per_value, value);
 
 }
 
 template <unsigned LogBitsPerValue, typename Index>
 __fhd__ bit_container_t& bit_container_for_element(
-	const bit_container_t* __restrict__ data,
-	Index                               element_index)
+    const bit_container_t* __restrict__ data,
+    Index                               element_index)
 {
-	enum {
-		bits_per_value = 1 << LogBitsPerValue,
-		elements_per_container = bits_per_bit_container / bits_per_value
-	};
-	auto index_of_container = element_index / elements_per_container;
-	return const_cast<bit_container_t&>(data[index_of_container]);
+    enum {
+        bits_per_value = 1 << LogBitsPerValue,
+        elements_per_container = bits_per_bit_container / bits_per_value
+    };
+    auto index_of_container = element_index / elements_per_container;
+    return const_cast<bit_container_t&>(data[index_of_container]);
 }
 
 
 template <unsigned LogBitsPerValue, typename Index>
 __fhd__ bit_container_t get_bit_resolution_element(
-	const bit_container_t* __restrict__ data,
-	Index                               element_index)
+    const bit_container_t* __restrict__ data,
+    Index                               element_index)
 {
-	enum {
-		bits_per_value = 1 << LogBitsPerValue,
-		elements_per_container = bits_per_bit_container / bits_per_value
-	};
-	auto index_within_container = element_index % elements_per_container;
-	auto& container = bit_container_for_element<LogBitsPerValue, Index>(data, element_index);
-	return get_bit_resolution_element<LogBitsPerValue, Index>(container, index_within_container);
+    enum {
+        bits_per_value = 1 << LogBitsPerValue,
+        elements_per_container = bits_per_bit_container / bits_per_value
+    };
+    auto index_within_container = element_index % elements_per_container;
+    auto& container = bit_container_for_element<LogBitsPerValue, Index>(data, element_index);
+    return get_bit_resolution_element<LogBitsPerValue, Index>(container, index_within_container);
 }
 
 template <unsigned LogBitsPerValue, typename Index>
 __fhd__ void set_bit_resolution_element(
-	const bit_container_t* __restrict__ data,
-	Index                               element_index,
-	bit_container_t                     value)
+    const bit_container_t* __restrict__ data,
+    Index                               element_index,
+    bit_container_t                     value)
 {
-	enum {
-		bits_per_value = 1 << LogBitsPerValue,
-		elements_per_container = bits_per_bit_container / bits_per_value
-	};
-	auto index_within_container = element_index % elements_per_container;
-	auto& container = const_cast<bit_container_t&>(
-		bit_container_for_element<LogBitsPerValue, Index>(data, element_index));
-	set_bit_resolution_element<LogBitsPerValue, Index>(container, index_within_container, value);
+    enum {
+        bits_per_value = 1 << LogBitsPerValue,
+        elements_per_container = bits_per_bit_container / bits_per_value
+    };
+    auto index_within_container = element_index % elements_per_container;
+    auto& container = const_cast<bit_container_t&>(
+        bit_container_for_element<LogBitsPerValue, Index>(data, element_index));
+    set_bit_resolution_element<LogBitsPerValue, Index>(container, index_within_container, value);
 }
 
 #undef __fd__

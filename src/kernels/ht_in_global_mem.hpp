@@ -1,6 +1,8 @@
 #pragma once
 
-#include "kernel.hpp"
+#include "expl_comp_strat/common.hpp"
+#include "preprocessor_shorthands.cuh"
+#include "atomics.cuh"
 #include "constants.hpp"
 #include "data_types.h"
 #include "bit_operations.h"

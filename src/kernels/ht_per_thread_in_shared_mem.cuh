@@ -1,22 +1,16 @@
 #pragma once
 
-#include "kernel.hpp"
+#include "preprocessor_shorthands.cuh"
+#include "atomics.cuh"
 #include "constants.hpp"
 #include "data_types.h"
 #include "bit_operations.h"
 
-#ifdef __CUDACC__
-#define __fhd__  __forceinline__ __host__ __device__
-#define __fd__   __forceinline__ __device__
-#else
-#define __fhd__ inline
-#define __fd__  inline
-#endif
-
 namespace cuda {
 
 enum {
-    max_threads_per_block_for_per_thread_shared_mem = 128
+    max_threads_per_block_for_per_thread_shared_mem = 128,
+    threads_per_block_for_in_registers_hash_table   = 256, // maybe go all the way up to 1024?
 };
 
 template <unsigned NumThreadsPerBlock = max_threads_per_block_for_per_thread_shared_mem>

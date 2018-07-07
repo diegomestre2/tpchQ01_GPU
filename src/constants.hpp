@@ -18,7 +18,7 @@ enum {
 };
 
 constexpr const double scale_factor   = 1.0;
-constexpr const char kernel_variant[] = "in-registers";
+constexpr const char kernel_variant[] = "in-registers-per-thread";
 
 static_assert(num_tuples_per_kernel_launch % num_threads_per_block == 0,
     "Please allot the same number of records to each thread");

@@ -51,7 +51,7 @@ struct stream_input_buffer_set;
 enum : bool { is_compressed = true, is_not_compressed = false};
 
 template <> struct stream_input_buffer_set<is_compressed> {
-	template <typename T> using unique_ptr = cuda::memory::device::unique_ptr<T>;
+    template <typename T> using unique_ptr = cuda::memory::device::unique_ptr<T>;
     unique_ptr< compressed::ship_date_t[]      > ship_date;
     unique_ptr< compressed::discount_t[]       > discount;
     unique_ptr< compressed::extended_price_t[] > extended_price;
@@ -62,7 +62,7 @@ template <> struct stream_input_buffer_set<is_compressed> {
 };
 
 template <> struct stream_input_buffer_set<is_not_compressed> {
-	template <typename T> using unique_ptr = cuda::memory::device::unique_ptr<T>;
+    template <typename T> using unique_ptr = cuda::memory::device::unique_ptr<T>;
     unique_ptr< ship_date_t[]      > ship_date;
     unique_ptr< discount_t[]       > discount;
     unique_ptr< extended_price_t[] > extended_price;
@@ -94,7 +94,8 @@ void print_help(int argc, char** argv) {
     fprintf(stderr, "   --print-results\n");
     fprintf(stderr, "   --use-filter-pushdown\n");
     fprintf(stderr, "   --use-coprocessing (currently ignored)\n");
-    fprintf(stderr, "   --hash-table-placement=[default:in-registers] (one of: in-registers, local-mem, per-thread-shared-mem, global))\n");
+    fprintf(stderr, "   --hash-table-placement=[default:in-registers-per-thread]\n"
+                    "     (one of: in-registers, in-registers-per-thread, local-mem, per-thread-shared-mem, global))\n");
     fprintf(stderr, "   --sf=[default:%f] (number, e.g. 0.01 - 100)\n", defaults::scale_factor);
     fprintf(stderr, "   --streams=[default:%u] (number, e.g. 1 - 64)\n", defaults::num_gpu_streams);
     fprintf(stderr, "   --threads-per-block=[default:%u] (number, e.g. 32 - 1024)\n", defaults::num_threads_per_block);

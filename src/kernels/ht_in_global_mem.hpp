@@ -5,7 +5,7 @@
 #include "atomics.cuh"
 #include "constants.hpp"
 #include "data_types.h"
-#include "bit_operations.h"
+#include "bit_operations.hpp"
 
 namespace cuda {
 __global__

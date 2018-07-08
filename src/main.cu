@@ -1,8 +1,9 @@
 #include "helper.hpp"
 #include "data_types.h"
 #include "constants.hpp"
-#include "bit_operations.h"
+#include "bit_operations.hpp"
 #include "kernels/ht_in_global_mem.hpp"
+#include "kernels/ht_in_registers.cuh"
 #include "kernels/ht_per_thread_in_registers.cuh"
 #include "kernels/ht_in_local_mem.cuh"
 #include "kernels/ht_per_thread_in_shared_mem.cuh"
@@ -133,6 +134,7 @@ void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
     cout << "|  LS | RF |  sum_quantity        |  sum_base_price      |  sum_disc_price      |  sum_charge          | count      |\n";
     cout << "+-------------------------------------------------------------------------------------------------------------------+\n";
     auto print_dec = [] (auto s, auto x) { printf("%s%17ld.%02ld", s, Decimal64::GetInt(x), Decimal64::GetFrac(x)); };
+    cardinality_t total_passing { 0 };
 
     for (int group=0; group<num_potential_groups; group++) {
         if (true) { // (aggregates_on_host.record_count[group] > 0) {
@@ -168,15 +170,16 @@ void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
             print_dec(" | ",  aggregates_on_host.sum_discounted_price.get()[group]);
             print_dec(" | ",  aggregates_on_host.sum_charge.get()[group]);
             printf(" | %10u |\n", aggregates_on_host.record_count.get()[group]);
+            total_passing += aggregates_on_host.record_count.get()[group];
         }
     }
-
     cout << "+-------------------------------------------------------------------------------------------------------------------+\n";
+    cout << "Total number of elements tuples satisfying the WHERE clause: " << total_passing << "\n";
 }
 
 const std::unordered_map<string, cuda::device_function_t> kernels = {
     { "local-mem",               cuda::in_local_mem_ht_tpchQ01            },
-//    { "in-registers",            cuda::in_registers_ht_tpchQ01            },
+    { "in-registers",            cuda::in_registers_ht_tpchQ01            },
     { "in-registers-per-thread", cuda::in_registers_per_thread_ht_tpchQ01 },
     { "per-thread-shared-mem",   cuda::thread_in_shared_mem_ht_tpchQ01<>  },
 //  { "per-block-shared-mem",    cuda::shared_mem_ht_tpchQ01              },
@@ -185,7 +188,7 @@ const std::unordered_map<string, cuda::device_function_t> kernels = {
 
 const std::unordered_map<string, cuda::device_function_t> kernels_compressed = {
     { "local-mem",               cuda::in_local_mem_ht_tpchQ01_compressed            },
-//    { "in-registers",            cuda::in_registers_ht_tpchQ01_compressed            },
+    { "in-registers",            cuda::in_registers_ht_tpchQ01_compressed            },
     { "in-registers-per-thread", cuda::in_registers_per_thread_ht_tpchQ01_compressed },
     { "per-thread-shared-mem",   cuda::thread_in_shared_mem_ht_tpchQ01_compressed<>  },
 //  { "per-block-shared-mem",    cuda::shared_mem_ht_tpchQ01_compressed              },
@@ -194,7 +197,7 @@ const std::unordered_map<string, cuda::device_function_t> kernels_compressed = {
 
 const std::unordered_map<string, cuda::device_function_t> kernels_filter_pushdown = {
     { "local-mem",               cuda::in_local_mem_ht_tpchQ01_filter_pushdown_compressed            },
-//    { "in-registers",            cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed            },
+    { "in-registers",            cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed            },
     { "in-registers-per-thread", cuda::in_registers_per_thread_ht_tpchQ01_filter_pushdown_compressed },
     { "global",                  cuda::global_ht_tpchQ01_filter_pushdown_compressed                  },
 //  { "per-block-shared-mem",    cuda::shared_mem_ht_tpchQ01_pushdown_compressed                     },
@@ -206,6 +209,15 @@ const std::unordered_map<string, cuda::device_function_t> kernels_filter_pushdow
 const std::unordered_map<string, cuda::grid_block_dimension_t> fixed_threads_per_block = {
     { "per-thread-shared-mem", cuda::max_threads_per_block_for_per_thread_shared_mem },
     { "in-registers",          cuda::threads_per_block_for_in_registers_hash_table },
+};
+
+const std::unordered_map<string, unsigned> num_threads_to_handle_tuple = {
+    { "local-mem",               1  },
+    { "in-registers",            div_rounding_up(warp_size, warp_size / num_potential_groups)  },
+    { "in-registers-per-thread", 1  },
+    { "per-thread-shared-mem",   1  },
+//  { "per-block-shared-mem",    1? },
+    { "global",                  1  },
 };
 
 struct q1_params_t {
@@ -221,6 +233,7 @@ struct q1_params_t {
     cuda::grid_block_dimension_t num_threads_per_block
                                          { defaults::num_threads_per_block };
     int num_tuples_per_thread            { defaults::num_tuples_per_thread };
+
     int num_tuples_per_kernel_launch     { defaults::num_tuples_per_kernel_launch };
         // Make sure it's a multiple of num_threads_per_block and of warp_size, or bad things may happen
 
@@ -230,7 +243,6 @@ struct q1_params_t {
     int num_query_execution_runs         { defaults::num_query_execution_runs };
 
     bool use_coprocessing                { false };
-
     bool user_set_num_threads_per_block  { false };
 };
 
@@ -646,13 +658,29 @@ int main(int argc, char** argv) {
                 stream.enqueue.copy(input_buffers.line_status.get()   , line_status    + offset_in_table, num_tuples_for_this_launch * sizeof(line_status_t));
             }
 
-            auto num_blocks = div_rounding_up(
-                    num_tuples_for_this_launch, params.num_threads_per_block * params.num_tuples_per_thread);
-            // NOTE: If the number of blocks drops below the number of GPU cores, this is definitely useless,
-            // and to be on the safe side - twice as many.
-            auto launch_config = cuda::make_launch_config(num_blocks, params.num_threads_per_block);
-            // cout << "num_blocks = " << num_blocks << ", params.num_threads_per_block = " << params.num_threads_per_block << endl;
-            (void) launch_config;
+            cuda::grid_block_dimension_t num_threads_per_block;
+            cuda::grid_dimension_t       num_blocks;
+
+            if (params.kernel_variant == "in-registers") {
+        		auto num_warps_per_block = params.num_threads_per_block / warp_size;
+        			// rounding down the number of threads per block!
+        		num_threads_per_block = num_warps_per_block * warp_size;
+        		auto num_tables_per_warp       = cuda::warp_size / num_potential_groups;
+        		auto num_tuples_handled_by_block = num_tables_per_warp * num_warps_per_block * params.num_tuples_per_thread;
+                num_blocks = div_rounding_up(
+                    num_tuples_for_this_launch,
+                    num_tuples_handled_by_block);
+            }
+            else {
+                num_blocks = div_rounding_up(
+                        num_tuples_for_this_launch,
+                        params.num_threads_per_block * params.num_tuples_per_thread);
+                // NOTE: If the number of blocks drops below the number of GPU cores, this is definitely useless,
+                // and to be on the safe side - twice as many.
+                num_threads_per_block = params.num_threads_per_block;
+            }
+            auto launch_config = cuda::make_launch_config(num_blocks, num_threads_per_block);
+            // cout << "num_tuples_for_this_launch = " << num_tuples_for_this_launch << ", num_blocks = " << num_blocks << ", params.num_threads_per_block = " << params.num_threads_per_block << endl;
 
             
             if (params.use_filter_pushdown) {

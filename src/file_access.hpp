@@ -1,6 +1,6 @@
 #include "data_types.h"
 #include "constants.hpp"
-#include "bit_operations.h"
+#include "bit_operations.hpp"
 
 #if __cplusplus >= 201703L
 #include <filesystem>

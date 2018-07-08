@@ -1,10 +1,23 @@
+/*
+ * In this kernel variant, each hash table has as many
+ * corresponding threads as it has entries (i.e. potential values),
+ * with all such threads belonging to the same warp. A warp
+ * may thus be responsible for multiple hash tables; and the
+ * number of possible values (= hash table size) is limited
+ * to the warp size. For larger tables it is still possible
+ * to adopt a similar approach by having each thread be
+ * responsible for multiple values, but this suffers
+ * from an increasing instruction count per single update,
+ * a problem also shared by the per-thread in-registers hash
+ * table approach.
+ */
 #pragma once
 
 #include "preprocessor_shorthands.cuh"
 #include "atomics.cuh"
 #include "constants.hpp"
 #include "data_types.h"
-#include "bit_operations.h"
+#include "bit_operations.hpp"
 
 namespace cuda {
 
@@ -25,17 +38,46 @@ void in_registers_ht_tpchQ01(
     const line_status_t*     __restrict__ line_status,
     cardinality_t                         num_tuples)
 {
-    sum_quantity_t         thread_sum_quantity         [num_potential_groups] = { 0 };
-    sum_base_price_t       thread_sum_base_price       [num_potential_groups] = { 0 };
-    sum_discounted_price_t thread_sum_discounted_price [num_potential_groups] = { 0 };
-    sum_charge_t           thread_sum_charge           [num_potential_groups] = { 0 };
-    sum_discount_t         thread_sum_discount         [num_potential_groups] = { 0 };
-    cardinality_t          thread_record_count         [num_potential_groups] = { 0 };
+    enum {
+        tables_per_warp       = warp_size / num_potential_groups,
+        active_lanes_per_warp = num_potential_groups * tables_per_warp,
+    };
 
+    auto lane_index = blockIdx.x % warp_size;
+    auto warp_index = threadIdx.x / warp_size;
 
-    cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
-    for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < num_tuples; i += stride) {
+    if (lane_index >= active_lanes_per_warp) { return; }
 
+    auto intra_warp_table_index = lane_index / num_potential_groups;
+    auto lane_group_index = lane_index % num_potential_groups;
+
+    // Following are the aggregate "tables" - where each thread
+    // holds just one aggregate per table, for a single group
+
+    sum_quantity_t         single_group_sum_quantity         { 0 };
+    sum_base_price_t       single_group_sum_base_price       { 0 };
+    sum_discounted_price_t single_group_sum_discounted_price { 0 };
+    sum_charge_t           single_group_sum_charge           { 0 };
+    sum_discount_t         single_group_sum_discount         { 0 };
+    cardinality_t          single_group_record_count         { 0 };
+
+    // At each iteration of the main loop, a thread handles a single input tuple;
+    // and the same tuple must be handled by all threads corresponding to a single
+    // aggregates table. Also, there's no need to have that tuple considered
+    // by any other grid thread. We this calculate the initial tuple index to consider
+    // using "aggregate table indices".
+
+    auto num_warps_per_block = blockDim.x / warp_size;
+        // Note: The block size must be a multiple of warp_size, otherwise
+        // this instruction will mess things up.
+    auto num_tables_per_block = num_warps_per_block * tables_per_warp;
+    cardinality_t intra_warp_tuple_index = intra_warp_table_index;
+    cardinality_t intra_block_tuple_index = warp_index * tables_per_warp + intra_warp_tuple_index;
+    cardinality_t initial_tuple_index =
+        blockIdx.x * num_tables_per_block + intra_block_tuple_index;
+    cardinality_t stride = (gridDim.x * num_tables_per_block ); // this is grid-stride, sort of
+
+    for(cardinality_t i = initial_tuple_index; i < num_tuples; i += stride) {
         if (shipdate[i] <= threshold_ship_date) {
             // TODO: Some of these calculations could work on uint32_t
             auto line_quantity         = quantity[i];
@@ -48,35 +90,28 @@ void in_registers_ht_tpchQ01(
             auto line_return_flag      = return_flag[i];
             auto line_status_          = line_status[i];
 
-            int group_index =
+            int line_group_index =
                 (encode_return_flag(line_return_flag) << line_status_bits) + encode_line_status(line_status_);
 
-            #pragma unroll
-            for(int i = 0; i < num_potential_groups; i++) {
-                if(i == group_index) {
-                    thread_sum_quantity        [i] += line_quantity;
-                    thread_sum_base_price      [i] += line_price;
-                    thread_sum_charge          [i] += line_charge;
-                    thread_sum_discounted_price[i] += line_discounted_price;
-                    thread_sum_discount        [i] += line_discount;
-                    thread_record_count        [i] ++;
-                }
+            if (line_group_index == lane_group_index) {
+                single_group_sum_quantity         += line_quantity;
+                single_group_sum_base_price       += line_price;
+                single_group_sum_charge           += line_charge;
+                single_group_sum_discounted_price += line_discounted_price;
+                single_group_sum_discount         += line_discount;
+                single_group_record_count         ++;
             }
         }
     }
 
     // final aggregation
 
-    // These manual casts are really unbecoming. We need a wrapper...
-    #pragma unroll
-    for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
-        atomicAdd( & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
-        atomicAdd( & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
-        atomicAdd( & sum_charge          [group_index], thread_sum_charge          [group_index]);
-        atomicAdd( & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
-        atomicAdd( & sum_discount        [group_index], thread_sum_discount        [group_index]);
-        atomicAdd( & record_count        [group_index], thread_record_count        [group_index]);
-    }
+    atomicAdd( & sum_quantity        [lane_group_index], single_group_sum_quantity         );
+    atomicAdd( & sum_base_price      [lane_group_index], single_group_sum_base_price       );
+    atomicAdd( & sum_charge          [lane_group_index], single_group_sum_charge           );
+    atomicAdd( & sum_discounted_price[lane_group_index], single_group_sum_discounted_price );
+    atomicAdd( & sum_discount        [lane_group_index], single_group_sum_discount         );
+    atomicAdd( & record_count        [lane_group_index], single_group_record_count         );
 }
 
  __global__
@@ -96,16 +131,47 @@ void in_registers_ht_tpchQ01_compressed(
     const bit_container_t*               __restrict__ line_status,
     cardinality_t                                     num_tuples)
  {
-    sum_quantity_t         thread_sum_quantity         [num_potential_groups] = { 0 };
-    sum_base_price_t       thread_sum_base_price       [num_potential_groups] = { 0 };
-    sum_discounted_price_t thread_sum_discounted_price [num_potential_groups] = { 0 };
-    sum_charge_t           thread_sum_charge           [num_potential_groups] = { 0 };
-    sum_discount_t         thread_sum_discount         [num_potential_groups] = { 0 };
-    cardinality_t          thread_record_count         [num_potential_groups] = { 0 };
+    enum {
+        tables_per_warp       = warp_size / num_potential_groups,
+        active_lanes_per_warp = num_potential_groups * tables_per_warp,
+    };
+
+    auto lane_index = blockIdx.x % warp_size;
+    auto warp_index = threadIdx.x / warp_size;
+
+    if (lane_index >= active_lanes_per_warp) { return; }
+
+    auto intra_warp_table_index = lane_index / num_potential_groups;
+    auto lane_group_index = lane_index % num_potential_groups;
+
+    // Following are the aggregate "tables" - where each thread
+    // holds just one aggregate per table, for a single group
+
+    sum_quantity_t         single_group_sum_quantity         { 0 };
+    sum_base_price_t       single_group_sum_base_price       { 0 };
+    sum_discounted_price_t single_group_sum_discounted_price { 0 };
+    sum_charge_t           single_group_sum_charge           { 0 };
+    sum_discount_t         single_group_sum_discount         { 0 };
+    cardinality_t          single_group_record_count         { 0 };
+
+    // At each iteration of the main loop, a thread handles a single input tuple;
+    // and the same tuple must be handled by all threads corresponding to a single
+    // aggregates table. Also, there's no need to have that tuple considered
+    // by any other grid thread. We this calculate the initial tuple index to consider
+    // using "aggregate table indices".
+
+    auto num_warps_per_block = blockDim.x / warp_size;
+        // Note: The block size must be a multiple of warp_size, otherwise
+        // this instruction will mess things up.
+    auto num_tables_per_block = num_warps_per_block * tables_per_warp;
+    cardinality_t intra_warp_tuple_index = intra_warp_table_index;
+    cardinality_t intra_block_tuple_index = warp_index * tables_per_warp + intra_warp_tuple_index;
+    cardinality_t initial_tuple_index =
+        blockIdx.x * num_tables_per_block + intra_block_tuple_index;
+    cardinality_t stride = (gridDim.x * num_tables_per_block ); // this is grid-stride, sort of
 
 
-    cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
-    for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < num_tuples; i += stride) {
+    for(cardinality_t i = initial_tuple_index; i < num_tuples; i += stride) {
         if (shipdate[i] <= compressed_threshold_ship_date) {
             // TODO: Some of these calculations could work on uint32_t
             auto line_quantity         = quantity[i];
@@ -118,35 +184,27 @@ void in_registers_ht_tpchQ01_compressed(
             auto line_return_flag      = get_bit_resolution_element<log_return_flag_bits, cardinality_t>(return_flag, i);
             auto line_status_          = get_bit_resolution_element<log_line_status_bits, cardinality_t>(line_status, i);
 
-            int group_index = (line_return_flag << line_status_bits) + line_status_;
+            int line_group_index = (line_return_flag << line_status_bits) + line_status_;
 
-            #pragma unroll
-            for(int i = 0; i < num_potential_groups; i++) {
-                if(i == group_index) {
-                    thread_sum_quantity        [i] += line_quantity;
-                    thread_sum_base_price      [i] += line_price;
-                    thread_sum_charge          [i] += line_charge;
-                    thread_sum_discounted_price[i] += line_discounted_price;
-                    thread_sum_discount        [i] += line_discount;
-                    thread_record_count        [i] ++;
-                }
+            if (line_group_index == lane_group_index) {
+                single_group_sum_quantity         += line_quantity;
+                single_group_sum_base_price       += line_price;
+                single_group_sum_charge           += line_charge;
+                single_group_sum_discounted_price += line_discounted_price;
+                single_group_sum_discount         += line_discount;
+                single_group_record_count         ++;
             }
         }
     }
 
     // final aggregation
 
-    // These manual casts are really unbecoming. We need a wrapper...
-    #pragma unroll
-    for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
-        atomicAdd( & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
-        atomicAdd( & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
-        atomicAdd( & sum_charge          [group_index], thread_sum_charge          [group_index]);
-        atomicAdd( & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
-        atomicAdd( & sum_discount        [group_index], thread_sum_discount        [group_index]);
-        atomicAdd( & record_count        [group_index], thread_record_count        [group_index]);
-    }
-
+    atomicAdd( & sum_quantity        [lane_group_index], single_group_sum_quantity         );
+    atomicAdd( & sum_base_price      [lane_group_index], single_group_sum_base_price       );
+    atomicAdd( & sum_charge          [lane_group_index], single_group_sum_charge           );
+    atomicAdd( & sum_discounted_price[lane_group_index], single_group_sum_discounted_price );
+    atomicAdd( & sum_discount        [lane_group_index], single_group_sum_discount         );
+    atomicAdd( & record_count        [lane_group_index], single_group_record_count         );
 }
 
  __global__
@@ -166,18 +224,48 @@ void in_registers_ht_tpchQ01_filter_pushdown_compressed(
     const bit_container_t*               __restrict__ line_status,
     cardinality_t                                     num_tuples)
  {
-    sum_quantity_t         thread_sum_quantity         [num_potential_groups] = { 0 };
-    sum_base_price_t       thread_sum_base_price       [num_potential_groups] = { 0 };
-    sum_discounted_price_t thread_sum_discounted_price [num_potential_groups] = { 0 };
-    sum_charge_t           thread_sum_charge           [num_potential_groups] = { 0 };
-    sum_discount_t         thread_sum_discount         [num_potential_groups] = { 0 };
-    cardinality_t          thread_record_count         [num_potential_groups] = { 0 };
+    enum {
+        tables_per_warp       = warp_size / num_potential_groups,
+        active_lanes_per_warp = num_potential_groups * tables_per_warp,
+    };
 
+    auto lane_index = blockIdx.x % warp_size;
+    auto warp_index = threadIdx.x / warp_size;
+
+    if (lane_index >= active_lanes_per_warp) { return; }
+
+    auto intra_warp_table_index = lane_index / num_potential_groups;
+    auto lane_group_index = lane_index % num_potential_groups;
+
+    // Following are the aggregate "tables" - where each thread
+    // holds just one aggregate per table, for a single group
+
+    sum_quantity_t         single_group_sum_quantity         { 0 };
+    sum_base_price_t       single_group_sum_base_price       { 0 };
+    sum_discounted_price_t single_group_sum_discounted_price { 0 };
+    sum_charge_t           single_group_sum_charge           { 0 };
+    sum_discount_t         single_group_sum_discount         { 0 };
+    cardinality_t          single_group_record_count         { 0 };
+
+    // At each iteration of the main loop, a thread handles a single input tuple;
+    // and the same tuple must be handled by all threads corresponding to a single
+    // aggregates table. Also, there's no need to have that tuple considered
+    // by any other grid thread. We this calculate the initial tuple index to consider
+    // using "aggregate table indices".
+
+    auto num_warps_per_block = blockDim.x / warp_size;
+        // Note: The block size must be a multiple of warp_size, otherwise
+        // this instruction will mess things up.
+    auto num_tables_per_block = num_warps_per_block * tables_per_warp;
+    cardinality_t intra_warp_tuple_index = intra_warp_table_index;
+    cardinality_t intra_block_tuple_index = warp_index * tables_per_warp + intra_warp_tuple_index;
+    cardinality_t initial_tuple_index =
+        blockIdx.x * num_tables_per_block + intra_block_tuple_index;
+    cardinality_t stride = (gridDim.x * num_tables_per_block ); // this is grid-stride, sort of
 
     constexpr uint8_t SHIPDATE_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
 
-    cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
-    for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < num_tuples; i += stride) {
+    for(cardinality_t i = initial_tuple_index; i < num_tuples; i += stride) {
         if (shipdate[i / 8] & SHIPDATE_MASK[i % 8]) {
             // TODO: Some of these calculations could work on uint32_t
             auto line_quantity         = quantity[i];
@@ -190,35 +278,27 @@ void in_registers_ht_tpchQ01_filter_pushdown_compressed(
             auto line_return_flag      = get_bit_resolution_element<log_return_flag_bits, cardinality_t>(return_flag, i);
             auto line_status_          = get_bit_resolution_element<log_line_status_bits, cardinality_t>(line_status, i);
 
-            int group_index = (line_return_flag << line_status_bits) + line_status_;
+            int line_group_index = (line_return_flag << line_status_bits) + line_status_;
 
-            #pragma unroll
-            for(int i = 0; i < num_potential_groups; i++) {
-                if(i == group_index) {
-                    thread_sum_quantity        [i] += line_quantity;
-                    thread_sum_base_price      [i] += line_price;
-                    thread_sum_charge          [i] += line_charge;
-                    thread_sum_discounted_price[i] += line_discounted_price;
-                    thread_sum_discount        [i] += line_discount;
-                    thread_record_count        [i] ++;
-                }
+            if (line_group_index == lane_group_index) {
+                single_group_sum_quantity         += line_quantity;
+                single_group_sum_base_price       += line_price;
+                single_group_sum_charge           += line_charge;
+                single_group_sum_discounted_price += line_discounted_price;
+                single_group_sum_discount         += line_discount;
+                single_group_record_count         ++;
             }
         }
     }
 
     // final aggregation
 
-    // These manual casts are really unbecoming. We need a wrapper...
-    #pragma unroll
-    for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
-        atomicAdd( & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
-        atomicAdd( & sum_base_price      [group_index], thread_sum_base_price      [group_index]);
-        atomicAdd( & sum_charge          [group_index], thread_sum_charge          [group_index]);
-        atomicAdd( & sum_discounted_price[group_index], thread_sum_discounted_price[group_index]);
-        atomicAdd( & sum_discount        [group_index], thread_sum_discount        [group_index]);
-        atomicAdd( & record_count        [group_index], thread_record_count        [group_index]);
-    }
-
+    atomicAdd( & sum_quantity        [lane_group_index], single_group_sum_quantity         );
+    atomicAdd( & sum_base_price      [lane_group_index], single_group_sum_base_price       );
+    atomicAdd( & sum_charge          [lane_group_index], single_group_sum_charge           );
+    atomicAdd( & sum_discounted_price[lane_group_index], single_group_sum_discounted_price );
+    atomicAdd( & sum_discount        [lane_group_index], single_group_sum_discount         );
+    atomicAdd( & record_count        [lane_group_index], single_group_record_count         );
 }
 
 } // namespace cuda

@@ -4,7 +4,7 @@
 #include "atomics.cuh"
 #include "constants.hpp"
 #include "data_types.h"
-#include "bit_operations.h"
+#include "bit_operations.hpp"
 
 namespace cuda {
 
@@ -62,7 +62,6 @@ void in_local_mem_ht_tpchQ01(
 
     // final aggregation
 
-    // These manual casts are really unbecoming. We need a wrapper...
     #pragma unroll
     for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
         atomicAdd( & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
@@ -126,7 +125,6 @@ void in_local_mem_ht_tpchQ01_compressed(
 
     // final aggregation
 
-    // These manual casts are really unbecoming. We need a wrapper...
     #pragma unroll
     for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
         atomicAdd( & sum_quantity        [group_index], thread_sum_quantity        [group_index]);
@@ -191,7 +189,6 @@ void in_local_mem_ht_tpchQ01_filter_pushdown_compressed(
 
     // final aggregation
 
-    // These manual casts are really unbecoming. We need a wrapper...
     #pragma unroll
     for (int group_index = 0; group_index < num_potential_groups; ++group_index) {
         atomicAdd( & sum_quantity        [group_index], thread_sum_quantity        [group_index]);

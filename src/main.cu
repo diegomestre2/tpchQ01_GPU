@@ -99,6 +99,7 @@ void print_help(int argc, char** argv) {
     fprintf(stderr, "   --use-coprocessing (currently ignored)\n");
     fprintf(stderr, "   --hash-table-placement=[default:in-registers-per-thread]\n"
                     "     (one of: in-registers, in-registers-per-thread, local-mem, per-thread-shared-mem, global))\n");
+    fprintf(stderr, "   --runs=[default:%u] (number, e.g. 1 - 100)\n", (unsigned) defaults::num_query_execution_runs);
     fprintf(stderr, "   --sf=[default:%f] (number, e.g. 0.01 - 100)\n", defaults::scale_factor);
     fprintf(stderr, "   --streams=[default:%u] (number, e.g. 1 - 64)\n", defaults::num_gpu_streams);
     fprintf(stderr, "   --threads-per-block=[default:%u] (number, e.g. 32 - 1024)\n", defaults::num_threads_per_block);
@@ -785,13 +786,12 @@ int main(int argc, char** argv) {
                     num_tuples_for_this_launch);
             }
         }
-        std::vector<cuda::event_t> completion_events;
         for(int i = 1; i < params.num_gpu_streams; i++) {
-            auto event = streams[i].enqueue.event();
-            completion_events.emplace_back(std::move(event));
+            auto ev = cuda_device.create_event(cuda::event::sync_by_blocking);
+            auto stream_completion_event = streams[i].enqueue.event(ev);
+            streams[0].enqueue.wait(ev);
         }
         
-        // It's probably a better idea to go round-robin on the streams here
         streams[0].enqueue.copy(aggregates_on_host.sum_quantity.get(),         aggregates_on_device.sum_quantity.get(),         num_potential_groups * sizeof(sum_quantity_t));
         streams[0].enqueue.copy(aggregates_on_host.sum_base_price.get(),       aggregates_on_device.sum_base_price.get(),       num_potential_groups * sizeof(sum_base_price_t));
         streams[0].enqueue.copy(aggregates_on_host.sum_discounted_price.get(), aggregates_on_device.sum_discounted_price.get(), num_potential_groups * sizeof(sum_discounted_price_t));
@@ -799,17 +799,9 @@ int main(int argc, char** argv) {
         streams[0].enqueue.copy(aggregates_on_host.sum_discount.get(),         aggregates_on_device.sum_discount.get(),         num_potential_groups * sizeof(sum_discount_t));
         streams[0].enqueue.copy(aggregates_on_host.record_count.get(),         aggregates_on_device.record_count.get(),         num_potential_groups * sizeof(cardinality_t));
 
-        // TODO: There's some sort of result stability issue here
-/*
-        for(int i = 1; i < params.num_gpu_streams; i++) {
-            streams[i].synchronize();
-        }
-*/
-        streams[0].synchronize();
-
-        cuda_device.synchronize();
-
         if (cpu_coprocessor) { cpu_coprocessor->wait(); }
+
+        streams[0].synchronize();
 
         auto end = timer::now();
 

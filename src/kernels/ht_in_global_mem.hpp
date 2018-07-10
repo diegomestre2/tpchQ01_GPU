@@ -100,7 +100,7 @@ void global_ht_tpchQ01_filter_pushdown_compressed (
     sum_charge_t*                        __restrict__ sum_charge,
     sum_discount_t*                      __restrict__ sum_discount,
     cardinality_t*                       __restrict__ record_count,
-    const uint8_t*                       __restrict__ shipdate,
+    const bit_container_t*               __restrict__ precomputed_filter,
     const compressed::discount_t*        __restrict__ discount,
     const compressed::extended_price_t*  __restrict__ extended_price,
     const compressed::tax_t*             __restrict__ tax,
@@ -109,11 +109,10 @@ void global_ht_tpchQ01_filter_pushdown_compressed (
     const bit_container_t*               __restrict__ line_status,
     cardinality_t                                     num_tuples)
 {
-    constexpr uint8_t SHIPDATE_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
-
     cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
     for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < num_tuples; i += stride) {
-        if (shipdate[i / 8] & SHIPDATE_MASK[i % 8]) {
+        auto passes_filter = get_bit(precomputed_filter, i);
+    	if (passes_filter) {
             auto line_quantity         = quantity[i];
             auto line_discount         = discount[i];
             auto line_price            = extended_price[i];

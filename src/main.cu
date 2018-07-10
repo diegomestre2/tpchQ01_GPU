@@ -60,6 +60,7 @@ template <> struct stream_input_buffer_set<is_compressed> {
     unique_ptr< compressed::quantity_t[]       > quantity;
     unique_ptr< bit_container_t[]              > return_flag;
     unique_ptr< bit_container_t[]              > line_status;
+    unique_ptr< bit_container_t[]              > precomputed_filter;
 };
 
 template <> struct stream_input_buffer_set<is_not_compressed> {
@@ -71,6 +72,7 @@ template <> struct stream_input_buffer_set<is_not_compressed> {
     unique_ptr< quantity_t[]       > quantity;
     unique_ptr< return_flag_t[]    > return_flag;
     unique_ptr< line_status_t[]    > line_status;
+//  unique_ptr< bit_container_t[]  > precomputed_filter;
 };
 
 
@@ -174,7 +176,10 @@ void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
         }
     }
     cout << "+-------------------------------------------------------------------------------------------------------------------+\n";
-    cout << "Total number of elements tuples satisfying the WHERE clause: " << total_passing << "\n";
+    cout
+        << "Total number of elements tuples satisfying the WHERE clause: "
+        << total_passing << " / " << cardinality << " = " << std::dec
+        << (double) total_passing / cardinality << "\n";
 }
 
 const std::unordered_map<string, cuda::device_function_t> kernels = {
@@ -222,9 +227,9 @@ const std::unordered_map<string, unsigned> num_threads_to_handle_tuple = {
 
 struct q1_params_t {
 
-	// Command-line-settable parameters
+    // Command-line-settable parameters
 
-	double scale_factor                  { defaults::scale_factor };
+    double scale_factor                  { defaults::scale_factor };
     std::string kernel_variant           { defaults::kernel_variant };
     bool should_print_results            { defaults::should_print_results };
     bool use_filter_pushdown             { false };
@@ -237,7 +242,7 @@ struct q1_params_t {
     int num_tuples_per_kernel_launch     { defaults::num_tuples_per_kernel_launch };
         // Make sure it's a multiple of num_threads_per_block and of warp_size, or bad things may happen
 
-	// This is the number of times we run the actual query execution - the part that we time;
+    // This is the number of times we run the actual query execution - the part that we time;
     // it will not include initialization/allocations that are not necessary when the DBMS
     // is brought up. Note the allocation vs sub-allocation issue (see further comments below)
     int num_query_execution_runs         { defaults::num_query_execution_runs };
@@ -248,7 +253,7 @@ struct q1_params_t {
 
 q1_params_t parse_command_line(int argc, char** argv)
 {
-	q1_params_t params;
+    q1_params_t params;
 
     for(int i = 1; i < argc; i++) {
         auto arg = string(argv[i]);
@@ -263,39 +268,39 @@ q1_params_t parse_command_line(int argc, char** argv)
         } else if (arg == "use-coprocessing") {
             params.use_coprocessing = true;
         } else if (arg == "apply-compression") {
-        	params.apply_compression = true;
+            params.apply_compression = true;
         } else if (arg == "use-filter-pushdown") {
-        	params.use_filter_pushdown = true;
-        	params.apply_compression = true;
+            params.use_filter_pushdown = true;
+            params.apply_compression = true;
         }  else if (arg == "print-results") {
-        	params.should_print_results = true;
+            params.should_print_results = true;
         } else {
             // A  name=value argument
             auto p = split_once(arg, '=');
             auto& arg_name = p.first; auto& arg_value = p.second;
             if (arg_name == "scale-factor") {
-            	params.scale_factor = std::stod(arg_value);
+                params.scale_factor = std::stod(arg_value);
                 if (params.scale_factor - 0 < 0.001) {
                     cerr << "Invalid scale factor " + std::to_string(params.scale_factor) << endl;
                     exit(EXIT_FAILURE);
                 }
             } else if (arg_name == "hash-table-placement") {
-            	params.kernel_variant = arg_value;
+                params.kernel_variant = arg_value;
                 if (kernels.find(params.kernel_variant) == kernels.end()) {
                     cerr << "No kernel variant named \"" + params.kernel_variant + "\" is available" << endl;
                     exit(EXIT_FAILURE);
                 }
             } else if (arg_name == "streams") {
-            	params.num_gpu_streams = std::stoi(arg_value);
+                params.num_gpu_streams = std::stoi(arg_value);
             } else if (arg_name == "tuples-per-thread") {
-            	params.num_tuples_per_thread = std::stoi(arg_value);
+                params.num_tuples_per_thread = std::stoi(arg_value);
             } else if (arg_name == "threads-per-block") {
-            	params.num_threads_per_block = std::stoi(arg_value);
+                params.num_threads_per_block = std::stoi(arg_value);
                 params.user_set_num_threads_per_block = true;
             } else if (arg_name == "tuples-per-kernel-launch") {
-            	params.num_tuples_per_kernel_launch = std::stoi(arg_value);
+                params.num_tuples_per_kernel_launch = std::stoi(arg_value);
             } else if (arg_name == "runs") {
-            	params.num_query_execution_runs = std::stoi(arg_value);
+                params.num_query_execution_runs = std::stoi(arg_value);
                 if (params.num_query_execution_runs <= 0) {
                     cerr << "Number of runs must be positive" << endl;
                     exit(EXIT_FAILURE);
@@ -316,6 +321,35 @@ q1_params_t parse_command_line(int argc, char** argv)
         params.num_threads_per_block = fixed_threads_per_block.at(params.kernel_variant);
     }
     return params;
+}
+
+void precompute_filter_for_table_chunk(
+    const compressed::ship_date_t*  __restrict__  compressed_ship_date,
+    bit_container_t*                __restrict__  precomputed_filter,
+    cardinality_t                                 num_tuples)
+{
+    // Note: we assume ana aligned beginning, i.e. that the number of tuples per launch is
+    // a multiple of bits_per_container
+    cardinality_t end_offset = num_tuples;
+    cardinality_t end_offset_in_full_containers = end_offset - end_offset % bits_per_container;
+    for(cardinality_t i = 0; i < end_offset_in_full_containers; i += bits_per_container) {
+        bit_container_t bit_container { 0 };
+        for(int j = 0; j < bits_per_container; j++) {
+            // Note this relies on the little-endianness of nVIDIA GPUs
+            auto evaluated_where_clause = compressed_ship_date[i+j] < compressed_threshold_ship_date;
+            bit_container |= bit_container_t{evaluated_where_clause} << j;
+        }
+        precomputed_filter[i / bits_per_container] = bit_container;
+    }
+    if (end_offset > end_offset_in_full_containers) {
+        bit_container_t bit_container { 0 };
+        for(int j = 0; j + end_offset_in_full_containers < end_offset; j++) {
+            auto evaluated_where_clause =
+                compressed_ship_date[end_offset_in_full_containers+j] < compressed_threshold_ship_date;
+            bit_container |= bit_container_t{evaluated_where_clause} << j;
+        }
+        precomputed_filter[end_offset / bits_per_container] = bit_container;
+    }
 }
 
 int main(int argc, char** argv) {
@@ -420,8 +454,7 @@ int main(int argc, char** argv) {
 
     auto compressed_return_flag    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, return_flag_values_per_container));
     auto compressed_line_status    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, line_status_values_per_container));
-
-    auto ship_date_bit_vector      = cuda::memory::host::make_unique< uint8_t[]         >(div_rounding_up(cardinality, 8));
+    auto precomputed_filter = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, bits_per_container));
 
     auto ship_date      = li.l_shipdate.get();
     auto return_flag    = li.l_returnflag.get();
@@ -546,7 +579,8 @@ int main(int argc, char** argv) {
                 cuda::memory::device::make_unique< compressed::tax_t[]            >(cuda_device, params.num_tuples_per_kernel_launch),
                 cuda::memory::device::make_unique< compressed::quantity_t[]       >(cuda_device, params.num_tuples_per_kernel_launch),
                 cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(params.num_tuples_per_kernel_launch, return_flag_values_per_container)),
-                cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(params.num_tuples_per_kernel_launch, line_status_values_per_container))
+                cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(params.num_tuples_per_kernel_launch, line_status_values_per_container)),
+                cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(params.num_tuples_per_kernel_launch, bits_per_container))
             };
             stream_input_buffer_sets.compressed.emplace_back(std::move(input_buffers));
         }
@@ -610,6 +644,7 @@ int main(int argc, char** argv) {
             streams[i].enqueue.wait(aggregates_initialized_event);
             // The other streams also require the aggregates to be initialized before doing any work
         }
+
         auto stream_index = 0;
         for (size_t offset_in_table = 0;
              offset_in_table < gpu_end_offset;
@@ -625,26 +660,24 @@ int main(int argc, char** argv) {
 
             if (params.apply_compression) {
                 auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
+                if (params.use_filter_pushdown) {
+                    cuda::profiling::scoped_range_marker("On-CPU filtering");
+                    precompute_filter_for_table_chunk(
+                        compressed_ship_date.get() + offset_in_table,
+                        precomputed_filter.get() + offset_in_table / bits_per_container,
+                        num_tuples_for_this_launch);
+                }
                 stream.enqueue.copy(input_buffers.discount.get()      , compressed_discount.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::discount_t));
                 stream.enqueue.copy(input_buffers.extended_price.get(), compressed_extended_price.get() + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::extended_price_t));
                 stream.enqueue.copy(input_buffers.tax.get()           , compressed_tax.get()            + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::tax_t));
                 stream.enqueue.copy(input_buffers.quantity.get()      , compressed_quantity.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::quantity_t));
                 stream.enqueue.copy(input_buffers.return_flag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t));
                 stream.enqueue.copy(input_buffers.line_status.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
-                if (params.use_filter_pushdown) {
-                    cuda::profiling::scoped_range_marker("on-CPU filtering");
-                    auto shipdate_bit_vector = ship_date_bit_vector.get();
-                    auto shipdate_compressed = compressed_ship_date.get();
-                    size_t target = offset_in_table + num_tuples_for_this_launch;
-                    for(size_t i = offset_in_table; i < target; i += 8) {
-                        shipdate_bit_vector[i / 8] = 0;
-                        for(size_t j = 0; j < std::min((size_t) 8, target - i); j++) {
-                            shipdate_bit_vector[i / 8] |= (shipdate_compressed[i + j] < compressed_threshold_ship_date) << j;
-                        }
-                    }
-                    stream.enqueue.copy(input_buffers.ship_date.get()     , shipdate_bit_vector             + offset_in_table / 8, ((num_tuples_for_this_launch + 7) / 8) * sizeof(uint8_t));
+                if (not params.use_filter_pushdown) {
+                    stream.enqueue.copy(input_buffers.ship_date.get(), compressed_ship_date.get() + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::ship_date_t));
                 } else {
-                    stream.enqueue.copy(input_buffers.ship_date.get()     , compressed_ship_date.get()      + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::ship_date_t));
+                    auto num_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, bits_per_container);
+                    stream.enqueue.copy(input_buffers.precomputed_filter.get(), precomputed_filter.get() + offset_in_table / bits_per_container, num_bit_containers_for_this_launch * sizeof(bit_container_t));
                 }
             }
             else {
@@ -662,11 +695,13 @@ int main(int argc, char** argv) {
             cuda::grid_dimension_t       num_blocks;
 
             if (params.kernel_variant == "in-registers") {
-        		auto num_warps_per_block = params.num_threads_per_block / warp_size;
-        			// rounding down the number of threads per block!
-        		num_threads_per_block = num_warps_per_block * warp_size;
-        		auto num_tables_per_warp       = cuda::warp_size / num_potential_groups;
-        		auto num_tuples_handled_by_block = num_tables_per_warp * num_warps_per_block * params.num_tuples_per_thread;
+                // Calculation is different here because more than one thread works on a tuple,
+                // and some figuring is per-warp
+                auto num_warps_per_block = params.num_threads_per_block / warp_size;
+                    // rounding down the number of threads per block!
+                num_threads_per_block = num_warps_per_block * warp_size;
+                auto num_tables_per_warp       = cuda::warp_size / num_potential_groups;
+                auto num_tuples_handled_by_block = num_tables_per_warp * num_warps_per_block * params.num_tuples_per_thread;
                 num_blocks = div_rounding_up(
                     num_tuples_for_this_launch,
                     num_tuples_handled_by_block);
@@ -680,10 +715,15 @@ int main(int argc, char** argv) {
                 num_threads_per_block = params.num_threads_per_block;
             }
             auto launch_config = cuda::make_launch_config(num_blocks, num_threads_per_block);
-            // cout << "num_tuples_for_this_launch = " << num_tuples_for_this_launch << ", num_blocks = " << num_blocks << ", params.num_threads_per_block = " << params.num_threads_per_block << endl;
-
+/*
+            cout << "Launch parameters:\n"
+           	     << "\tnum_tuples_for_this_launch  = " << num_tuples_for_this_launch << '\n'
+            	 << "\tgrid blocks                 = " << num_blocks << '\n'
+            	 << "\tthreads per block           = " << num_threads_per_block << '\n';
+*/
             
             if (params.use_filter_pushdown) {
+                assert(params.apply_compression && "Filter pre-computation is only currently supported when compression is employed");
                 auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
                 auto kernel = kernels_filter_pushdown.at(params.kernel_variant);
                 stream.enqueue.kernel_launch(
@@ -695,7 +735,7 @@ int main(int argc, char** argv) {
                     aggregates_on_device.sum_charge.get(),
                     aggregates_on_device.sum_discount.get(),
                     aggregates_on_device.record_count.get(),
-                    input_buffers.ship_date.get(),
+                    input_buffers.precomputed_filter.get(),
                     input_buffers.discount.get(),
                     input_buffers.extended_price.get(),
                     input_buffers.tax.get(),
@@ -767,6 +807,8 @@ int main(int argc, char** argv) {
 */
         streams[0].synchronize();
 
+        cuda_device.synchronize();
+
         if (cpu_coprocessor) { cpu_coprocessor->wait(); }
 
         auto end = timer::now();
@@ -775,10 +817,10 @@ int main(int argc, char** argv) {
         cout << "done." << endl;
         results_file << duration.count() << '\n';
         if (cpu_coprocessor) { 
-			assert_always(cpu_coprocessor->numExtantGroups() == 4); 
-				// Actually, for scale factors under, say, 0.001, this
-				// may realistically end up being 3 instead of 4
-		}
+            assert_always(cpu_coprocessor->numExtantGroups() == 4);
+                // Actually, for scale factors under, say, 0.001, this
+                // may realistically end up being 3 instead of 4
+        }
         if (params.should_print_results) {
             print_results(aggregates_on_host, cardinality);
         }

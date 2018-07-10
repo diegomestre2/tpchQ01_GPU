@@ -10,6 +10,11 @@
 #define __fd__  inline
 #endif
 
+template <typename T> constexpr size_t size_in_bits()         { return sizeof(T) * CHAR_BIT; }
+template <typename T> constexpr size_t size_in_bits(const T&) { return size_in_bits<T>();    }
+
+enum { bits_per_container = size_in_bits<bit_container_t>() };
+
 // The following would be better placed in a proper bit vector class having per-element proxies.
 
 template <typename Integer>
@@ -20,6 +25,29 @@ __fhd__ constexpr Integer get_bit_range(
 {
     return (value >> start_bit) & ((1 << num_bits) - 1);
 }
+
+/**
+ * @note @p value is assumed to have an appropriate number of bits
+ */
+template <typename Integer>
+__fhd__ constexpr void set_bit(
+    Integer&  value,
+    unsigned  bit_index) noexcept
+{
+    value |= (Integer{1} << bit_index);
+}
+
+/**
+ * @note @p value is assumed to have an appropriate number of bits
+ */
+template <typename Integer>
+__fhd__ constexpr void clear_bit(
+    Integer&  value,
+    unsigned  bit_index) noexcept
+{
+    value &= ~(Integer{1} << bit_index);
+}
+
 
 /**
  * @note @p value is assumed to have an appropriate number of bits
@@ -48,6 +76,19 @@ __fhd__ bit_container_t get_bit_resolution_element(
         bits_per_value * element_index_within_container, bits_per_value);
 
 }
+
+template <typename Index>
+__fhd__ bit_container_t get_bit(
+    const bit_container_t*  bit_containers,
+    Index                   bit_index)
+{
+	enum { bits_per_container = sizeof(bit_container_t) * CHAR_BIT };
+    auto index_of_container = bit_index / bits_per_container;
+    auto index_within_container = bit_index % bits_per_container;
+    auto container = bit_containers[index_of_container];
+    return (container >>  index_within_container) & 0x1;
+}
+
 
 /**
  * @note assumes the relevant bits of @p bit_container are 0

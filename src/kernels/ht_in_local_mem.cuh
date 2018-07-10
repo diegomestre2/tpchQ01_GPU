@@ -100,7 +100,7 @@ void in_local_mem_ht_tpchQ01_compressed(
 
     cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
     for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < num_tuples; i += stride) {
-        if (shipdate[i] <= compressed_threshold_ship_date) {
+    	if (shipdate[i] <= compressed_threshold_ship_date) {
             // TODO: Some of these calculations could work on uint32_t
             auto line_quantity         = quantity[i];
             auto line_discount         = discount[i];
@@ -144,7 +144,7 @@ void in_local_mem_ht_tpchQ01_filter_pushdown_compressed(
     sum_charge_t*                        __restrict__ sum_charge,
     sum_discount_t*                      __restrict__ sum_discount,
     cardinality_t*                       __restrict__ record_count,
-    const uint8_t*                       __restrict__ shipdate,
+    const bit_container_t*               __restrict__ precomputed_filter,
     const compressed::discount_t*        __restrict__ discount,
     const compressed::extended_price_t*  __restrict__ extended_price,
     const compressed::tax_t*             __restrict__ tax,
@@ -160,11 +160,10 @@ void in_local_mem_ht_tpchQ01_filter_pushdown_compressed(
     sum_discount_t         thread_sum_discount         [num_potential_groups] = { 0 };
     cardinality_t          thread_record_count         [num_potential_groups] = { 0 };
 
-    constexpr uint8_t SHIPDATE_MASK[] = { 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80 };
-
     cardinality_t stride = (blockDim.x * gridDim.x); //Grid-Stride
     for(cardinality_t i = (blockIdx.x * blockDim.x + threadIdx.x); i < num_tuples; i += stride) {
-        if (shipdate[i / 8] & SHIPDATE_MASK[i % 8]) {
+        auto passes_filter = get_bit(precomputed_filter, i);
+    	if (passes_filter) {
             // TODO: Some of these calculations could work on uint32_t
             auto line_quantity         = quantity[i];
             auto line_discount         = discount[i];

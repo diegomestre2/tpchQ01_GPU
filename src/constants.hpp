@@ -42,10 +42,12 @@ constexpr const char lineitem_table_file_name[]
 
 
 enum {
-    num_orders_at_scale_factor_1     = 1500000,
-    cardinality_of_scale_factor_1    = 6001215,
-    ship_date_frame_of_reference     = 727563, // which date value is this?
-    threshold_ship_date              = 729999, // todate_(2, 9, 1998)
+    num_orders_per_sf                = 1500000,
+    max_line_items_per_order         = 7,
+    max_line_items_per_sf            = num_orders_per_sf * max_line_items_per_order,
+    cardinality_of_scale_factor_1    = 6001215, // known actual result from the TPC-H data generator
+    ship_date_frame_of_reference     = 727563, // January   1st, 1992
+    threshold_ship_date              = 729999, // September 2nd, 1998
     compressed_threshold_ship_date   = threshold_ship_date - ship_date_frame_of_reference,
     return_flag_support_size         = 3,
     line_status_support_size         = 2,

@@ -272,7 +272,6 @@ q1_params_t parse_command_line(int argc, char** argv)
             params.apply_compression = true;
         } else if (arg == "use-filter-pushdown") {
             params.use_filter_pushdown = true;
-            params.apply_compression = true;
         }  else if (arg == "print-results") {
             params.should_print_results = true;
         } else {
@@ -312,6 +311,11 @@ q1_params_t parse_command_line(int argc, char** argv)
             }
         }
     }
+    if (params.use_filter_pushdown and not params.apply_compression) {
+        cerr << "Filter precomputation is only currently supported when compression is applied; "
+                "use \"--apply-compression\"." << endl;
+        exit(EXIT_FAILURE);
+    }
     if (fixed_threads_per_block.find(params.kernel_variant) != fixed_threads_per_block.end()) {
         if (params.user_set_num_threads_per_block and
             (fixed_threads_per_block.at(params.kernel_variant) != params.num_threads_per_block)) {
@@ -337,7 +341,7 @@ void precompute_filter_for_table_chunk(
         bit_container_t bit_container { 0 };
         for(int j = 0; j < bits_per_container; j++) {
             // Note this relies on the little-endianness of nVIDIA GPUs
-            auto evaluated_where_clause = compressed_ship_date[i+j] < compressed_threshold_ship_date;
+            auto evaluated_where_clause = compressed_ship_date[i+j] <= compressed_threshold_ship_date;
             bit_container |= bit_container_t{evaluated_where_clause} << j;
         }
         precomputed_filter[i / bits_per_container] = bit_container;
@@ -354,14 +358,12 @@ void precompute_filter_for_table_chunk(
 }
 
 int main(int argc, char** argv) {
-    cout << "TPC-H Query 1" << '\n';
     make_sure_we_are_on_cpu_core_0();
 
     auto params = parse_command_line(argc, argv);
     cardinality_t cardinality; // This is computed rather than being set manually
 
-
-    lineitem li((size_t)(7000000 * std::max(params.scale_factor, 1.0)));
+    lineitem li((size_t)(max_line_items_per_sf * std::max(params.scale_factor, 1.0)));
         // TODO: lineitem should really not need this cap, it should just adjust
         // allocated space as the need arises (and start with an estimate based on
         // the file size
@@ -788,7 +790,7 @@ int main(int argc, char** argv) {
         }
         for(int i = 1; i < params.num_gpu_streams; i++) {
             auto ev = cuda_device.create_event(cuda::event::sync_by_blocking);
-            auto stream_completion_event = streams[i].enqueue.event(ev);
+            streams[i].enqueue.event(ev);
             streams[0].enqueue.wait(ev);
         }
         

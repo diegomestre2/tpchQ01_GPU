@@ -357,16 +357,11 @@ void precompute_filter_for_table_chunk(
     }
 }
 
-int main(int argc, char** argv) {
-    make_sure_we_are_on_cpu_core_0();
-
-    auto params = parse_command_line(argc, argv);
-    cardinality_t cardinality; // This is computed rather than being set manually
-
-    lineitem li((size_t)(max_line_items_per_sf * std::max(params.scale_factor, 1.0)));
-        // TODO: lineitem should really not need this cap, it should just adjust
-        // allocated space as the need arises (and start with an estimate based on
-        // the file size
+cardinality_t load_table_columns_from_files(
+    const q1_params_t&      params,
+    lineitem& __restrict__  li)
+{
+    cardinality_t cardinality;
 
     std::unique_ptr< ship_date_t[]      > _shipdate;
     std::unique_ptr< return_flag_t[]    > _returnflag;
@@ -403,7 +398,7 @@ int main(int argc, char** argv) {
         for_each_argument(
             [&](auto tup){
                 std::get<0>(tup).cardinality = cardinality;
-                std::get<0>(tup).m_ptr = std::get<1>(tup).get();
+                std::get<0>(tup).m_ptr = std::get<1>(tup).release();
             },
             tie(li.l_shipdate,      _shipdate),
             tie(li.l_returnflag,    _returnflag),
@@ -446,6 +441,19 @@ int main(int argc, char** argv) {
         write_column_to_binary_file(li.l_extendedprice.get(), cardinality, data_files_directory, "extendedprice.bin");
         write_column_to_binary_file(li.l_quantity.get(),      cardinality, data_files_directory, "quantity.bin");
     }
+    return cardinality;
+}
+
+int main(int argc, char** argv) {
+    make_sure_we_are_on_cpu_core_0();
+
+    auto params = parse_command_line(argc, argv);
+
+    lineitem li((size_t)(max_line_items_per_sf * std::max(params.scale_factor, 1.0)));
+        // Note: lineitem should really not need this cap, it should just adjust
+        // allocated space as the need arises (and start with an estimate based on
+        // the file size
+    auto cardinality = load_table_columns_from_files(params, li);
 
     CoProc* cpu_coprocessor = params.use_coprocessing ?  new CoProc(li, true) : nullptr;
 

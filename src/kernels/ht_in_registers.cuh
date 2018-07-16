@@ -18,6 +18,7 @@
 #include "constants.hpp"
 #include "data_types.h"
 #include "bit_operations.hpp"
+#include <stdio.h>
 
 namespace cuda {
 

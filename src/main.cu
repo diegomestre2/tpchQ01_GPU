@@ -46,33 +46,32 @@ inline void assert_always(bool a) {
 
 using timer = std::chrono::high_resolution_clock;
 
-template <bool Compressed>
-struct stream_input_buffer_set;
+template <template <typename> class Ptr, bool Compressed>
+struct input_buffer_set;
 
 enum : bool { is_compressed = true, is_not_compressed = false};
 
-template <> struct stream_input_buffer_set<is_compressed> {
-    template <typename T> using unique_ptr = cuda::memory::device::unique_ptr<T>;
-    unique_ptr< compressed::ship_date_t[]      > ship_date;
-    unique_ptr< compressed::discount_t[]       > discount;
-    unique_ptr< compressed::extended_price_t[] > extended_price;
-    unique_ptr< compressed::tax_t[]            > tax;
-    unique_ptr< compressed::quantity_t[]       > quantity;
-    unique_ptr< bit_container_t[]              > return_flag;
-    unique_ptr< bit_container_t[]              > line_status;
-    unique_ptr< bit_container_t[]              > precomputed_filter;
+template <template <typename> class Ptr>
+struct input_buffer_set<Ptr, is_compressed> {
+    Ptr< compressed::ship_date_t[]      > ship_date;
+    Ptr< compressed::discount_t[]       > discount;
+    Ptr< compressed::extended_price_t[] > extended_price;
+    Ptr< compressed::tax_t[]            > tax;
+    Ptr< compressed::quantity_t[]       > quantity;
+    Ptr< bit_container_t[]              > return_flag;
+    Ptr< bit_container_t[]              > line_status;
+    Ptr< bit_container_t[]              > precomputed_filter;
 };
 
-template <> struct stream_input_buffer_set<is_not_compressed> {
-    template <typename T> using unique_ptr = cuda::memory::device::unique_ptr<T>;
-    unique_ptr< ship_date_t[]      > ship_date;
-    unique_ptr< discount_t[]       > discount;
-    unique_ptr< extended_price_t[] > extended_price;
-    unique_ptr< tax_t[]            > tax;
-    unique_ptr< quantity_t[]       > quantity;
-    unique_ptr< return_flag_t[]    > return_flag;
-    unique_ptr< line_status_t[]    > line_status;
-//  unique_ptr< bit_container_t[]  > precomputed_filter;
+template <template <typename> class Ptr>
+struct input_buffer_set<Ptr, is_not_compressed> {
+    Ptr< ship_date_t[]      > ship_date;
+    Ptr< discount_t[]       > discount;
+    Ptr< extended_price_t[] > extended_price;
+    Ptr< tax_t[]            > tax;
+    Ptr< quantity_t[]       > quantity;
+    Ptr< return_flag_t[]    > return_flag;
+    Ptr< line_status_t[]    > line_status;
 };
 
 
@@ -444,6 +443,239 @@ cardinality_t load_table_columns_from_files(
     return cardinality;
 }
 
+// Would be nice to avoid actually declaring the following 3 types and just using plane aggregates
+
+template <typename T>
+using plugged_unique_ptr = std::unique_ptr<T>;
+
+template <typename T>
+using plain_ptr = std::conditional_t<std::is_array<T>::value, std::decay_t<T>, std::decay_t<T>*>;
+
+
+// Note: This should be a variant
+struct stream_input_buffer_sets {
+    std::vector<input_buffer_set<cuda::memory::device::unique_ptr, is_not_compressed > > uncompressed;
+    std::vector<input_buffer_set<cuda::memory::device::unique_ptr, is_compressed     > > compressed;
+};
+
+template <template <typename> class UniquePtr>
+struct aggregates_set {
+    UniquePtr<sum_quantity_t[]        > sum_quantity;
+    UniquePtr<sum_base_price_t[]      > sum_base_price;
+    UniquePtr<sum_discounted_price_t[]> sum_discounted_price;
+    UniquePtr<sum_charge_t[]          > sum_charge;
+    UniquePtr<sum_discount_t[]        > sum_discount;
+    UniquePtr<cardinality_t[]         > record_count;
+};
+
+
+using host_aggregates_t = aggregates_set<plugged_unique_ptr>;
+using device_aggregates_t = aggregates_set<cuda::memory::device::unique_ptr>;
+
+void execute_query_1_once(
+    cuda::device_t<>                              cuda_device,
+    const q1_params_t&              __restrict__  params,
+    int                                           run_index,
+    CoProc*                         __restrict__  cpu_coprocessor,
+    cardinality_t                                 cardinality,
+    std::vector<cuda::stream_t<>>&  __restrict__  streams,
+    host_aggregates_t&              __restrict__  aggregates_on_host,
+    device_aggregates_t&            __restrict__  aggregates_on_device,
+    stream_input_buffer_sets&       __restrict__  stream_input_buffer_sets,
+    input_buffer_set<plain_ptr, is_not_compressed>&
+                                    __restrict__  uncompressed, // on host
+    input_buffer_set<cuda::memory::host::unique_ptr, is_compressed>&
+                                    __restrict__  compressed // on host
+)
+{
+    if (params.use_coprocessing) {
+         cpu_coprocessor->Clear();
+    }
+    auto gpu_end_offset = cardinality;
+    if (params.use_coprocessing) {
+         // Split the work between the CPU and the GPU at 50% each
+         // TODO:
+         // - Double-check the choice of alignment here
+         // - The parameters here are weird
+         auto cpu_start_offset = cardinality - cardinality / 20;
+         cpu_start_offset = cpu_start_offset - cpu_start_offset % params.num_tuples_per_kernel_launch;
+         auto num_records_for_cpu_to_process = cardinality - cpu_start_offset;
+         (*cpu_coprocessor)(cpu_start_offset, num_records_for_cpu_to_process);
+         gpu_end_offset = cpu_start_offset;
+    }
+
+    // Initialize the aggregates; perhaps we should do this in a single kernel? ... probably not worth it
+    streams[0].enqueue.memset(aggregates_on_device.sum_quantity.get(),         0, num_potential_groups * sizeof(sum_quantity_t));
+    streams[0].enqueue.memset(aggregates_on_device.sum_base_price.get(),       0, num_potential_groups * sizeof(sum_base_price_t));
+    streams[0].enqueue.memset(aggregates_on_device.sum_discounted_price.get(), 0, num_potential_groups * sizeof(sum_discounted_price_t));
+    streams[0].enqueue.memset(aggregates_on_device.sum_charge.get(),           0, num_potential_groups * sizeof(sum_charge_t));
+    streams[0].enqueue.memset(aggregates_on_device.sum_discount.get(),         0, num_potential_groups * sizeof(sum_discount_t));
+    streams[0].enqueue.memset(aggregates_on_device.record_count.get(),         0, num_potential_groups * sizeof(cardinality_t));
+
+    cuda::event_t aggregates_initialized_event = streams[0].enqueue.event(
+        cuda::event::sync_by_blocking, cuda::event::dont_record_timings, cuda::event::not_interprocess);
+    for (int i = 1; i < params.num_gpu_streams; ++i) {
+        streams[i].enqueue.wait(aggregates_initialized_event);
+        // The other streams also require the aggregates to be initialized before doing any work
+    }
+
+    auto stream_index = 0;
+    for (size_t offset_in_table = 0;
+         offset_in_table < gpu_end_offset;
+         offset_in_table += params.num_tuples_per_kernel_launch,
+         stream_index = (stream_index+1) % params.num_gpu_streams)
+    {
+        auto num_tuples_for_this_launch = std::min<cardinality_t>(params.num_tuples_per_kernel_launch, gpu_end_offset - offset_in_table);
+        auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, return_flag_values_per_container);
+        auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, line_status_values_per_container);
+
+        // auto start_copy = timer::now();  // This can't work, since copying is asynchronous.
+        auto& stream = streams[stream_index];
+
+        if (params.apply_compression) {
+            auto& stream_input_buffer_set = stream_input_buffer_sets.compressed[stream_index];
+            if (params.use_filter_pushdown) {
+                cuda::profiling::scoped_range_marker("On-CPU filtering");
+                precompute_filter_for_table_chunk(
+                    compressed.ship_date.get() + offset_in_table,
+                    compressed.precomputed_filter.get() + offset_in_table / bits_per_container,
+                    num_tuples_for_this_launch);
+            }
+            stream.enqueue.copy(stream_input_buffer_set.discount.get()      , compressed.discount.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::discount_t));
+            stream.enqueue.copy(stream_input_buffer_set.extended_price.get(), compressed.extended_price.get() + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::extended_price_t));
+            stream.enqueue.copy(stream_input_buffer_set.tax.get()           , compressed.tax.get()            + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::tax_t));
+            stream.enqueue.copy(stream_input_buffer_set.quantity.get()      , compressed.quantity.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::quantity_t));
+            stream.enqueue.copy(stream_input_buffer_set.return_flag.get()   , compressed.return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t));
+            stream.enqueue.copy(stream_input_buffer_set.line_status.get()   , compressed.line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
+            if (not params.use_filter_pushdown) {
+                stream.enqueue.copy(stream_input_buffer_set.ship_date.get(), compressed.ship_date.get() + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::ship_date_t));
+            } else {
+                auto num_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, bits_per_container);
+                stream.enqueue.copy(stream_input_buffer_set.precomputed_filter.get(), compressed.precomputed_filter.get() + offset_in_table / bits_per_container, num_bit_containers_for_this_launch * sizeof(bit_container_t));
+            }
+        }
+        else {
+            auto& stream_input_buffer_set = stream_input_buffer_sets.uncompressed[stream_index];
+            stream.enqueue.copy(stream_input_buffer_set.ship_date.get()     , uncompressed.ship_date      + offset_in_table, num_tuples_for_this_launch * sizeof(ship_date_t));
+            stream.enqueue.copy(stream_input_buffer_set.discount.get()      , uncompressed.discount       + offset_in_table, num_tuples_for_this_launch * sizeof(discount_t));
+            stream.enqueue.copy(stream_input_buffer_set.extended_price.get(), uncompressed.extended_price + offset_in_table, num_tuples_for_this_launch * sizeof(extended_price_t));
+            stream.enqueue.copy(stream_input_buffer_set.tax.get()           , uncompressed.tax            + offset_in_table, num_tuples_for_this_launch * sizeof(tax_t));
+            stream.enqueue.copy(stream_input_buffer_set.quantity.get()      , uncompressed.quantity       + offset_in_table, num_tuples_for_this_launch * sizeof(quantity_t));
+            stream.enqueue.copy(stream_input_buffer_set.return_flag.get()   , uncompressed.return_flag    + offset_in_table, num_tuples_for_this_launch * sizeof(return_flag_t));
+            stream.enqueue.copy(stream_input_buffer_set.line_status.get()   , uncompressed.line_status    + offset_in_table, num_tuples_for_this_launch * sizeof(line_status_t));
+        }
+
+        cuda::grid_block_dimension_t num_threads_per_block;
+        cuda::grid_dimension_t       num_blocks;
+
+        if (params.kernel_variant == "in-registers") {
+            // Calculation is different here because more than one thread works on a tuple,
+            // and some figuring is per-warp
+            auto num_warps_per_block = params.num_threads_per_block / warp_size;
+                // rounding down the number of threads per block!
+            num_threads_per_block = num_warps_per_block * warp_size;
+            auto num_tables_per_warp       = cuda::warp_size / num_potential_groups;
+            auto num_tuples_handled_by_block = num_tables_per_warp * num_warps_per_block * params.num_tuples_per_thread;
+            num_blocks = div_rounding_up(
+                num_tuples_for_this_launch,
+                num_tuples_handled_by_block);
+        }
+        else {
+            num_blocks = div_rounding_up(
+                    num_tuples_for_this_launch,
+                    params.num_threads_per_block * params.num_tuples_per_thread);
+            // NOTE: If the number of blocks drops below the number of GPU cores, this is definitely useless,
+            // and to be on the safe side - twice as many.
+            num_threads_per_block = params.num_threads_per_block;
+        }
+        auto launch_config = cuda::make_launch_config(num_blocks, num_threads_per_block);
+
+//        cout << "Launch parameters:\n"
+//             << "\tnum_tuples_for_this_launch  = " << num_tuples_for_this_launch << '\n'
+//             << "\tgrid blocks                 = " << num_blocks << '\n'
+//             << "\tthreads per block           = " << num_threads_per_block << '\n';
+
+        if (params.use_filter_pushdown) {
+            assert(params.apply_compression && "Filter pre-computation is only currently supported when compression is employed");
+            auto& stream_input_buffer_set = stream_input_buffer_sets.compressed[stream_index];
+            auto kernel = kernels_filter_pushdown.at(params.kernel_variant);
+            stream.enqueue.kernel_launch(
+                kernel,
+                launch_config,
+                aggregates_on_device.sum_quantity.get(),
+                aggregates_on_device.sum_base_price.get(),
+                aggregates_on_device.sum_discounted_price.get(),
+                aggregates_on_device.sum_charge.get(),
+                aggregates_on_device.sum_discount.get(),
+                aggregates_on_device.record_count.get(),
+                stream_input_buffer_set.precomputed_filter.get(),
+                stream_input_buffer_set.discount.get(),
+                stream_input_buffer_set.extended_price.get(),
+                stream_input_buffer_set.tax.get(),
+                stream_input_buffer_set.quantity.get(),
+                stream_input_buffer_set.return_flag.get(),
+                stream_input_buffer_set.line_status.get(),
+                num_tuples_for_this_launch);
+        } else if (params.apply_compression) {
+            auto& stream_input_buffer_set = stream_input_buffer_sets.compressed[stream_index];
+            auto kernel = kernels_compressed.at(params.kernel_variant);
+            stream.enqueue.kernel_launch(
+                kernel,
+                launch_config,
+                aggregates_on_device.sum_quantity.get(),
+                aggregates_on_device.sum_base_price.get(),
+                aggregates_on_device.sum_discounted_price.get(),
+                aggregates_on_device.sum_charge.get(),
+                aggregates_on_device.sum_discount.get(),
+                aggregates_on_device.record_count.get(),
+                stream_input_buffer_set.ship_date.get(),
+                stream_input_buffer_set.discount.get(),
+                stream_input_buffer_set.extended_price.get(),
+                stream_input_buffer_set.tax.get(),
+                stream_input_buffer_set.quantity.get(),
+                stream_input_buffer_set.return_flag.get(),
+                stream_input_buffer_set.line_status.get(),
+                num_tuples_for_this_launch);
+        } else {
+            auto& stream_input_buffer_set = stream_input_buffer_sets.uncompressed[stream_index];
+            auto kernel = kernels.at(params.kernel_variant);
+            stream.enqueue.kernel_launch(
+                kernel,
+                launch_config,
+                aggregates_on_device.sum_quantity.get(),
+                aggregates_on_device.sum_base_price.get(),
+                aggregates_on_device.sum_discounted_price.get(),
+                aggregates_on_device.sum_charge.get(),
+                aggregates_on_device.sum_discount.get(),
+                aggregates_on_device.record_count.get(),
+                stream_input_buffer_set.ship_date.get(),
+                stream_input_buffer_set.discount.get(),
+                stream_input_buffer_set.extended_price.get(),
+                stream_input_buffer_set.tax.get(),
+                stream_input_buffer_set.quantity.get(),
+                stream_input_buffer_set.return_flag.get(),
+                stream_input_buffer_set.line_status.get(),
+                num_tuples_for_this_launch);
+        }
+    }
+    for(int i = 1; i < params.num_gpu_streams; i++) {
+        auto ev = cuda_device.create_event(cuda::event::sync_by_blocking);
+        streams[i].enqueue.event(ev);
+        streams[0].enqueue.wait(ev);
+    }
+
+    streams[0].enqueue.copy(aggregates_on_host.sum_quantity.get(),         aggregates_on_device.sum_quantity.get(),         num_potential_groups * sizeof(sum_quantity_t));
+    streams[0].enqueue.copy(aggregates_on_host.sum_base_price.get(),       aggregates_on_device.sum_base_price.get(),       num_potential_groups * sizeof(sum_base_price_t));
+    streams[0].enqueue.copy(aggregates_on_host.sum_discounted_price.get(), aggregates_on_device.sum_discounted_price.get(), num_potential_groups * sizeof(sum_discounted_price_t));
+    streams[0].enqueue.copy(aggregates_on_host.sum_charge.get(),           aggregates_on_device.sum_charge.get(),           num_potential_groups * sizeof(sum_charge_t));
+    streams[0].enqueue.copy(aggregates_on_host.sum_discount.get(),         aggregates_on_device.sum_discount.get(),         num_potential_groups * sizeof(sum_discount_t));
+    streams[0].enqueue.copy(aggregates_on_host.record_count.get(),         aggregates_on_device.record_count.get(),         num_potential_groups * sizeof(cardinality_t));
+
+    if (cpu_coprocessor) { cpu_coprocessor->wait(); }
+
+    streams[0].synchronize();
+}
+
 int main(int argc, char** argv) {
     make_sure_we_are_on_cpu_core_0();
 
@@ -457,51 +689,54 @@ int main(int argc, char** argv) {
 
     CoProc* cpu_coprocessor = params.use_coprocessing ?  new CoProc(li, true) : nullptr;
 
-    auto compressed_ship_date      = cuda::memory::host::make_unique< compressed::ship_date_t[]      >(cardinality);
-    auto compressed_discount       = cuda::memory::host::make_unique< compressed::discount_t[]       >(cardinality);
-    auto compressed_extended_price = cuda::memory::host::make_unique< compressed::extended_price_t[] >(cardinality);
-    auto compressed_tax            = cuda::memory::host::make_unique< compressed::tax_t[]            >(cardinality);
-    auto compressed_quantity       = cuda::memory::host::make_unique< compressed::quantity_t[]       >(cardinality);
+    input_buffer_set<cuda::memory::host::unique_ptr, is_compressed> compressed {
+        cuda::memory::host::make_unique< compressed::ship_date_t[]      >(cardinality),
+        cuda::memory::host::make_unique< compressed::discount_t[]       >(cardinality),
+        cuda::memory::host::make_unique< compressed::extended_price_t[] >(cardinality),
+        cuda::memory::host::make_unique< compressed::tax_t[]            >(cardinality),
+        cuda::memory::host::make_unique< compressed::quantity_t[]       >(cardinality),
+        cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, return_flag_values_per_container)),
+        cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, line_status_values_per_container)),
+        cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, bits_per_container))
+    };
 
-    auto compressed_return_flag    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, return_flag_values_per_container));
-    auto compressed_line_status    = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, line_status_values_per_container));
-    auto precomputed_filter = cuda::memory::host::make_unique< bit_container_t[] >(div_rounding_up(cardinality, bits_per_container));
-
-    auto ship_date      = li.l_shipdate.get();
-    auto return_flag    = li.l_returnflag.get();
-    auto line_status    = li.l_linestatus.get();
-    auto discount       = li.l_discount.get();
-    auto tax            = li.l_tax.get();
-    auto extended_price = li.l_extendedprice.get();
-    auto quantity       = li.l_quantity.get();
+    input_buffer_set<plain_ptr, is_not_compressed> uncompressed {
+        li.l_shipdate.get(),
+        li.l_discount.get(),
+        li.l_extendedprice.get(),
+        li.l_tax.get(),
+        li.l_quantity.get(),
+        li.l_returnflag.get(),
+        li.l_linestatus.get(),
+    };
 
     if (params.apply_compression) {
         cout << "Preprocessing/compressing column data... " << flush;
 
         // Man, we really need to have a sub-byte-length-value container class
-        std::memset(compressed_return_flag.get(), 0, div_rounding_up(cardinality, return_flag_values_per_container));
-        std::memset(compressed_line_status.get(), 0, div_rounding_up(cardinality, line_status_values_per_container));
+        std::memset(compressed.return_flag.get(), 0, div_rounding_up(cardinality, return_flag_values_per_container));
+        std::memset(compressed.line_status.get(), 0, div_rounding_up(cardinality, line_status_values_per_container));
         for(cardinality_t i = 0; i < cardinality; i++) {
-            compressed_ship_date[i]      = ship_date[i] - ship_date_frame_of_reference;
-            compressed_discount[i]       = discount[i]; // we're keeping the factor 100 scaling
-            compressed_extended_price[i] = extended_price[i];
-            compressed_quantity[i]       = quantity[i] / 100;
-            compressed_tax[i]            = tax[i]; // we're keeping the factor 100 scaling
+            compressed.ship_date[i]      = uncompressed.ship_date[i] - ship_date_frame_of_reference;
+            compressed.discount[i]       = uncompressed.discount[i]; // we're keeping the factor 100 scaling
+            compressed.extended_price[i] = uncompressed.extended_price[i];
+            compressed.quantity[i]       = uncompressed.quantity[i] / 100;
+            compressed.tax[i]            = uncompressed.tax[i]; // we're keeping the factor 100 scaling
             set_bit_resolution_element<log_return_flag_bits, cardinality_t>(
-                compressed_return_flag.get(), i, encode_return_flag(return_flag[i]));
+                compressed.return_flag.get(), i, encode_return_flag(uncompressed.return_flag[i]));
             set_bit_resolution_element<log_line_status_bits, cardinality_t>(
-                compressed_line_status.get(), i, encode_line_status(line_status[i]));
-            assert( (ship_date_t)      compressed_ship_date[i]      == ship_date[i] - ship_date_frame_of_reference);
-            assert( (discount_t)       compressed_discount[i]       == discount[i]);
-            assert( (extended_price_t) compressed_extended_price[i] == extended_price[i]);
-            assert( (quantity_t)       compressed_quantity[i]       == quantity[i] / 100);
+                compressed.line_status.get(), i, encode_line_status(uncompressed.line_status[i]));
+            assert( (ship_date_t)      compressed.ship_date[i]      == uncompressed.ship_date[i] - ship_date_frame_of_reference);
+            assert( (discount_t)       compressed.discount[i]       == uncompressed.discount[i]);
+            assert( (extended_price_t) compressed.extended_price[i] == uncompressed.extended_price[i]);
+            assert( (quantity_t)       compressed.quantity[i]       == uncompressed.quantity[i] / 100);
                 // not keeping the scaling here since we know the data is all integral; you could call this a form
                 // of compression
-            assert( (tax_t)            compressed_tax[i]            == tax[i]);
+            assert( (tax_t)            compressed.tax[i]            == uncompressed.tax[i]);
         }
         for(cardinality_t i = 0; i < cardinality; i++) {
-            assert(decode_return_flag(get_bit_resolution_element<log_return_flag_bits, cardinality_t>(compressed_return_flag.get(), i)) == return_flag[i]);
-            assert(decode_line_status(get_bit_resolution_element<log_line_status_bits, cardinality_t>(compressed_line_status.get(), i)) == line_status[i]);
+            assert(decode_return_flag(get_bit_resolution_element<log_return_flag_bits, cardinality_t>(compressed.return_flag.get(), i)) == uncompressed.return_flag[i]);
+            assert(decode_line_status(get_bit_resolution_element<log_line_status_bits, cardinality_t>(compressed.line_status.get(), i)) == uncompressed.line_status[i]);
         }
 
         cout << "done." << endl;
@@ -512,32 +747,13 @@ int main(int argc, char** argv) {
     // a few sub-allocations, which would take very little time (dozens of clock cycles overall) -
     // no system calls.
 
-    struct {
-        std::unique_ptr<sum_quantity_t[]        > sum_quantity;
-        std::unique_ptr<sum_base_price_t[]      > sum_base_price;
-        std::unique_ptr<sum_discounted_price_t[]> sum_discounted_price;
-        std::unique_ptr<sum_charge_t[]          > sum_charge;
-        std::unique_ptr<sum_discount_t[]        > sum_discount;
-        std::unique_ptr<cardinality_t[]         > record_count;
-        // Why aren't we computing these? They're part of TPC-H Q1 after all
-        // struct {
-        //     std::unique_ptr<avg_quantity_t[]        > avg_quantity;
-        //     std::unique_ptr<avg_extended_price_t[]  > avg_extended_price;
-        //     std::unique_ptr<avg_discount_t[]        > avg_discount;
-        // } derived;
-    } aggregates_on_host = {
+    host_aggregates_t aggregates_on_host {
         std::make_unique< sum_quantity_t[]         >(num_potential_groups),
         std::make_unique< sum_base_price_t[]       >(num_potential_groups),
         std::make_unique< sum_discounted_price_t[] >(num_potential_groups),
         std::make_unique< sum_charge_t []          >(num_potential_groups),
         std::make_unique< sum_discount_t[]         >(num_potential_groups),
         std::make_unique< cardinality_t[]          >(num_potential_groups)
-        // ,
-        // {
-        //      std::make_unique< avg_quantity_t[]         >(num_potential_groups),
-        //      std::make_unique< avg_extended_price_t[]   >(num_potential_groups),
-        //      std::make_unique< avg_discount_t[]         >(num_potential_groups),
-        // }
     };
 
     /* Allocate memory on device */
@@ -550,14 +766,7 @@ int main(int argc, char** argv) {
 
     auto cuda_device = cuda::device::current::get();
 
-    struct {
-        cuda::memory::device::unique_ptr< sum_quantity_t[]         > sum_quantity;
-        cuda::memory::device::unique_ptr< sum_base_price_t[]       > sum_base_price;
-        cuda::memory::device::unique_ptr< sum_discounted_price_t[] > sum_discounted_price;
-        cuda::memory::device::unique_ptr< sum_charge_t[]           > sum_charge;
-        cuda::memory::device::unique_ptr< sum_discount_t[]         > sum_discount;
-        cuda::memory::device::unique_ptr< cardinality_t[]          > record_count;
-    } aggregates_on_device = {
+    device_aggregates_t aggregates_on_device {
         cuda::memory::device::make_unique< sum_quantity_t[]         >(cuda_device, num_potential_groups),
         cuda::memory::device::make_unique< sum_base_price_t[]       >(cuda_device, num_potential_groups),
         cuda::memory::device::make_unique< sum_discounted_price_t[] >(cuda_device, num_potential_groups),
@@ -566,10 +775,8 @@ int main(int argc, char** argv) {
         cuda::memory::device::make_unique< cardinality_t[]          >(cuda_device, num_potential_groups)
     };
 
-    struct {
-        std::vector<stream_input_buffer_set<is_not_compressed> > uncompressed;
-        std::vector<stream_input_buffer_set<is_compressed    > > compressed;
-    } stream_input_buffer_sets;
+    stream_input_buffer_sets stream_input_buffer_sets;
+
     std::vector<cuda::stream_t<>> streams;
     if (params.apply_compression) {
         stream_input_buffer_sets.compressed.reserve(params.num_gpu_streams);
@@ -580,10 +787,9 @@ int main(int argc, char** argv) {
         // We'll be scheduling (most of) our work in a round-robin fashion on all of
         // the streams, to prevent the GPU from idling.
 
-
     for (int i = 0; i < params.num_gpu_streams; ++i) {
         if (params.apply_compression) {
-            auto input_buffers = stream_input_buffer_set<is_compressed>{
+            auto stream_input_buffer_set = input_buffer_set<cuda::memory::device::unique_ptr, is_compressed>{
                 cuda::memory::device::make_unique< compressed::ship_date_t[]      >(cuda_device, params.num_tuples_per_kernel_launch),
                 cuda::memory::device::make_unique< compressed::discount_t[]       >(cuda_device, params.num_tuples_per_kernel_launch),
                 cuda::memory::device::make_unique< compressed::extended_price_t[] >(cuda_device, params.num_tuples_per_kernel_launch),
@@ -593,10 +799,10 @@ int main(int argc, char** argv) {
                 cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(params.num_tuples_per_kernel_launch, line_status_values_per_container)),
                 cuda::memory::device::make_unique< bit_container_t[]              >(cuda_device, div_rounding_up(params.num_tuples_per_kernel_launch, bits_per_container))
             };
-            stream_input_buffer_sets.compressed.emplace_back(std::move(input_buffers));
+            stream_input_buffer_sets.compressed.emplace_back(std::move(stream_input_buffer_set));
         }
         else {
-            auto input_buffers = stream_input_buffer_set<is_not_compressed>{
+            auto stream_input_buffer_set = input_buffer_set<cuda::memory::device::unique_ptr, is_not_compressed>{
                 cuda::memory::device::make_unique< ship_date_t[]      >(cuda_device, params.num_tuples_per_kernel_launch),
                 cuda::memory::device::make_unique< discount_t[]       >(cuda_device, params.num_tuples_per_kernel_launch),
                 cuda::memory::device::make_unique< extended_price_t[] >(cuda_device, params.num_tuples_per_kernel_launch),
@@ -605,213 +811,25 @@ int main(int argc, char** argv) {
                 cuda::memory::device::make_unique< return_flag_t[]    >(cuda_device, params.num_tuples_per_kernel_launch),
                 cuda::memory::device::make_unique< line_status_t[]    >(cuda_device, params.num_tuples_per_kernel_launch),
             };
-            stream_input_buffer_sets.uncompressed.emplace_back(std::move(input_buffers));
+            stream_input_buffer_sets.uncompressed.emplace_back(std::move(stream_input_buffer_set));
         }
         auto stream = cuda_device.create_stream(cuda::stream::async);
         streams.emplace_back(std::move(stream));
     }
 
-    // You can't measure this from inside the process - without events, which
-    // double copy_time = 0;
-    // double computation_time = 0;
-
     // This only works for the overall time, not for anything else, so it's not a good idea:
-     std::ofstream results_file;
-     results_file.open("results.csv", std::ios::out);
+    std::ofstream results_file;
+    results_file.open("results.csv", std::ios::out);
 
-     cuda::profiling::start();
+    cuda::profiling::start();
 
     for(int run_index = 0; run_index < params.num_query_execution_runs; run_index++) {
-        cout << "Executing query, run " << run_index + 1 << " of " << params.num_query_execution_runs << "... " << flush;
-        if (params.use_coprocessing) {
-             cpu_coprocessor->Clear();
-        }
+        cout << "Executing TPC-H Query 1, run " << run_index + 1 << " of " << params.num_query_execution_runs << "... " << flush;
         auto start = timer::now();
-        
-        auto gpu_end_offset = cardinality;
-        if (params.use_coprocessing) {
-             // Split the work between the CPU and the GPU at 50% each
-             // TODO: 
-             // - Double-check the choice of alignment here
-             // - The parameters here are weird
-             auto cpu_start_offset = cardinality - cardinality / 20;
-             cpu_start_offset = cpu_start_offset - cpu_start_offset % params.num_tuples_per_kernel_launch;
-             auto num_records_for_cpu_to_process = cardinality - cpu_start_offset;
-             (*cpu_coprocessor)(cpu_start_offset, num_records_for_cpu_to_process);
-             gpu_end_offset = cpu_start_offset;
-        } 
-
-        // Initialize the aggregates; perhaps we should do this in a single kernel? ... probably not worth it
-        streams[0].enqueue.memset(aggregates_on_device.sum_quantity.get(),         0, num_potential_groups * sizeof(sum_quantity_t));
-        streams[0].enqueue.memset(aggregates_on_device.sum_base_price.get(),       0, num_potential_groups * sizeof(sum_base_price_t));
-        streams[0].enqueue.memset(aggregates_on_device.sum_discounted_price.get(), 0, num_potential_groups * sizeof(sum_discounted_price_t));
-        streams[0].enqueue.memset(aggregates_on_device.sum_charge.get(),           0, num_potential_groups * sizeof(sum_charge_t));
-        streams[0].enqueue.memset(aggregates_on_device.sum_discount.get(),         0, num_potential_groups * sizeof(sum_discount_t));
-        streams[0].enqueue.memset(aggregates_on_device.record_count.get(),         0, num_potential_groups * sizeof(cardinality_t));
-
-        cuda::event_t aggregates_initialized_event = streams[0].enqueue.event(
-            cuda::event::sync_by_blocking, cuda::event::dont_record_timings, cuda::event::not_interprocess);
-        for (int i = 1; i < params.num_gpu_streams; ++i) {
-            streams[i].enqueue.wait(aggregates_initialized_event);
-            // The other streams also require the aggregates to be initialized before doing any work
-        }
-
-        auto stream_index = 0;
-        for (size_t offset_in_table = 0;
-             offset_in_table < gpu_end_offset;
-             offset_in_table += params.num_tuples_per_kernel_launch,
-             stream_index = (stream_index+1) % params.num_gpu_streams)
-        {
-            auto num_tuples_for_this_launch = std::min<cardinality_t>(params.num_tuples_per_kernel_launch, gpu_end_offset - offset_in_table);
-            auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, return_flag_values_per_container);
-            auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, line_status_values_per_container);
-
-            // auto start_copy = timer::now();  // This can't work, since copying is asynchronous.
-            auto& stream = streams[stream_index];
-
-            if (params.apply_compression) {
-                auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
-                if (params.use_filter_pushdown) {
-                    cuda::profiling::scoped_range_marker("On-CPU filtering");
-                    precompute_filter_for_table_chunk(
-                        compressed_ship_date.get() + offset_in_table,
-                        precomputed_filter.get() + offset_in_table / bits_per_container,
-                        num_tuples_for_this_launch);
-                }
-                stream.enqueue.copy(input_buffers.discount.get()      , compressed_discount.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::discount_t));
-                stream.enqueue.copy(input_buffers.extended_price.get(), compressed_extended_price.get() + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::extended_price_t));
-                stream.enqueue.copy(input_buffers.tax.get()           , compressed_tax.get()            + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::tax_t));
-                stream.enqueue.copy(input_buffers.quantity.get()      , compressed_quantity.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::quantity_t));
-                stream.enqueue.copy(input_buffers.return_flag.get()   , compressed_return_flag.get()    + offset_in_table / return_flag_values_per_container, num_return_flag_bit_containers_for_this_launch * sizeof(bit_container_t));
-                stream.enqueue.copy(input_buffers.line_status.get()   , compressed_line_status.get()    + offset_in_table / line_status_values_per_container, num_line_status_bit_containers_for_this_launch * sizeof(bit_container_t));
-                if (not params.use_filter_pushdown) {
-                    stream.enqueue.copy(input_buffers.ship_date.get(), compressed_ship_date.get() + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::ship_date_t));
-                } else {
-                    auto num_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, bits_per_container);
-                    stream.enqueue.copy(input_buffers.precomputed_filter.get(), precomputed_filter.get() + offset_in_table / bits_per_container, num_bit_containers_for_this_launch * sizeof(bit_container_t));
-                }
-            }
-            else {
-                auto& input_buffers = stream_input_buffer_sets.uncompressed[stream_index];
-                stream.enqueue.copy(input_buffers.ship_date.get()     , ship_date      + offset_in_table, num_tuples_for_this_launch * sizeof(ship_date_t));
-                stream.enqueue.copy(input_buffers.discount.get()      , discount       + offset_in_table, num_tuples_for_this_launch * sizeof(discount_t));
-                stream.enqueue.copy(input_buffers.extended_price.get(), extended_price + offset_in_table, num_tuples_for_this_launch * sizeof(extended_price_t));
-                stream.enqueue.copy(input_buffers.tax.get()           , tax            + offset_in_table, num_tuples_for_this_launch * sizeof(tax_t));
-                stream.enqueue.copy(input_buffers.quantity.get()      , quantity       + offset_in_table, num_tuples_for_this_launch * sizeof(quantity_t));
-                stream.enqueue.copy(input_buffers.return_flag.get()   , return_flag    + offset_in_table, num_tuples_for_this_launch * sizeof(return_flag_t));
-                stream.enqueue.copy(input_buffers.line_status.get()   , line_status    + offset_in_table, num_tuples_for_this_launch * sizeof(line_status_t));
-            }
-
-            cuda::grid_block_dimension_t num_threads_per_block;
-            cuda::grid_dimension_t       num_blocks;
-
-            if (params.kernel_variant == "in-registers") {
-                // Calculation is different here because more than one thread works on a tuple,
-                // and some figuring is per-warp
-                auto num_warps_per_block = params.num_threads_per_block / warp_size;
-                    // rounding down the number of threads per block!
-                num_threads_per_block = num_warps_per_block * warp_size;
-                auto num_tables_per_warp       = cuda::warp_size / num_potential_groups;
-                auto num_tuples_handled_by_block = num_tables_per_warp * num_warps_per_block * params.num_tuples_per_thread;
-                num_blocks = div_rounding_up(
-                    num_tuples_for_this_launch,
-                    num_tuples_handled_by_block);
-            }
-            else {
-                num_blocks = div_rounding_up(
-                        num_tuples_for_this_launch,
-                        params.num_threads_per_block * params.num_tuples_per_thread);
-                // NOTE: If the number of blocks drops below the number of GPU cores, this is definitely useless,
-                // and to be on the safe side - twice as many.
-                num_threads_per_block = params.num_threads_per_block;
-            }
-            auto launch_config = cuda::make_launch_config(num_blocks, num_threads_per_block);
-/*
-            cout << "Launch parameters:\n"
-           	     << "\tnum_tuples_for_this_launch  = " << num_tuples_for_this_launch << '\n'
-            	 << "\tgrid blocks                 = " << num_blocks << '\n'
-            	 << "\tthreads per block           = " << num_threads_per_block << '\n';
-*/
-            
-            if (params.use_filter_pushdown) {
-                assert(params.apply_compression && "Filter pre-computation is only currently supported when compression is employed");
-                auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
-                auto kernel = kernels_filter_pushdown.at(params.kernel_variant);
-                stream.enqueue.kernel_launch(
-                    kernel,
-                    launch_config,
-                    aggregates_on_device.sum_quantity.get(),
-                    aggregates_on_device.sum_base_price.get(),
-                    aggregates_on_device.sum_discounted_price.get(),
-                    aggregates_on_device.sum_charge.get(),
-                    aggregates_on_device.sum_discount.get(),
-                    aggregates_on_device.record_count.get(),
-                    input_buffers.precomputed_filter.get(),
-                    input_buffers.discount.get(),
-                    input_buffers.extended_price.get(),
-                    input_buffers.tax.get(),
-                    input_buffers.quantity.get(),
-                    input_buffers.return_flag.get(),
-                    input_buffers.line_status.get(),
-                    num_tuples_for_this_launch);
-            } else if (params.apply_compression) {
-                auto& input_buffers = stream_input_buffer_sets.compressed[stream_index];
-                auto kernel = kernels_compressed.at(params.kernel_variant);
-                stream.enqueue.kernel_launch(
-                    kernel,
-                    launch_config,
-                    aggregates_on_device.sum_quantity.get(),
-                    aggregates_on_device.sum_base_price.get(),
-                    aggregates_on_device.sum_discounted_price.get(),
-                    aggregates_on_device.sum_charge.get(),
-                    aggregates_on_device.sum_discount.get(),
-                    aggregates_on_device.record_count.get(),
-                    input_buffers.ship_date.get(),
-                    input_buffers.discount.get(),
-                    input_buffers.extended_price.get(),
-                    input_buffers.tax.get(),
-                    input_buffers.quantity.get(),
-                    input_buffers.return_flag.get(),
-                    input_buffers.line_status.get(),
-                    num_tuples_for_this_launch);
-            } else {
-                auto& input_buffers = stream_input_buffer_sets.uncompressed[stream_index];
-                auto kernel = kernels.at(params.kernel_variant);
-                stream.enqueue.kernel_launch(
-                    kernel,
-                    launch_config,
-                    aggregates_on_device.sum_quantity.get(),
-                    aggregates_on_device.sum_base_price.get(),
-                    aggregates_on_device.sum_discounted_price.get(),
-                    aggregates_on_device.sum_charge.get(),
-                    aggregates_on_device.sum_discount.get(),
-                    aggregates_on_device.record_count.get(),
-                    input_buffers.ship_date.get(),
-                    input_buffers.discount.get(),
-                    input_buffers.extended_price.get(),
-                    input_buffers.tax.get(),
-                    input_buffers.quantity.get(),
-                    input_buffers.return_flag.get(),
-                    input_buffers.line_status.get(),
-                    num_tuples_for_this_launch);
-            }
-        }
-        for(int i = 1; i < params.num_gpu_streams; i++) {
-            auto ev = cuda_device.create_event(cuda::event::sync_by_blocking);
-            streams[i].enqueue.event(ev);
-            streams[0].enqueue.wait(ev);
-        }
-        
-        streams[0].enqueue.copy(aggregates_on_host.sum_quantity.get(),         aggregates_on_device.sum_quantity.get(),         num_potential_groups * sizeof(sum_quantity_t));
-        streams[0].enqueue.copy(aggregates_on_host.sum_base_price.get(),       aggregates_on_device.sum_base_price.get(),       num_potential_groups * sizeof(sum_base_price_t));
-        streams[0].enqueue.copy(aggregates_on_host.sum_discounted_price.get(), aggregates_on_device.sum_discounted_price.get(), num_potential_groups * sizeof(sum_discounted_price_t));
-        streams[0].enqueue.copy(aggregates_on_host.sum_charge.get(),           aggregates_on_device.sum_charge.get(),           num_potential_groups * sizeof(sum_charge_t));
-        streams[0].enqueue.copy(aggregates_on_host.sum_discount.get(),         aggregates_on_device.sum_discount.get(),         num_potential_groups * sizeof(sum_discount_t));
-        streams[0].enqueue.copy(aggregates_on_host.record_count.get(),         aggregates_on_device.record_count.get(),         num_potential_groups * sizeof(cardinality_t));
-
-        if (cpu_coprocessor) { cpu_coprocessor->wait(); }
-
-        streams[0].synchronize();
+        execute_query_1_once(
+            cuda_device, params, run_index, cpu_coprocessor, cardinality, streams,
+            aggregates_on_host, aggregates_on_device, stream_input_buffer_sets,
+            uncompressed, compressed);
 
         auto end = timer::now();
 
@@ -828,5 +846,4 @@ int main(int argc, char** argv) {
         }
     }
     cuda::profiling::stop();
-    results_file.close();
 }

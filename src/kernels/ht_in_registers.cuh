@@ -43,7 +43,7 @@ void in_registers_ht_tpchQ01(
         active_lanes_per_warp = num_potential_groups * tables_per_warp,
     };
 
-    auto lane_index = blockIdx.x % warp_size;
+    auto lane_index = threadIdx.x % warp_size;
     auto warp_index = threadIdx.x / warp_size;
 
     if (lane_index >= active_lanes_per_warp) { return; }
@@ -136,7 +136,7 @@ void in_registers_ht_tpchQ01_compressed(
         active_lanes_per_warp = num_potential_groups * tables_per_warp,
     };
 
-    auto lane_index = blockIdx.x % warp_size;
+    auto lane_index = threadIdx.x % warp_size;
     auto warp_index = threadIdx.x / warp_size;
 
     if (lane_index >= active_lanes_per_warp) { return; }
@@ -229,7 +229,7 @@ void in_registers_ht_tpchQ01_filter_pushdown_compressed(
         active_lanes_per_warp = num_potential_groups * tables_per_warp,
     };
 
-    auto lane_index = blockIdx.x % warp_size;
+    auto lane_index = threadIdx.x % warp_size;
     auto warp_index = threadIdx.x / warp_size;
 
     if (lane_index >= active_lanes_per_warp) { return; }

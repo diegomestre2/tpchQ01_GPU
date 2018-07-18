@@ -95,7 +95,7 @@ void print_help(int argc, char** argv) {
     fprintf(stderr, "   --apply-compression\n");
     fprintf(stderr, "   --print-results\n");
     fprintf(stderr, "   --use-filter-pushdown\n");
-    fprintf(stderr, "   --use-coprocessing (currently ignored)\n");
+    fprintf(stderr, "   --use-coprocessing\n");
     fprintf(stderr, "   --hash-table-placement=[default:in-registers-per-thread]\n"
                     "     (one of: in-registers, in-registers-per-thread, local-mem, per-thread-shared-mem, global))\n");
     fprintf(stderr, "   --runs=[default:%u] (number, e.g. 1 - 100)\n", (unsigned) defaults::num_query_execution_runs);

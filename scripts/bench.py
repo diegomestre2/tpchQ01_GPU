@@ -22,18 +22,22 @@ options = [
 	"--hash-table-placement=in-registers",
 	"--hash-table-placement=in-registers-per-thread",
 	"--hash-table-placement=global",
+	"--hash-table-placement=per-thread-shared-mem",
 	"--hash-table-placement=local-mem --apply-compression",
 	"--hash-table-placement=in-registers --apply-compression",
 	"--hash-table-placement=in-registers-per-thread --apply-compression",
 	"--hash-table-placement=global --apply-compression",
+	"--hash-table-placement=per-thread-shared-mem --apply-compression",
 	"--hash-table-placement=local-mem --apply-compression --use-coprocessing",
 	"--hash-table-placement=in-registers --apply-compression --use-coprocessing",
 	"--hash-table-placement=in-registers-per-thread --apply-compression --use-coprocessing",
 	"--hash-table-placement=global --apply-compression --use-coprocessing",
+	"--hash-table-placement=per-thread-shared-mem --apply-compression --use-coprocessing",
 	"--hash-table-placement=local-mem --apply-compression --use-filter-pushdown",
 	"--hash-table-placement=in-registers --apply-compression --use-filter-pushdown",
 	"--hash-table-placement=in-registers-per-thread --apply-compression --use-filter-pushdown",
 	"--hash-table-placement=global --apply-compression --use-filter-pushdown",
+	"--hash-table-placement=per-thread-shared-mem --apply-compression --use-filter-pushdown",
 ]
 
 def syscall(cmd):

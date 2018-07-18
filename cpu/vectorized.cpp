@@ -3,7 +3,7 @@
 #ifdef __AVX512F__
 #define HAND_OPT_CODE false
 #else
-#define HAND_OPT_CODE true
+#define HAND_OPT_CODE false
 #endif
 
 int
@@ -821,7 +821,7 @@ int Primitives::par_ordaggr_quantity(AggrHashTable* RESTRICT aggr0, idx_t* RESTR
 	return ordaggr_int16_t_sum(pos, lim, grp, num_groups, quantity,
 		[&] (auto group_idx, int64_t val) {
 			auto g = grp[group_idx];
-			aggrs0[g].sum_quantity += val;
+			aggr0[g].sum_quantity += val;
 		}
 	);
 #else
@@ -835,7 +835,7 @@ int Primitives::par_ordaggr_extended_price(AggrHashTable* RESTRICT aggr0, idx_t*
 	return ordaggr_int32_t_sum(pos, lim, grp, num_groups, price,
 		[&] (auto group_idx, int64_t val) {
 			auto g = grp[group_idx];
-			aggrs0[g].sum_base_price += val;
+			aggr0[g].sum_base_price += val;
 		}
 	);
 #else
@@ -849,7 +849,7 @@ int Primitives::par_ordaggr_disc_price(AggrHashTable* RESTRICT aggr0, idx_t* RES
 	return ordaggr_int32_t_sum64(pos, lim, grp, num_groups, v_disc_price,
 		[&] (auto group_idx, int64_t val) {
 			auto g = grp[group_idx];
-			aggrs0[g].sum_disc_price = int128_add64(aggrs0[g].sum_disc_price, val);
+			aggr0[g].sum_disc_price = int128_add64(aggr0[g].sum_disc_price, val);
 		}
 	);
 #else
@@ -863,7 +863,7 @@ int Primitives::par_ordaggr_charge(AggrHashTable* RESTRICT aggr0, idx_t* RESTRIC
 	return ordaggr_int64_t_sum(pos, lim, grp, num_groups, v_charge,
 		[&] (auto group_idx, int64_t val) {
 			auto g = grp[group_idx];
-			aggrs0[g].sum_charge = int128_add64(aggrs0[g].sum_charge, val);
+			aggr0[g].sum_charge = int128_add64(aggr0[g].sum_charge, val);
 		}
 	);
 #else
@@ -877,7 +877,7 @@ int Primitives::par_ordaggr_disc(AggrHashTable* RESTRICT aggr0, idx_t* RESTRICT 
 	return ordaggr_int8_t_sum(pos, lim, grp, num_groups, v_disc_1,
 		[&] (auto group_idx, int64_t val) {
 			auto g = grp[group_idx];
-			aggrs0[g].sum_disc += val;
+			aggr0[g].sum_disc += val;
 		}
 	);
 #else

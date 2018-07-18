@@ -167,7 +167,7 @@ struct AVX512 : public BaseKernel {
 			};
 
 
-			auto aggregate = [cnt_aggr64, sum_aggr64, sum_aggr128_64] (const auto& idx, const auto& msk, const auto& quant, const auto& price, const auto& disc,
+			auto aggregate = [this,cnt_aggr64, sum_aggr64, sum_aggr128_64] (const auto& idx, const auto& msk, const auto& quant, const auto& price, const auto& disc,
 					const auto& disc_price, const auto& charge) {
 				cnt_aggr64(idx, (int64_t*)&aggr_avx0_count, msk);
 				sum_aggr64(idx, (int64_t*)&aggr_avx0_sum_quantity, msk, quant);

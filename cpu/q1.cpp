@@ -11,7 +11,8 @@
 #include "kernel_hyper_compact.hpp"
 #include "kernel_x100.hpp"
 #include "kernel_x100_old.hpp"
-#include "kernel_avx512.hpp"
+// Commented-out per Tim's suggests 2018-07-18
+// #include "kernel_avx512.hpp"
 
 #include <tuple>
 

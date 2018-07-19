@@ -214,6 +214,9 @@ int main(int argc, const char** argv) {
 
 	run<Morsel<KernelX100<kMagic, true>, true>>(li, "$\\text{Full system Morsel X100 Compact NSM In-Reg}$");
 	run<Morsel<KernelX100<kMagic, true>, false>>(li, "$\\text{One socket Morsel X100 Compact NSM In-Reg}$");
+
+	run<Morsel<KernelX100<kMagic, true, kPopulationCount>, true>>(li, "$\\text{AVX512 opt, Full system Morsel X100 Compact NSM In-Reg}$");
+	run<Morsel<KernelX100<kMagic, true, kPopulationCount>, false>>(li, "$\\text{AVX512 opt, One socket Morsel X100 Compact NSM In-Reg}$");
 	
 
 	//run<Morsel<KernelNaiveCompact>>(li, "$\\text{HyPer Compact NoOverflow}$");

@@ -11,7 +11,13 @@ size_t morsel_size = 10*1024;
 
 // Wrapper like Eminem
 struct CPUKernel {
-	Morsel<KernelX100<kMagic, true>> m;
+	Morsel<KernelX100<kMagic, true
+#ifdef __AVX512F__
+	kPopulationCount
+#else
+	kNoAvx512
+#endif
+	>> m;
 
 	CPUKernel(const lineitem& li, bool wo_core0) : m(li, wo_core0) {
 	}

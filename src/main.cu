@@ -36,6 +36,8 @@ using std::endl;
 using std::flush;
 using std::string;
 
+static CoProc* cpu_coprocessor = nullptr;
+
 inline void assert_always(bool a) {
     assert(a);
     if (!a) {
@@ -142,17 +144,22 @@ void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
         if (true) { // (aggregates_on_host.record_count[group] > 0) {
             char rf = decode_return_flag(group >> line_status_bits);
             char ls = decode_line_status(group & 0b1);
+            int idx;
+
             if (rf == 'A' and ls == 'F') {
+                idx = 393;
                 if (cardinality == 6001215) {
                     assert(aggregates_on_host.sum_quantity[group] == 3773410700);
                     assert(aggregates_on_host.record_count[group] == 1478493);
                 }
             } else if (rf == 'N' and ls == 'F') {
+                idx = 406;
                 if (cardinality == 6001215) {
                     assert(aggregates_on_host.sum_quantity[group] == 99141700);
                     assert(aggregates_on_host.record_count[group] == 38854);
                 }
             } else if (rf == 'N' and ls == 'O') {
+                idx = 415;
                 rf = 'N';
                 ls = 'O';
                 if (cardinality == 6001215) {
@@ -160,12 +167,29 @@ void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
                     assert(aggregates_on_host.record_count[group] == 2920374);
                 }
             } else if (rf == 'R' and ls == 'F') {
+                idx = 410;
                 if (cardinality == 6001215) {
                     assert(aggregates_on_host.sum_quantity[group]== 3771975300);
                     assert(aggregates_on_host.record_count[group]== 1478870);
                 }
+            } else {
+                continue;
             }
 
+            if (cpu_coprocessor) {
+                auto t = &cpu_coprocessor->table[idx];
+                auto& a = aggregates_on_host;
+
+                a.sum_quantity[group] += t->sum_quantity;
+                a.record_count[group] += t->count;
+                
+                a.sum_base_price[group] += t->sum_base_price;
+                a.sum_discounted_price[group] += t->sum_disc_price;
+
+                a.sum_charge[group] += t->sum_charge;
+                a.sum_discount[group] += t->sum_disc;
+            }
+                
             printf("| # %c | %c ", rf, ls);
             print_dec(" | ",  aggregates_on_host.sum_quantity.get()[group]);
             print_dec(" | ",  aggregates_on_host.sum_base_price.get()[group]);
@@ -349,7 +373,7 @@ void precompute_filter_for_table_chunk(
         bit_container_t bit_container { 0 };
         for(int j = 0; j + end_offset_in_full_containers < end_offset; j++) {
             auto evaluated_where_clause =
-                compressed_ship_date[end_offset_in_full_containers+j] < compressed_threshold_ship_date;
+                compressed_ship_date[end_offset_in_full_containers+j] <= compressed_threshold_ship_date;
             bit_container |= bit_container_t{evaluated_where_clause} << j;
         }
         precomputed_filter[end_offset / bits_per_container] = bit_container;
@@ -476,7 +500,6 @@ void execute_query_1_once(
     cuda::device_t<>                              cuda_device,
     const q1_params_t&              __restrict__  params,
     int                                           run_index,
-    CoProc*                         __restrict__  cpu_coprocessor,
     cardinality_t                                 cardinality,
     std::vector<cuda::stream_t<>>&  __restrict__  streams,
     host_aggregates_t&              __restrict__  aggregates_on_host,
@@ -497,10 +520,18 @@ void execute_query_1_once(
          // TODO:
          // - Double-check the choice of alignment here
          // - The parameters here are weird
-         auto cpu_start_offset = cardinality - cardinality / 20;
+         auto cpu_start_offset = cardinality - cardinality / 2;
          cpu_start_offset = cpu_start_offset - cpu_start_offset % params.num_tuples_per_kernel_launch;
          auto num_records_for_cpu_to_process = cardinality - cpu_start_offset;
-         (*cpu_coprocessor)(cpu_start_offset, num_records_for_cpu_to_process);
+
+         precomp_filter = compressed.precomputed_filter.get();
+         compr_shipdate = compressed.ship_date.get();
+
+         if (params.use_filter_pushdown)
+            (*cpu_coprocessor)(0, cardinality, cpu_start_offset);
+        else
+            (*cpu_coprocessor)(cpu_start_offset, num_records_for_cpu_to_process, 0);
+
          gpu_end_offset = cpu_start_offset;
     }
 
@@ -520,12 +551,24 @@ void execute_query_1_once(
     }
 
     auto stream_index = 0;
-    for (size_t offset_in_table = 0;
-         offset_in_table < gpu_end_offset;
-         offset_in_table += params.num_tuples_per_kernel_launch,
+    for (size_t offset_in_table2 = 0;
+         offset_in_table2 < gpu_end_offset;
+         offset_in_table2 += params.num_tuples_per_kernel_launch,
          stream_index = (stream_index+1) % params.num_gpu_streams)
     {
-        auto num_tuples_for_this_launch = std::min<cardinality_t>(params.num_tuples_per_kernel_launch, gpu_end_offset - offset_in_table);
+        size_t offset_in_table;
+        cardinality_t num_tuples_for_this_launch;
+        if (params.use_filter_pushdown) {
+            FilterChunk chunk;
+            precomp_filter_queue.wait_dequeue(chunk);
+
+            offset_in_table = chunk.offset;
+            num_tuples_for_this_launch = chunk.num;
+        } else {
+            offset_in_table = offset_in_table2;
+            num_tuples_for_this_launch = std::min<cardinality_t>(params.num_tuples_per_kernel_launch, gpu_end_offset - offset_in_table);
+        }
+        
         auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, return_flag_values_per_container);
         auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, line_status_values_per_container);
 
@@ -534,13 +577,15 @@ void execute_query_1_once(
 
         if (params.apply_compression) {
             auto& stream_input_buffer_set = stream_input_buffer_sets.compressed[stream_index];
-            if (params.use_filter_pushdown) {
+#if 0
+            if (false && params.use_filter_pushdown) {
                 cuda::profiling::scoped_range_marker("On-CPU filtering");
                 precompute_filter_for_table_chunk(
                     compressed.ship_date.get() + offset_in_table,
                     compressed.precomputed_filter.get() + offset_in_table / bits_per_container,
                     num_tuples_for_this_launch);
             }
+#endif
             stream.enqueue.copy(stream_input_buffer_set.discount.get()      , compressed.discount.get()       + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::discount_t));
             stream.enqueue.copy(stream_input_buffer_set.extended_price.get(), compressed.extended_price.get() + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::extended_price_t));
             stream.enqueue.copy(stream_input_buffer_set.tax.get()           , compressed.tax.get()            + offset_in_table, num_tuples_for_this_launch * sizeof(compressed::tax_t));
@@ -680,6 +725,7 @@ int main(int argc, char** argv) {
     make_sure_we_are_on_cpu_core_0();
 
     auto params = parse_command_line(argc, argv);
+    morsel_size = params.num_tuples_per_kernel_launch;
 
     lineitem li((size_t)(max_line_items_per_sf * std::max(params.scale_factor, 1.0)));
         // Note: lineitem should really not need this cap, it should just adjust
@@ -687,7 +733,7 @@ int main(int argc, char** argv) {
         // the file size
     auto cardinality = load_table_columns_from_files(params, li);
 
-    CoProc* cpu_coprocessor = params.use_coprocessing ?  new CoProc(li, true) : nullptr;
+    cpu_coprocessor = params.use_coprocessing ?  new CoProc(li, true) : nullptr;
 
     input_buffer_set<cuda::memory::host::unique_ptr, is_compressed> compressed {
         cuda::memory::host::make_unique< compressed::ship_date_t[]      >(cardinality),
@@ -827,7 +873,7 @@ int main(int argc, char** argv) {
         cout << "Executing TPC-H Query 1, run " << run_index + 1 << " of " << params.num_query_execution_runs << "... " << flush;
         auto start = timer::now();
         execute_query_1_once(
-            cuda_device, params, run_index, cpu_coprocessor, cardinality, streams,
+            cuda_device, params, run_index, cardinality, streams,
             aggregates_on_host, aggregates_on_device, stream_input_buffer_sets,
             uncompressed, compressed);
 

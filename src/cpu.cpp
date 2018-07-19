@@ -4,6 +4,11 @@
 #include "cpu/tpch_kit.hpp"
 #include "cpu/kernel_x100.hpp"
 
+uint32_t* precomp_filter = nullptr;
+uint16_t* compr_shipdate = nullptr;
+moodycamel::BlockingConcurrentQueue<FilterChunk> precomp_filter_queue;
+size_t morsel_size = 10*1024;
+
 // Wrapper like Eminem
 struct CPUKernel {
 	Morsel<KernelX100<kMagic, true>> m;
@@ -11,7 +16,7 @@ struct CPUKernel {
 	CPUKernel(const lineitem& li, bool wo_core0) : m(li, wo_core0) {
 	}
 
-	void spawn(size_t offset, size_t num) { m.spawn(offset, num); }
+	void spawn(size_t offset, size_t num, size_t pushdown_cpu_start_offset) { m.spawn(offset, num, pushdown_cpu_start_offset); }
 
 	void wait(bool active) { m.wait(active); }
 };
@@ -29,9 +34,9 @@ CoProc::~CoProc()
 
 
 void
-CoProc::operator()(size_t offset, size_t num)
+CoProc::operator()(size_t offset, size_t num, size_t pushdown_cpu_start_offset)
 {
-	kernel->spawn(offset, num);
+	kernel->spawn(offset, num, pushdown_cpu_start_offset);
 }
 
 void

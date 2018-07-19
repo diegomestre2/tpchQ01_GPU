@@ -411,6 +411,14 @@ struct KernelX100 : BaseKernel {
 #include <condition_variable>
 #include <mutex>
 
+// without stupid typedefs
+void precompute_filter_for_table_chunk(
+    const uint16_t*  __restrict__  compressed_ship_date,
+    uint32_t*                __restrict__  precomputed_filter,
+    uint32_t                                 num_tuples);
+
+#include "../src/cpu.h"
+
 template<typename KERNEL, bool full_system = true>
 struct Morsel : BaseKernel {
 
@@ -425,6 +433,8 @@ struct Morsel : BaseKernel {
 	std::condition_variable cond_finished;
 	std::condition_variable cond_start;
 
+	size_t pushdown_cpu_start_offset;
+
 	enum Stage {
 		UNCLEAR = 0,
 		DONE,
@@ -434,9 +444,14 @@ struct Morsel : BaseKernel {
 
 	Stage stage;
 
-	const size_t morsel_size = 10*1024;
-
 	size_t size;
+
+	void FilterPushDownShit(size_t offset, size_t num) {
+		static_assert(sizeof(compr_shipdate[0] ) == sizeof(uint16_t), "Wrong type");
+		precompute_filter_for_table_chunk(compr_shipdate + offset, precomp_filter + offset / 32, num);
+
+		precomp_filter_queue.enqueue(FilterChunk { offset, num});
+	}
 
 	NOINL void Query(size_t id) {
 		assert(size > 0);
@@ -453,7 +468,12 @@ struct Morsel : BaseKernel {
 
 			assert(offset < li.l_extendedprice.cardinality);
 			assert(offset + num <= li.l_extendedprice.cardinality);
-			s.task(offset, num);
+
+			if (offset < pushdown_cpu_start_offset) {
+				FilterPushDownShit(offset, num);
+			} else {
+				s.task(offset, num);
+			}
 
 			if (morsel_completed++ >= num_morsels) {
 				std::unique_lock<std::mutex> lock(lock_query);
@@ -574,7 +594,8 @@ struct Morsel : BaseKernel {
 	void Profile(size_t total_tuples) override {
 	}
 
-	NOINL void spawn(size_t offset, size_t num) {
+	NOINL void spawn(size_t offset, size_t num, size_t pushdown_cpu_start_offset) {
+		this->pushdown_cpu_start_offset = pushdown_cpu_start_offset;
 		size = offset + num;
 		assert(size <= li.l_extendedprice.cardinality);
 		// start threads
@@ -607,7 +628,7 @@ struct Morsel : BaseKernel {
 	}
 
 	NOINL void task(size_t offset, size_t num) {
-		spawn(offset, num);
+		spawn(offset, num, 0);
 
 		wait();
 	}

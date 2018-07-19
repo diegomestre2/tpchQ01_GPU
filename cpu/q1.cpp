@@ -16,7 +16,22 @@
 
 #include <tuple>
 
+size_t morsel_size = 10*1024;
+
 #define PRINT_RESULTS
+
+uint32_t* precomp_filter = nullptr;
+uint16_t* compr_shipdate = nullptr;
+moodycamel::BlockingConcurrentQueue<FilterChunk> precomp_filter_queue;
+
+void precompute_filter_for_table_chunk(
+    const uint16_t*  __restrict__  compressed_ship_date,
+    uint32_t*                __restrict__  precomputed_filter,
+    uint32_t                                 num_tuples)
+{
+	throw std::bad_alloc();
+}
+
 
 static const size_t REP_COUNT = 25;
 

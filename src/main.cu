@@ -81,6 +81,7 @@ void print_help(int argc, char** argv) {
                     "     (one of: in-registers, in-registers-per-thread, local-mem, per-thread-shared-mem, global))\n");
     fprintf(stderr, "   --runs=[default:%u] (number, e.g. 1 - 100)\n", (unsigned) defaults::num_query_execution_runs);
     fprintf(stderr, "   --sf=[default:%f] (number, e.g. 0.01 - 100)\n", defaults::scale_factor);
+    fprintf(stderr, "   --cpu-fraction=[default:%f] (number, e.g. 0.5 - 100)\n", defaults::cpu_coprocessing_fraction);
     fprintf(stderr, "   --streams=[default:%u] (number, e.g. 1 - 64)\n", defaults::num_gpu_streams);
     fprintf(stderr, "   --threads-per-block=[default:%u] (number, e.g. 32 - 1024)\n", defaults::num_threads_per_block);
     fprintf(stderr, "   --tuples-per-thread=[default:%u] (number, e.g. 1 - 1048576)\n", defaults::num_tuples_per_thread);
@@ -227,6 +228,10 @@ struct q1_params_t {
     int num_query_execution_runs         { defaults::num_query_execution_runs };
 
     bool use_coprocessing                { false };
+
+    // The fraction of the total table (i.e. total number of tuples) which the CPU, rather than
+    // the GPU, will undertake to process; this ignores any filter precomputation work.
+    double cpu_processing_fraction       { defaults::cpu_coprocessing_fraction };
     bool user_set_num_threads_per_block  { false };
 };
 
@@ -278,9 +283,25 @@ q1_params_t parse_command_line(int argc, char** argv)
             } else if (arg_name == "tuples-per-kernel-launch") {
                 params.num_tuples_per_kernel_launch = std::stoi(arg_value);
             } else if (arg_name == "runs") {
-                params.num_query_execution_runs = std::stoi(arg_value);
-                if (params.num_query_execution_runs <= 0) {
-                    cerr << "Number of runs must be positive" << endl;
+                try {
+                    params.num_query_execution_runs = std::stoi(arg_value);
+                    if (params.num_query_execution_runs <= 0) {
+                        cerr << "Number of runs must be positive" << endl;
+                        exit(EXIT_FAILURE);
+                    }
+                } catch(std::invalid_argument) {
+                    cerr << "Cannot parse the number of runs passed after --runs=" << endl;
+                    exit(EXIT_FAILURE);
+                }
+            } else if (arg_name == "cpu-fraction") {
+                try {
+                    params.cpu_processing_fraction = std::stod(arg_value);
+                    if (params.cpu_processing_fraction < 0 or params.cpu_processing_fraction > 1.0) {
+                        cerr << "The fraction of aggregation work be performed by the CPU must be in the range 0.0 - 1.0" << endl;
+                        exit(EXIT_FAILURE);
+                    }
+                } catch(std::invalid_argument) {
+                    cerr << "Cannot parse the fraction passed after --cpu-fraction=" << endl;
                     exit(EXIT_FAILURE);
                 }
             } else {
@@ -294,11 +315,6 @@ q1_params_t parse_command_line(int argc, char** argv)
                 "invoke with \"--apply-compression\"." << endl;
         exit(EXIT_FAILURE);
     }
-    // if (params.use_filter_pushdown and not params.use_coprocessing) {
-    //     cerr << "Filter precomputation is only currently supported when also using the CPU to "
-    //             "process some of the data; invoke with \"--use-coprocessing\"." << endl;
-    //     exit(EXIT_FAILURE);
-    // }
     if (fixed_threads_per_block.find(params.kernel_variant) != fixed_threads_per_block.end()) {
         if (params.user_set_num_threads_per_block and
             (fixed_threads_per_block.at(params.kernel_variant) != params.num_threads_per_block)) {
@@ -467,26 +483,36 @@ void execute_query_1_once(
     }
     auto gpu_end_offset = cardinality;
     if (params.use_coprocessing || params.use_filter_pushdown) {
-         // Split the work between the CPU and the GPU at 50% each
-         // TODO:
-         // - Double-check the choice of alignment here
-         // - The parameters here are weird
-         auto cpu_start_offset = cardinality - cardinality / 2;
-         cpu_start_offset = cpu_start_offset - cpu_start_offset % params.num_tuples_per_kernel_launch;
+        cardinality_t cpu_start_offset = cardinality;
+        if (params.use_coprocessing) {
+            // Split the work between the CPU and the GPU; GPU part
+			// starts at the beginning, CPU part starts at some offset
+            cpu_start_offset -= cardinality * params.cpu_processing_fraction;
 
-         if (!params.use_coprocessing) {
+            // To allow
+            // for nice assumed alignment for the CPU-processed data,
+            // we only let the CPU start at full batch intervals
+            // (which is not theoretically necessary but simpler for us)
+            cpu_start_offset -= cpu_start_offset % params.num_tuples_per_kernel_launch;
+        }
+        else {
             cpu_start_offset = cardinality;
-         }
+        }
 
-         auto num_records_for_cpu_to_process = cardinality - cpu_start_offset;
+        auto num_records_for_cpu_to_process = cardinality - cpu_start_offset;
 
-         precomp_filter = compressed.precomputed_filter.get();
-         compr_shipdate = compressed.ship_date.get();
+        precomp_filter = compressed.precomputed_filter.get();
+        compr_shipdate = compressed.ship_date.get();
 
-         if (params.use_filter_pushdown)
+        if (params.use_filter_pushdown) {
+            // Process everything on the CPU, but don't aggregate anything before cpu_start_offset
             (*cpu_coprocessor)(0, cardinality, cpu_start_offset);
-        else
+        }
+        else {
+            // Process  num_records_for_cpu_to_process starting at cpu_start_offset,
+            // and don't precompute the filter for any part of the table
             (*cpu_coprocessor)(cpu_start_offset, num_records_for_cpu_to_process, 0);
+        }
 
          gpu_end_offset = cpu_start_offset;
     }
@@ -524,7 +550,7 @@ void execute_query_1_once(
             offset_in_table = offset_in_table2;
             num_tuples_for_this_launch = std::min<cardinality_t>(params.num_tuples_per_kernel_launch, gpu_end_offset - offset_in_table);
         }
-        
+
         auto num_return_flag_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, return_flag_values_per_container);
         auto num_line_status_bit_containers_for_this_launch = div_rounding_up(num_tuples_for_this_launch, line_status_values_per_container);
 

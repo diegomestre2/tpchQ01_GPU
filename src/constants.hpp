@@ -7,18 +7,20 @@
 namespace defaults {
 
 enum {
-    num_threads_per_block            = 256,
-    num_tuples_per_thread            = 1024,
-    num_gpu_streams                  = 4,   // And 2 might just be enough actually
-    num_tuples_per_kernel_launch     = 1 << 20, // used for scheduling the kernel
-    should_print_results             = false,
-    apply_compression                = false,
+    num_threads_per_block             = 256,
+    num_tuples_per_thread             = 1024,
+    num_gpu_streams                   = 4,   // And 2 might just be enough actually
+    num_tuples_per_kernel_launch      = 1 << 20, // used for scheduling the kernel
+    should_print_results              = false,
+    apply_compression                 = false,
         // should be true really, but then we'd need a turn-off switch for no compression
-    num_query_execution_runs         = 5,
+    num_query_execution_runs          = 5,
 };
 
 constexpr const double scale_factor   = 1.0;
 constexpr const char kernel_variant[] = "in-registers-per-thread";
+constexpr const double cpu_coprocessing_fraction
+                                      = 0.5;
 
 static_assert(num_tuples_per_kernel_launch % num_threads_per_block == 0,
     "Please allot the same number of records to each thread");

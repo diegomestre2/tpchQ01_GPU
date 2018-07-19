@@ -339,11 +339,11 @@ q1_params_t parse_command_line(int argc, char** argv)
                 "invoke with \"--apply-compression\"." << endl;
         exit(EXIT_FAILURE);
     }
-    if (params.use_filter_pushdown and not params.use_coprocessing) {
-        cerr << "Filter precomputation is only currently supported when also using the CPU to "
-                "process some of the data; invoke with \"--use-coprocessing\"." << endl;
-        exit(EXIT_FAILURE);
-    }
+    // if (params.use_filter_pushdown and not params.use_coprocessing) {
+    //     cerr << "Filter precomputation is only currently supported when also using the CPU to "
+    //             "process some of the data; invoke with \"--use-coprocessing\"." << endl;
+    //     exit(EXIT_FAILURE);
+    // }
     if (fixed_threads_per_block.find(params.kernel_variant) != fixed_threads_per_block.end()) {
         if (params.user_set_num_threads_per_block and
             (fixed_threads_per_block.at(params.kernel_variant) != params.num_threads_per_block)) {
@@ -516,17 +516,22 @@ void execute_query_1_once(
                                     __restrict__  compressed // on host
 )
 {
-    if (params.use_coprocessing) {
+    if (params.use_coprocessing || params.use_filter_pushdown) {
          cpu_coprocessor->Clear();
     }
     auto gpu_end_offset = cardinality;
-    if (params.use_coprocessing) {
+    if (params.use_coprocessing || params.use_filter_pushdown) {
          // Split the work between the CPU and the GPU at 50% each
          // TODO:
          // - Double-check the choice of alignment here
          // - The parameters here are weird
          auto cpu_start_offset = cardinality - cardinality / 2;
          cpu_start_offset = cpu_start_offset - cpu_start_offset % params.num_tuples_per_kernel_launch;
+
+         if (!params.use_coprocessing) {
+            cpu_start_offset = cardinality;
+         }
+
          auto num_records_for_cpu_to_process = cardinality - cpu_start_offset;
 
          precomp_filter = compressed.precomputed_filter.get();
@@ -738,7 +743,7 @@ int main(int argc, char** argv) {
         // the file size
     auto cardinality = load_table_columns_from_files(params, li);
 
-    cpu_coprocessor = params.use_coprocessing ?  new CoProc(li, true) : nullptr;
+    cpu_coprocessor = (params.use_coprocessing || params.use_filter_pushdown) ?  new CoProc(li, true) : nullptr;
 
     input_buffer_set<cuda::memory::host::unique_ptr, is_compressed> compressed {
         cuda::memory::host::make_unique< compressed::ship_date_t[]      >(cardinality),

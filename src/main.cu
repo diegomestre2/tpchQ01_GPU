@@ -35,16 +35,9 @@ using std::cerr;
 using std::endl;
 using std::flush;
 using std::string;
+using cuda::warp_size;
 
 static CoProc* cpu_coprocessor = nullptr;
-
-inline void assert_always(bool a) {
-    assert(a);
-    if (!a) {
-        fprintf(stderr, "Assert always failed!");
-        exit(EXIT_FAILURE);
-    }
-}
 
 using timer = std::chrono::high_resolution_clock;
 
@@ -77,20 +70,6 @@ struct input_buffer_set<Ptr, is_not_compressed> {
 };
 
 
-// Note: This will force casts to int. It's not a problem
-// the way our code is written, but otherwise it needs to be generalized
-constexpr inline int div_rounding_up(const int& dividend, const int& divisor)
-{
-    // This is not the fastest implementation, but it's safe, in that there's never overflow
-#if __cplusplus >= 201402L
-    std::div_t div_result = std::div(dividend, divisor);
-    return div_result.quot + !(!div_result.rem);
-#else
-    // Hopefully the compiler will optimize the two calls away.
-    return std::div(dividend, divisor).quot + !(!std::div(dividend, divisor).rem);
-#endif
-}
-
 void print_help(int argc, char** argv) {
     fprintf(stderr, "Unrecognized command line option.\n");
     fprintf(stderr, "Usage: %s [args]\n", argv[0]);
@@ -106,30 +85,6 @@ void print_help(int argc, char** argv) {
     fprintf(stderr, "   --threads-per-block=[default:%u] (number, e.g. 32 - 1024)\n", defaults::num_threads_per_block);
     fprintf(stderr, "   --tuples-per-thread=[default:%u] (number, e.g. 1 - 1048576)\n", defaults::num_tuples_per_thread);
     fprintf(stderr, "   --tuples-per-kernel=[default:%u] (number, e.g. 64 - 4194304)\n", defaults::num_tuples_per_kernel_launch);
-}
-
-template <typename F, typename... Args>
-void for_each_argument(F f, Args&&... args) {
-    [](...){}((f(std::forward<Args>(args)), 0)...);
-}
-
-void make_sure_we_are_on_cpu_core_0()
-{
-#if 0
-    // CPU affinities are devil's work
-    // Make sure we are on core 0
-    // TODO: Why not in a function?
-    cpu_set_t cpuset; 
-
-    CPU_ZERO(&cpuset);
-    CPU_SET(0, &cpuset);
-    sched_setaffinity(0, sizeof(cpuset), &cpuset);
-#endif
-}
-
-std::pair<string,string> split_once(string delimited, char delimiter) {
-    auto pos = delimited.find_first_of(delimiter);
-    return { delimited.substr(0, pos), delimited.substr(pos+1) };
 }
 
 template <typename T>
@@ -471,15 +426,6 @@ cardinality_t load_table_columns_from_files(
     }
     return cardinality;
 }
-
-// Would be nice to avoid actually declaring the following 3 types and just using plane aggregates
-
-template <typename T>
-using plugged_unique_ptr = std::unique_ptr<T>;
-
-template <typename T>
-using plain_ptr = std::conditional_t<std::is_array<T>::value, std::decay_t<T>, std::decay_t<T>*>;
-
 
 // Note: This should be a variant
 struct stream_input_buffer_sets {

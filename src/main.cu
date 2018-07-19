@@ -892,11 +892,11 @@ int main(int argc, char** argv) {
         std::chrono::duration<double> duration(end - start);
         cout << "done." << endl;
         results_file << duration.count() << '\n';
-        if (cpu_coprocessor) { 
-            assert_always(cpu_coprocessor->numExtantGroups() == 4);
-                // Actually, for scale factors under, say, 0.001, this
-                // may realistically end up being 3 instead of 4
-        }
+        // if (cpu_coprocessor) { 
+        //     assert_always(cpu_coprocessor->numExtantGroups() == 4);
+        //         // Actually, for scale factors under, say, 0.001, this
+        //         // may realistically end up being 3 instead of 4
+        // }
         if (params.should_print_results) {
             print_results(aggregates_on_host, cardinality);
         }

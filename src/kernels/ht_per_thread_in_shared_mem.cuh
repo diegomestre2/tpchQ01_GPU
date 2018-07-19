@@ -40,7 +40,7 @@ void thread_in_shared_mem_ht_tpchQ01(
     __shared__ sum_discount_t         sums_of_discount         [num_potential_groups * NumThreadsPerBlock];
     __shared__ cardinality_t          record_counts            [num_potential_groups * NumThreadsPerBlock];
         // The layout of each of these arrays is such, that all of a warp's data within is located
-        // in two shared memory banks (for 64-bit data) or one back (for 32-bit data). This can
+        // in two shared memory banks (for 64-bit data) or one bank (for 32-bit data). This can
         // be possibly improved by splitting the 64-bit values into pairs of 32-bit values for
         // writing, but: 1. I don't have the time right now. 2. Not sure how much of a benefit
         // this will be.

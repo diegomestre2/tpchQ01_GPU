@@ -336,7 +336,12 @@ q1_params_t parse_command_line(int argc, char** argv)
     }
     if (params.use_filter_pushdown and not params.apply_compression) {
         cerr << "Filter precomputation is only currently supported when compression is applied; "
-                "use \"--apply-compression\"." << endl;
+                "invoke with \"--apply-compression\"." << endl;
+        exit(EXIT_FAILURE);
+    }
+    if (params.use_filter_pushdown and not params.use_coprocessing) {
+        cerr << "Filter precomputation is only currently supported when also using the CPU to "
+                "process some of the data; invoke with \"--use-coprocessing\"." << endl;
         exit(EXIT_FAILURE);
     }
     if (fixed_threads_per_block.find(params.kernel_variant) != fixed_threads_per_block.end()) {

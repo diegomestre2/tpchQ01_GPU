@@ -3583,7 +3583,8 @@ namespace moodycamel {
 		: itemsConsumedFromCurrent(0), currentProducer(nullptr), desiredProducer(nullptr)
 	{
 		initialOffset = queue.nextExplicitConsumerId.fetch_add(1, std::memory_order_release);
-		lastKnownGlobalOffset = -1;
+		lastKnownGlobalOffset = details::const_numeric_max<decltype(lastKnownGlobalOffset)>::value;
+			// not assigning -1 to avoid compiler warning
 	}
 
 	template<typename T, typename Traits>
@@ -3591,7 +3592,8 @@ namespace moodycamel {
 		: itemsConsumedFromCurrent(0), currentProducer(nullptr), desiredProducer(nullptr)
 	{
 		initialOffset = reinterpret_cast<ConcurrentQueue<T, Traits>*>(&queue)->nextExplicitConsumerId.fetch_add(1, std::memory_order_release);
-		lastKnownGlobalOffset = -1;
+		lastKnownGlobalOffset = details::const_numeric_max<decltype(lastKnownGlobalOffset)>::value;
+			// not assigning -1 to avoid compiler warning
 	}
 
 	template<typename T, typename Traits>

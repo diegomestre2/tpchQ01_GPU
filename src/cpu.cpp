@@ -11,7 +11,7 @@ size_t morsel_size = 10*1024;
 
 // Wrapper like Eminem
 struct CPUKernel {
-	Morsel<KernelX100<kMagic, true
+	Morsel<KernelX100<kMagic, true,
 #ifdef __AVX512F__
 	kPopulationCount
 #else

@@ -10,7 +10,7 @@ enum {
     num_threads_per_block             = 256,
     num_tuples_per_thread             = 1024,
     num_gpu_streams                   = 4,   // And 2 might just be enough actually
-    num_tuples_per_kernel_launch      = 1 << 20, // used for scheduling the kernel
+    num_tuples_per_kernel_launch      = 1 << 21, // used for scheduling the kernel
     should_print_results              = false,
     apply_compression                 = false,
         // should be true really, but then we'd need a turn-off switch for no compression

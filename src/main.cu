@@ -85,7 +85,7 @@ void print_help(int argc, char** argv) {
     fprintf(stderr, "   --streams=[default:%u] (number, e.g. 1 - 64)\n", defaults::num_gpu_streams);
     fprintf(stderr, "   --threads-per-block=[default:%u] (number, e.g. 32 - 1024)\n", defaults::num_threads_per_block);
     fprintf(stderr, "   --tuples-per-thread=[default:%u] (number, e.g. 1 - 1048576)\n", defaults::num_tuples_per_thread);
-    fprintf(stderr, "   --tuples-per-kernel=[default:%u] (number, e.g. 64 - 4194304)\n", defaults::num_tuples_per_kernel_launch);
+    fprintf(stderr, "   --tuples-per-kernel-launch=[default:%u] (number, e.g. 64 - 4194304)\n", defaults::num_tuples_per_kernel_launch);
 }
 
 template <typename T>

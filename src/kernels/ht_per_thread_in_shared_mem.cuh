@@ -9,11 +9,18 @@
 namespace cuda {
 
 enum {
-    max_threads_per_block_for_per_thread_shared_mem = 128,
-    threads_per_block_for_in_registers_hash_table   = 256, // maybe go all the way up to 1024?
+    size_of_set_of_hash_tables =
+        (sizeof(sum_quantity_t) + sizeof(sum_base_price_t) + sizeof(sum_discounted_price_t) +
+        sizeof(sum_charge_t) + sizeof(sum_discount_t) + sizeof (cardinality_t)) * num_potential_groups,
+    assumed_shared_memory_size = (48 * 1024),
+    non_full_warp_size_max_threads_per_block_for_per_thread_shared_mem =
+            assumed_shared_memory_size / size_of_set_of_hash_tables,
+    max_threads_per_block_for_per_thread_shared_mem =
+            non_full_warp_size_max_threads_per_block_for_per_thread_shared_mem -
+            non_full_warp_size_max_threads_per_block_for_per_thread_shared_mem % warp_size,
 };
 
-template <unsigned NumThreadsPerBlock = max_threads_per_block_for_per_thread_shared_mem>
+template <unsigned MaxNumThreadsPerBlock = max_threads_per_block_for_per_thread_shared_mem>
     // this must be a nice number w.r.t. the number of shared memory banks, and not too high, otherwise
     // NVCC will complain about too much shared memory use!
 __global__
@@ -33,12 +40,12 @@ void thread_in_shared_mem_ht_tpchQ01(
     const line_status_t*     __restrict__ line_status,
     cardinality_t                         num_tuples)
 {
-    __shared__ sum_quantity_t         sums_of_quantity         [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_base_price_t       sums_of_base_price       [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_discounted_price_t sums_of_discounted_price [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_charge_t           sums_of_charge           [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_discount_t         sums_of_discount         [num_potential_groups * NumThreadsPerBlock];
-    __shared__ cardinality_t          record_counts            [num_potential_groups * NumThreadsPerBlock];
+    __shared__ sum_quantity_t         sums_of_quantity         [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_base_price_t       sums_of_base_price       [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_discounted_price_t sums_of_discounted_price [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_charge_t           sums_of_charge           [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_discount_t         sums_of_discount         [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ cardinality_t          record_counts            [num_potential_groups * MaxNumThreadsPerBlock];
         // The layout of each of these arrays is such, that all of a warp's data within is located
         // in two shared memory banks (for 64-bit data) or one bank (for 32-bit data). This can
         // be possibly improved by splitting the 64-bit values into pairs of 32-bit values for
@@ -110,7 +117,7 @@ void thread_in_shared_mem_ht_tpchQ01(
     }
 }
 
-template <unsigned NumThreadsPerBlock = max_threads_per_block_for_per_thread_shared_mem>
+template <unsigned MaxNumThreadsPerBlock = max_threads_per_block_for_per_thread_shared_mem>
     // this must be a nice number w.r.t. the number of shared memory banks, and not too high, otherwise
     // NVCC will complain about too much shared memory use!
 __global__
@@ -130,12 +137,12 @@ void thread_in_shared_mem_ht_tpchQ01_compressed(
     const bit_container_t*               __restrict__ line_status,
     cardinality_t                                     num_tuples)
 {
-    __shared__ sum_quantity_t         sums_of_quantity         [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_base_price_t       sums_of_base_price       [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_discounted_price_t sums_of_discounted_price [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_charge_t           sums_of_charge           [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_discount_t         sums_of_discount         [num_potential_groups * NumThreadsPerBlock];
-    __shared__ cardinality_t          record_counts            [num_potential_groups * NumThreadsPerBlock];
+    __shared__ sum_quantity_t         sums_of_quantity         [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_base_price_t       sums_of_base_price       [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_discounted_price_t sums_of_discounted_price [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_charge_t           sums_of_charge           [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_discount_t         sums_of_discount         [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ cardinality_t          record_counts            [num_potential_groups * MaxNumThreadsPerBlock];
         // The layout of each of these arrays is such, that all of a warp's data within is located
         // in two shared memory banks (for 64-bit data) or one back (for 32-bit data). This can
         // be possibly improved by splitting the 64-bit values into pairs of 32-bit values for
@@ -206,7 +213,7 @@ void thread_in_shared_mem_ht_tpchQ01_compressed(
 
 }
 
-template <unsigned NumThreadsPerBlock = max_threads_per_block_for_per_thread_shared_mem>
+template <unsigned MaxNumThreadsPerBlock = max_threads_per_block_for_per_thread_shared_mem>
     // this must be a nice number w.r.t. the number of shared memory banks, and not too high, otherwise
     // NVCC will complain about too much shared memory use!
 __global__
@@ -227,12 +234,12 @@ void thread_in_shared_mem_ht_tpchQ01_pushdown_compressed(
     cardinality_t                                     num_tuples)
  
 {
-    __shared__ sum_quantity_t         sums_of_quantity         [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_base_price_t       sums_of_base_price       [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_discounted_price_t sums_of_discounted_price [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_charge_t           sums_of_charge           [num_potential_groups * NumThreadsPerBlock];
-    __shared__ sum_discount_t         sums_of_discount         [num_potential_groups * NumThreadsPerBlock];
-    __shared__ cardinality_t          record_counts            [num_potential_groups * NumThreadsPerBlock];
+    __shared__ sum_quantity_t         sums_of_quantity         [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_base_price_t       sums_of_base_price       [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_discounted_price_t sums_of_discounted_price [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_charge_t           sums_of_charge           [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ sum_discount_t         sums_of_discount         [num_potential_groups * MaxNumThreadsPerBlock];
+    __shared__ cardinality_t          record_counts            [num_potential_groups * MaxNumThreadsPerBlock];
         // The layout of each of these arrays is such, that all of a warp's data within is located
         // in two shared memory banks (for 64-bit data) or one back (for 32-bit data). This can
         // be possibly improved by splitting the 64-bit values into pairs of 32-bit values for

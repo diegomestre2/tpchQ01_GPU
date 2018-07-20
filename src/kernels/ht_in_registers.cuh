@@ -22,6 +22,11 @@
 
 namespace cuda {
 
+enum {
+    threads_per_block_for_in_registers_hash_table   = 256, // maybe go all the way up to 1024?
+};
+
+
 __global__
 void in_registers_ht_tpchQ01(
     sum_quantity_t*          __restrict__ sum_quantity,

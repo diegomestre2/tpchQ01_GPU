@@ -192,8 +192,11 @@ const std::unordered_map<string, cuda::device_function_t> kernels_filter_pushdow
 // Some kernel variants cannot support as many threads per block as the hardware allows generally,
 // and for these we use a fixed number for now
 const std::unordered_map<string, cuda::grid_block_dimension_t> fixed_threads_per_block = {
-    { "per-thread-shared-mem", cuda::max_threads_per_block_for_per_thread_shared_mem },
     { "in-registers",          cuda::threads_per_block_for_in_registers_hash_table },
+};
+
+const std::unordered_map<string, cuda::grid_block_dimension_t> max_threads_per_block = {
+    { "per-thread-shared-mem", cuda::max_threads_per_block_for_per_thread_shared_mem },
 };
 
 const std::unordered_map<string, unsigned> num_threads_to_handle_tuple = {
@@ -280,6 +283,11 @@ q1_params_t parse_command_line(int argc, char** argv)
             } else if (arg_name == "threads-per-block") {
                 params.num_threads_per_block = std::stoi(arg_value);
                 params.user_set_num_threads_per_block = true;
+                if (params.num_threads_per_block % cuda::warp_size != 0) {
+                    cerr << "All kernels only support numbers of threads per grid block "
+                         << "which are multiples of the warp size (" << cuda::warp_size << ")" << endl;
+                    exit(EXIT_FAILURE);
+                }
             } else if (arg_name == "tuples-per-kernel-launch") {
                 params.num_tuples_per_kernel_launch = std::stoi(arg_value);
             } else if (arg_name == "runs") {
@@ -316,13 +324,23 @@ q1_params_t parse_command_line(int argc, char** argv)
         exit(EXIT_FAILURE);
     }
     if (fixed_threads_per_block.find(params.kernel_variant) != fixed_threads_per_block.end()) {
-        if (params.user_set_num_threads_per_block and
-            (fixed_threads_per_block.at(params.kernel_variant) != params.num_threads_per_block)) {
+        auto required_num_thread_per_block = fixed_threads_per_block.at(params.kernel_variant);
+        if (params.user_set_num_threads_per_block and params.num_threads_per_block != required_num_thread_per_block) {
             throw std::invalid_argument("Invalid number of threads per block for kernel variant "
                 + params.kernel_variant + " (it must be "
-                + std::to_string(fixed_threads_per_block.at(params.kernel_variant)) + ")");
+                + std::to_string(required_num_thread_per_block) + ")");
         }
         params.num_threads_per_block = fixed_threads_per_block.at(params.kernel_variant);
+    }
+    else if (max_threads_per_block.find(params.kernel_variant) != max_threads_per_block.end()) {
+        auto max_threads_per_block_for_kernel_variant = max_threads_per_block.at(params.kernel_variant);
+        if (params.user_set_num_threads_per_block and
+            (max_threads_per_block_for_kernel_variant < params.num_threads_per_block)) {
+            throw std::invalid_argument("Number of threads per block set for kernel variant "
+                + params.kernel_variant + " exceeds the maximum possible value of "
+                + std::to_string(max_threads_per_block_for_kernel_variant));
+        }
+        params.num_threads_per_block = max_threads_per_block_for_kernel_variant;
     }
     return params;
 }

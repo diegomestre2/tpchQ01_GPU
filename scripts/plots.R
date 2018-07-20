@@ -66,7 +66,7 @@ threads_per_block = c(32, 64, 128, 256, 512, 1024)
 
 for(vals in values_per_thread) {
     for(threads in threads_per_block) {
-        data <- read.table(paste0("results/threads/results-vals", vals, "-threads", threads, ".csv"), header=F,  sep=",", stringsAsFactors=F, na.strings="-1")
+        data <- read.table(paste0("results/grid_params/results-vals", vals, "-threads", threads, ".csv"), header=F,  sep=",", stringsAsFactors=F, na.strings="-1")
         names(data) <- c("time")
         data$vals <- vals
         data$threads <- threads

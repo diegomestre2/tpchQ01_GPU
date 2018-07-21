@@ -9,6 +9,11 @@
 #include <iostream>
 #include <string>
 #include <cassert>
+#include <unistd.h>
+#include <sstream>
+#include <iomanip>
+#include <ctime>
+#include <chrono>
 
 void get_device_properties(){
     int32_t device_cnt = 0;
@@ -94,4 +99,22 @@ constexpr inline int div_rounding_up(const int& dividend, const int& divisor)
     // Hopefully the compiler will optimize the two calls away.
     return std::div(dividend, divisor).quot + !(!std::div(dividend, divisor).rem);
 #endif
+}
+
+std::string host_name()
+{
+    enum { max_len = 1023 };
+    char buffer[max_len + 1];
+    gethostname(buffer, max_len);
+    buffer[max_len] = '\0'; // to be on the safe side
+    return { buffer };
+}
+
+std::string timestamp()
+{
+    auto now = std::chrono::system_clock::now();
+    auto now_c = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&now_c), "%F %T");
+    return ss.str();
 }

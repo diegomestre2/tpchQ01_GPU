@@ -21,6 +21,7 @@
 #include <chrono>
 #include <unordered_map>
 #include <numeric>
+#include <sstream>
 
 #ifndef GPU
 #error The GPU preprocessor directive must be defined (ask Tim for the reason)
@@ -237,6 +238,19 @@ struct q1_params_t {
     double cpu_processing_fraction       { defaults::cpu_coprocessing_fraction };
     bool user_set_num_threads_per_block  { false };
 };
+
+inline std::ostream& operator<<(std::ostream& os, const q1_params_t& p)
+{
+    os << "SF = " << p.scale_factor << " | "
+       << "kernel = " << p.kernel_variant << " | "
+       << (p.use_filter_pushdown ? "filter precomp" : "") << " | "
+       << (p.apply_compression ? "compressed" : "uncompressed" ) << " | "
+       << "streams = " << p.num_gpu_streams << " | "
+       << "block size = " << p.num_threads_per_block << " | "
+       << "tuples per thread = " << p.num_tuples_per_thread << " | "
+       << "batch size " << p.num_tuples_per_kernel_launch;
+    return os;
+}
 
 q1_params_t parse_command_line(int argc, char** argv)
 {
@@ -504,7 +518,7 @@ void execute_query_1_once(
         cardinality_t cpu_start_offset = cardinality;
         if (params.use_coprocessing) {
             // Split the work between the CPU and the GPU; GPU part
-			// starts at the beginning, CPU part starts at some offset
+            // starts at the beginning, CPU part starts at some offset
             cpu_start_offset -= cardinality * params.cpu_processing_fraction;
 
             // To allow
@@ -868,6 +882,13 @@ int main(int argc, char** argv) {
     results_file.open("results.csv", std::ios::out);
 
     cuda::profiling::start();
+    std::stringstream ss;
+    ss 
+       << "Binary: " << argv[0] << " | "
+       << "Time: " << timestamp() << " | "
+       << "Hostname: " << host_name() << " | "
+       << "Parameters: " << params;
+    cuda::profiling::mark::point(ss.str());
 
     for(int run_index = 0; run_index < params.num_query_execution_runs; run_index++) {
         cout << "Executing TPC-H Query 1, run " << run_index + 1 << " of " << params.num_query_execution_runs << "... " << flush;

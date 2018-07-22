@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# The CSV output field names and units:
+#
+# Type, Time(%)   , Time  , Calls  , Average Time, Min Time, Max Time, Name
+#     , Percentage, msec  ,        , msec        , msec    , msec    , 
+#
+# Type  - mainly "GPU activities" or "API calls". The former includes memset'ing and memory copies (HtoD, DtoH etc.)
+# Calls - number of times a specific kernel or API call was invoked; different argument values count as invocations of the same kernel
+# Name  - Name of the kernel, API call or other activity. For CUDA kernels, the name is the full demangled signature
+
+binary_name="bin/tpch_01"
+
+nvprof_output=$(nvprof \
+	--concurrent-kernels off \
+	--profile-from-start off \
+	--system-profiling off \
+	--csv \
+	--normalized-time-unit ms \
+	${binary_name} \
+	"$@" \
+	2>&1 \
+	1>/dev/null || exit -1) 
+num_matches=$(echo "$nvprof_output" | grep "GPU activities.*tpch" | wc -l)
+if (( "$num_matches" == 1 )); then
+	echo "$nvprof_output" | grep "GPU activities.*tpch"
+	exit 0
+else
+	echo "$nvprof_output" 1>&2;
+	exit 1
+fi

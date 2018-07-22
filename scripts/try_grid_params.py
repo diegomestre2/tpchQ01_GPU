@@ -20,7 +20,7 @@ results_dir = "results"
 tuples_per_launch = [256*1024, 512*1024, 1024*1024, 2*1024*1024]
 tuples_per_thread = [32, 64, 128, 256, 512, 1024] # anything below 32 is probably kind of silly
 threads_per_block = [32, 64, 128, 160, 256, 512] # Note that some kernels do not supported the entire ranges, and need either many or not-too-many
-placements = ["per-thread-shared-mem", "local-mem", "in-registers", "in-registers-per-thread", "global"]
+placements = ["shared_mem_per_thread", "local_mem", "in_registers", "in_register_per_thread", "global"]
 
 options = [
 #	  apply compression  filter precomputation  use coprocessing
@@ -38,7 +38,7 @@ default_streams = 1 # we don't want kernels to overlap
 default_tuples_per_launch = 1 << 22
 default_tuples_per_thread = 128
 default_threads_per_block = 256
-default_placement = "local-mem"
+default_placement = "local_mem"
 default_num_runs = 1 # is this sufficient? I wonder... if you want to increase it, you may need to noramlize by the number of runs down the line
 
 # This next line is pretty fragile; if the binary changes even slightly, it won't work

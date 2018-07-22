@@ -24,7 +24,7 @@ template <unsigned MaxNumThreadsPerBlock = max_threads_per_block_for_per_thread_
     // this must be a nice number w.r.t. the number of shared memory banks, and not too high, otherwise
     // NVCC will complain about too much shared memory use!
 __global__
-void thread_in_shared_mem_ht_tpchQ01(
+void shared_mem_per_thread_ht_tpchQ01(
     sum_quantity_t*          __restrict__ sum_quantity,
     sum_base_price_t*        __restrict__ sum_base_price,
     sum_discounted_price_t*  __restrict__ sum_discounted_price,
@@ -121,7 +121,7 @@ template <unsigned MaxNumThreadsPerBlock = max_threads_per_block_for_per_thread_
     // this must be a nice number w.r.t. the number of shared memory banks, and not too high, otherwise
     // NVCC will complain about too much shared memory use!
 __global__
-void thread_in_shared_mem_ht_tpchQ01_compressed(
+void shared_mem_per_thread_ht_tpchQ01_compressed(
     sum_quantity_t*                      __restrict__ sum_quantity,
     sum_base_price_t*                    __restrict__ sum_base_price,
     sum_discounted_price_t*              __restrict__ sum_discounted_price,
@@ -217,7 +217,7 @@ template <unsigned MaxNumThreadsPerBlock = max_threads_per_block_for_per_thread_
     // this must be a nice number w.r.t. the number of shared memory banks, and not too high, otherwise
     // NVCC will complain about too much shared memory use!
 __global__
-void thread_in_shared_mem_ht_tpchQ01_pushdown_compressed(
+void shared_mem_per_thread_ht_tpchQ01_pushdown_compressed(
     sum_quantity_t*                      __restrict__ sum_quantity,
     sum_base_price_t*                    __restrict__ sum_base_price,
     sum_discounted_price_t*              __restrict__ sum_discounted_price,

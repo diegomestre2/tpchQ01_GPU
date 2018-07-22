@@ -4,9 +4,9 @@
 #include "bit_operations.hpp"
 #include "kernels/ht_in_global_mem.hpp"
 #include "kernels/ht_in_registers.cuh"
-#include "kernels/ht_per_thread_in_registers.cuh"
+#include "kernels/ht_in_registers_per_thread.cuh"
 #include "kernels/ht_in_local_mem.cuh"
-#include "kernels/ht_per_thread_in_shared_mem.cuh"
+#include "kernels/ht_in_shared_mem_per_thread.cuh"
 // #include "kernels/ht_per_block_in_shared_mem.cuh"
 #include "expl_comp_strat/tpch_kit.hpp"
 #include "expl_comp_strat/common.hpp"
@@ -78,14 +78,14 @@ void print_help(int argc, char** argv) {
     fprintf(stderr, "   --print-results\n");
     fprintf(stderr, "   --use-filter-pushdown\n");
     fprintf(stderr, "   --use-coprocessing\n");
-    fprintf(stderr, "   --hash-table-placement=[default:in-registers-per-thread]\n"
-                    "     (one of: in-registers, in-registers-per-thread, local-mem, per-thread-shared-mem, global))\n");
+    fprintf(stderr, "   --hash-table-placement=[default:in_registers_per_thread]\n"
+                    "     (one of: in_registers, in_registers_per_thread, local_mem, shared_mem_per_thread, global))\n");
     fprintf(stderr, "   --runs=[default:%u] (number, e.g. 1 - 100)\n", (unsigned) defaults::num_query_execution_runs);
     fprintf(stderr, "   --sf=[default:%f] (number, e.g. 0.01 - 100)\n", defaults::scale_factor);
     fprintf(stderr, "   --cpu-fraction=[default:%f] (number, e.g. 0.5 - 100)\n", defaults::cpu_coprocessing_fraction);
     fprintf(stderr, "   --streams=[default:%u] (number, e.g. 1 - 64)\n", defaults::num_gpu_streams);
     fprintf(stderr, "   --threads-per-block=[default:%u] (number, e.g. 32 - 1024)\n", defaults::num_threads_per_block);
-    fprintf(stderr, "   --tuples-per-thread=[default:%u] (number, e.g. 1 - 1048576)\n", defaults::num_tuples_per_thread);
+    fprintf(stderr, "   --tuples_per_thread=[default:%u] (number, e.g. 1 - 1048576)\n", defaults::num_tuples_per_thread);
     fprintf(stderr, "   --tuples-per-kernel-launch=[default:%u] (number, e.g. 64 - 4194304)\n", defaults::num_tuples_per_kernel_launch);
 }
 
@@ -164,48 +164,48 @@ void print_results(const T& aggregates_on_host, cardinality_t cardinality) {
 }
 
 const std::unordered_map<string, cuda::device_function_t> kernels = {
-    { "local-mem",               cuda::in_local_mem_ht_tpchQ01            },
-    { "in-registers",            cuda::in_registers_ht_tpchQ01            },
-    { "in-registers-per-thread", cuda::in_registers_per_thread_ht_tpchQ01 },
-    { "per-thread-shared-mem",   cuda::thread_in_shared_mem_ht_tpchQ01<>  },
-//  { "per-block-shared-mem",    cuda::shared_mem_ht_tpchQ01              },
+    { "local_mem",               cuda::in_local_mem_ht_tpchQ01            },
+    { "in_registers",            cuda::in_registers_ht_tpchQ01            },
+    { "in_registers_per_thread", cuda::in_registers_per_thread_ht_tpchQ01 },
+    { "shared_mem_per_thread",   cuda::shared_mem_per_thread_ht_tpchQ01<> },
+//  { "shared_mem",              cuda::shared_mem_ht_tpchQ01              },
     { "global",                  cuda::global_ht_tpchQ01                  },
 };
 
 const std::unordered_map<string, cuda::device_function_t> kernels_compressed = {
-    { "local-mem",               cuda::in_local_mem_ht_tpchQ01_compressed            },
-    { "in-registers",            cuda::in_registers_ht_tpchQ01_compressed            },
-    { "in-registers-per-thread", cuda::in_registers_per_thread_ht_tpchQ01_compressed },
-    { "per-thread-shared-mem",   cuda::thread_in_shared_mem_ht_tpchQ01_compressed<>  },
-//  { "per-block-shared-mem",    cuda::shared_mem_ht_tpchQ01_compressed              },
+    { "local_mem",               cuda::in_local_mem_ht_tpchQ01_compressed            },
+    { "in_registers",            cuda::in_registers_ht_tpchQ01_compressed            },
+    { "in_registers_per_thread", cuda::in_registers_per_thread_ht_tpchQ01_compressed },
+    { "shared_mem_per_thread",   cuda::shared_mem_per_thread_ht_tpchQ01_compressed<> },
+//  { "shared_mem",              cuda::shared_mem_ht_tpchQ01_compressed              },
     { "global",                  cuda::global_ht_tpchQ01_compressed                  },
 };
 
 const std::unordered_map<string, cuda::device_function_t> kernels_filter_pushdown = {
-    { "local-mem",               cuda::in_local_mem_ht_tpchQ01_filter_pushdown_compressed            },
-    { "in-registers",            cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed            },
-    { "in-registers-per-thread", cuda::in_registers_per_thread_ht_tpchQ01_filter_pushdown_compressed },
+    { "local_mem",               cuda::in_local_mem_ht_tpchQ01_filter_pushdown_compressed            },
+    { "in_registers",            cuda::in_registers_ht_tpchQ01_filter_pushdown_compressed            },
+    { "in_registers_per_thread", cuda::in_registers_per_thread_ht_tpchQ01_filter_pushdown_compressed },
     { "global",                  cuda::global_ht_tpchQ01_filter_pushdown_compressed                  },
-//  { "per-block-shared-mem",    cuda::shared_mem_ht_tpchQ01_pushdown_compressed                     },
-    { "per-thread-shared-mem",   cuda::thread_in_shared_mem_ht_tpchQ01_pushdown_compressed<>         },
+//  { "shared_mem",              cuda::shared_mem_ht_tpchQ01_pushdown_compressed                     },
+    { "shared_mem_per_thread",   cuda::shared_mem_per_thread_ht_tpchQ01_pushdown_compressed<>        },
 };
 
 // Some kernel variants cannot support as many threads per block as the hardware allows generally,
 // and for these we use a fixed number for now
 const std::unordered_map<string, cuda::grid_block_dimension_t> fixed_threads_per_block = {
-    { "in-registers",          cuda::threads_per_block_for_in_registers_hash_table },
+    { "in_registers",          cuda::threads_per_block_for_in_registers_hash_table },
 };
 
 const std::unordered_map<string, cuda::grid_block_dimension_t> max_threads_per_block = {
-    { "per-thread-shared-mem", cuda::max_threads_per_block_for_per_thread_shared_mem },
+    { "shared_mem_per_thread", cuda::max_threads_per_block_for_per_thread_shared_mem },
 };
 
 const std::unordered_map<string, unsigned> num_threads_to_handle_tuple = {
-    { "local-mem",               1  },
-    { "in-registers",            div_rounding_up(warp_size, warp_size / num_potential_groups)  },
-    { "in-registers-per-thread", 1  },
-    { "per-thread-shared-mem",   1  },
-//  { "per-block-shared-mem",    1? },
+    { "local_mem",               1  },
+    { "in_registers",            div_rounding_up(warp_size, warp_size / num_potential_groups)  },
+    { "in_registers_per_thread", 1  },
+    { "shared_mem_per_thread",   1  },
+//  { "shared_mem",              1? },
     { "global",                  1  },
 };
 
@@ -627,7 +627,7 @@ void execute_query_1_once(
         cuda::grid_block_dimension_t num_threads_per_block;
         cuda::grid_dimension_t       num_blocks;
 
-        if (params.kernel_variant == "in-registers") {
+        if (params.kernel_variant == "in_registers") {
             // Calculation is different here because more than one thread works on a tuple,
             // and some figuring is per-warp
             auto num_warps_per_block = params.num_threads_per_block / warp_size;

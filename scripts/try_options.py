@@ -1,14 +1,6 @@
 #!/usr/bin/python
 #
-# Eyal's modified version of Mark's bench.py
-# Main changes:
-# * All results are prefixed with other (CSV) fields, so that the lines from all files are compatible and can be concatenated together into a single global results file if you so with
-# * Result timestamping
-# * Calculates the means of runs into separate CSV files (which could still be concatenated with the per-run results; the means have an empty/null run index
-# * Refusing to run with kernel grid parameter combinations which result in too few blocks for the (first) GPU on the system
-# * Not trying the various kernel grid parameter combinations - since they don't mean much when we're I/O-bound; sticking
-#   to the defaults for now
-# * Compatibility with plot.R currently broken :-(
+# Eyal's modified version of Mark's bench.py - compression and coprocessing-related options
 
 from __future__ import print_function
 from shutil import copyfile
@@ -23,17 +15,18 @@ results_dir = "results"
 default_sf = 100
 default_options = "--apply-compression"
 default_streams = 4
-default_tuples_per_launch = 1 << 21
-default_tuples_per_thread = 1024
+default_tuples_per_launch = 1 << 22
+default_tuples_per_thread = 128
 default_threads_per_block = 256
 default_placement = "local-mem"
+default_num_runs = 5
 
 shared_mem_max_threads_per_block = 160
 
 streams = [4]
 tuples_per_launch = [256*1024, 512*1024, 1024*1024, 2*1024*1024]
-tuples_per_thread = [64, 128, 256, 512, 1024, 2048, 4096] # anything below 32 is probably kind of silly
-threads_per_block = [32, 64, 128, 160, 256, 512, 1024] # Note that some kernels do not supported the entire ranges, and need either many or not-too-many
+tuples_per_thread = [32, 64, 128, 256, 512, 1024] # anything below 32 is probably kind of silly
+threads_per_block = [32, 64, 128, 160, 256, 512] # Note that some kernels do not supported the entire ranges, and need either many or not-too-many
 placements = ["per-thread-shared-mem", "local-mem", "in-registers", "in-registers-per-thread", "global"]
 
 options = [
@@ -60,34 +53,36 @@ def syscall(cmd):
 	print(cmd)
 	os.system(cmd)
 
-def run_test(filename_for_plot = None, raw_results_file = None, mean_results_file = None, sf = None, streams = None, tpls = None, vals = None, threads = None, placement = None, options = None):
-	if not placement: placement = default_placement
-	if not sf: sf = default_sf
-	if not streams: streams = default_streams
-	if not tpls: tpls = default_tuples_per_launch
-	if not vals: vals = default_tuples_per_thread
-	if not threads:
-		threads = default_threads_per_block
-		if (p == 'per-thread-shared-mem' and threads > shared_mem_max_threads_per_block):
-			threads = shared_mem_max_threads_per_block
-	if not options and options != '':
+def run_test(filename_for_plot = None, raw_results_file = None, mean_results_file = None, sf = None, streams = None, tpls = None, vals = None, threads = None, placement = None, options = None, runs = None):
+    if not runs : runs = default_num_runs
+    if not placement: placement = default_placement
+    if not sf: sf = default_sf
+    if not streams: streams = default_streams
+    if not tpls: tpls = default_tuples_per_launch
+    if not vals: vals = default_tuples_per_thread
+    if not threads:
+        threads = default_threads_per_block
+        if (p == 'per-thread-shared-mem' and threads > shared_mem_max_threads_per_block):
+            threads = shared_mem_max_threads_per_block
+    if not options and options != '':
             options = default_options
 
-	if tpls >= vals * threads * cores_per_gpu * min_keep_busy_factor :
-		print ("%s tuples per thread and %s threads per block are too many for %s tuples per launch - there would not be enough blocks to keep the GPU busy" % (vals, threads, tpls))
-		return
+    if tpls < vals * threads * cores_per_gpu * min_keep_busy_factor :
+        print ("%s tuples per thread and %s threads per block are too many for %s tuples per launch - there would not be enough blocks to keep the GPU busy" % (vals, threads, tpls))
+        return
 
-	syscall("""${BINARY} ${OPTIONS} --streams=${STREAMS} --scale-factor=${SF} --tuples-per-kernel-launch=${TUPLES} --tuples-per-thread=${VALUES} --threads-per-block=${THREADS} --hash-table-placement=${PLACEMENT}""".replace(
-		"${BINARY}", binary).replace(
-		"${OPTIONS}", options).replace(
-		"${STREAMS}", str(streams)).replace(
-		"${SF}", str(sf)).replace(
-		"${TUPLES}", str(tpls)).replace(
-		"${VALUES}", str(vals)).replace(
-		"${THREADS}", str(threads)).replace(
-		"${PLACEMENT}", placement))
-	if not os.path.isfile('results.csv'):
-		return
+    syscall("""${BINARY} ${OPTIONS} --streams=${STREAMS} --runs=${RUNS} --scale-factor=${SF} --tuples-per-kernel-launch=${TUPLES} --tuples-per-thread=${VALUES} --threads-per-block=${THREADS} --hash-table-placement=${PLACEMENT}""".replace(
+        "${BINARY}", binary).replace(
+        "${OPTIONS}", options).replace(
+        "${STREAMS}", str(streams)).replace(
+        "${RUNS}", str(runs)).replace(
+        "${SF}", str(sf)).replace(
+        "${TUPLES}", str(tpls)).replace(
+        "${VALUES}", str(vals)).replace(
+        "${THREADS}", str(threads)).replace(
+        "${PLACEMENT}", placement))
+    if not os.path.isfile('results.csv'):
+        return
 
 	full_plot_fn = os.path.join(results_dir, filename_for_plot)
 	if not os.path.isfile(full_plot_fn):
@@ -130,14 +125,3 @@ for opt in options:
 	for p in placements:
 		run_test(filename_for_plot = os.path.join(options_basename,'%s.csv' % p), raw_results_file = raw_fn, mean_results_file = mean_fn, options = opt, placement = p)
 
-#gp_basename='grid_params'
-#raw_fn = os.path.join(results_dir, '%s_raw.csv' % gp_basename)
-#mean_fn = os.path.join(results_dir, '%s.csv' % gp_basename)
-#init_results_files(gp_basename)
-#for vals in tuples_per_thread:
-#	for threads in threads_per_block:
-#		for p in placements:
-#			if default_tuples_per_launch >= vals * threads * cores_per_gpu * min_keep_busy_factor :
-#				run_test(raw_results_file = raw_fn, mean_results_file = mean_fn, filename_for_plot=os.path.join(gp_basename, 'vals_%s-threads_%s-placement_%s.csv' % (str(vals), str(threads), p)), vals = vals, threads = threads, placement = p)
-#			else:
-#				print ("%s tuples per thread and %s threads per block are too many for %s tuples per launch - there would not be enough blocks to keep the GPU busy" % (vals, threads, default_tuples_per_launch))

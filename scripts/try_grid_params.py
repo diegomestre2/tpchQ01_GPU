@@ -20,7 +20,7 @@ results_dir = "results"
 tuples_per_launch = [256*1024, 512*1024, 1024*1024, 2*1024*1024]
 tuples_per_thread = [32, 64, 128, 256, 512, 1024] # anything below 32 is probably kind of silly
 threads_per_block = [32, 64, 128, 160, 256, 512] # Note that some kernels do not supported the entire ranges, and need either many or not-too-many
-placements = ["shared_mem_per_thread", "local_mem", "in_registers", "in_register_per_thread", "global"]
+placements = ["shared_mem_per_thread", "local_mem", "in_registers", "in_registers_per_thread", "global"]
 
 options = [
 #	  apply compression  filter precomputation  use coprocessing
@@ -113,8 +113,9 @@ def run_test(results_file = None, sf = None, streams = None, tpls = None, vals =
 			f.write('%s,%s\n' % (csv_line_prefix,csv_line_data))
 			f.close()
 
-def init_results_files(basename):
-	os.system('mkdir -p %s' % os.path.join(results_dir, basename))
+def init_result_file(basename):
+	if not os.path.isdir(results_dir):
+		os.makedirs(results_dir)
 	results_filename = os.path.join(results_dir, '%s.csv' % basename)
 	result_csv_header_line='hostname,year,month,day,hour,minute,second,scale_factor,num_gpu_streams,tuples_per_kernel,tuples_per_thread,threads_per_block,num_runs,hash_table_placement,compressed_data,filter_precomputation,data_parallel_coprocessing,total_time_of_launches,num_launches,average_execution_time,min_execution_time,max_execution_time\n'
 	with open(results_filename, 'w') as f:
@@ -125,7 +126,7 @@ os.system('make $binary')
 
 gp_basename='grid_params'
 results_fn = os.path.join(results_dir, '%s.csv' % gp_basename)
-init_results_files(gp_basename)
+init_result_file(gp_basename)
 for opt in options:
 	for p in placements:
 		for vals in tuples_per_thread:

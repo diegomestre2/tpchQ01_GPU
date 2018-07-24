@@ -113,7 +113,7 @@ def run_test(results_file = None, sf = None, streams = None, tpls = None, vals =
 			f.write('%s,%s\n' % (csv_line_prefix,csv_line_data))
 			f.close()
 
-def init_result_file(basename):
+def init_results_file(basename):
 	if not os.path.isdir(results_dir):
 		os.makedirs(results_dir)
 	results_filename = os.path.join(results_dir, '%s.csv' % basename)
@@ -126,7 +126,7 @@ os.system('make $binary')
 
 gp_basename='grid_params'
 results_fn = os.path.join(results_dir, '%s.csv' % gp_basename)
-init_result_file(gp_basename)
+init_results_file(gp_basename)
 for opt in options:
 	for p in placements:
 		for vals in tuples_per_thread:

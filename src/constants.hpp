@@ -18,7 +18,7 @@ enum {
 };
 
 constexpr const double scale_factor   = 1.0;
-constexpr const char kernel_variant[] = "in-registers-per-thread";
+constexpr const char kernel_variant[] = "in_registers_per_thread";
 constexpr const double cpu_coprocessing_fraction
                                       = 0.5;
 
